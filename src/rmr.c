@@ -30,7 +30,6 @@ typedef struct MRCtx {
   void *privdata;
 } MRCtx;
 
-
 /* Create a new MapReduce context */
 MRCtx *MR_CreateCtx(void *ctx) {
   MRCtx *ret = malloc(sizeof(MRCtx));
@@ -58,7 +57,6 @@ void MRCtx_Free(MRCtx *ctx) {
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx) { return ctx->privdata; }
 
-
 /* handler for unblocking redis commands, that calls the actual reducer */
 int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv,
                        int argc) {
@@ -74,21 +72,19 @@ int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv,
 
 void __mrFreePrivdata(void *privdata) { free(privdata); }
 
-
 /* The callback called from each fanout request to aggregate their replies */
 static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   MRCtx *ctx = privdata;
 
   ctx->replies[ctx->numReplied++] = mrReply_Duplicate(r);
-  
+
   // If we've received the last reply - unblock the client
   if (ctx->numReplied == __cluster->numNodes) {
     RedisModuleBlockedClient *bc = ctx->privdata;
     RedisModule_UnblockClient(bc, ctx);
   }
 }
-
 
 /* start the event loop side thread */
 void *sideThread(void *arg) {
@@ -139,9 +135,10 @@ void __uvMapRequest(uv_work_t *wr) {
   // return REDIS_OK;
 }
 
-
-/* Fanout map - send the same command to all the shards, sending the collective reply to the reducer callback */
-int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, int argc, const char **argv) {
+/* Fanout map - send the same command to all the shards, sending the collective
+ * reply to the reducer callback */
+int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, int argc,
+              const char **argv) {
 
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;

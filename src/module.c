@@ -7,18 +7,19 @@
 #include "reply.h"
 
 
-
+/* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
 
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
-    __mr_replyWithMRReply(ctx, replies[i]);
+    MR_ReplyWithMRReply(ctx, replies[i]);
   }
   return REDISMODULE_OK;
 }
 
+/* A reducer that sums up numeric replies from a request */
 int sumReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);

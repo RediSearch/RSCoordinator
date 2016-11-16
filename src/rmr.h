@@ -2,25 +2,23 @@
 #ifndef __LIBRMR_H__
 #define __LIBRMR_H__
 
-#include "hiredis/hiredis.h"
+#include "reply.h"
+#include "cluster.h"
 
 struct MRCtx;
-struct MREndpoint; 
-struct MRCluster;
 
-
-typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, redisReply **replies);
+typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, MRReply **replies);
 
 int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, int argc, const char **argv);
 
-void MR_Init(struct MRCluster *cl);
+void MR_Init(MRNodeProvider np);
 
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
+void MRCtx_Free(struct MRCtx *ctx);
+
+struct MRCtx *MR_CreateCtx(void *ctx);
 
 
-struct MRCtx *MR_CreateCtx(struct MRCluster *cl, void *ctx);
-void MRCluster_ConnectAll(struct MRCluster *cl); 
-struct MRCluster *MR_NewCluster(int numNodes, struct MREndpoint *nodes); 
 
 
 #endif //__LIBRMR_H__

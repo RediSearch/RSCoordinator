@@ -3,6 +3,7 @@
 
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
+#include "command.h"
 
 /* A single endpoint in the cluster */
 typedef struct MREndpoint {
@@ -17,12 +18,17 @@ typedef struct  {
     void (*SetNotifier)(void (*callback)(void *ctx, MREndpoint *eps, int num));
 } MRNodeProvider;
 
+
+/* A function that tells the cluster which shard to send a command to. should return -1 if not applicable */
+typedef int (*ShardFunc)(MRCommand *cmd, MREndpoint *nodes, int num);
+
 /* A cluster has nodes and connections that can be used by the engine to send requests */
 typedef struct MRCluster {
   int numNodes;
   MREndpoint *nodes;
   redisAsyncContext **conns;
   MRNodeProvider nodeProvider;
+  ShardFunc sharder;
 } MRCluster;
  
 typedef void (*MRClusterNotifyCallback)(MREndpoint **, int);
@@ -34,7 +40,7 @@ MREndpoint *MR_NewEndpoint(const char *host, int port);
 int MRCluster_ConnectAll(MRCluster *cl);
 
 /* Create a new cluster using a node provider */
-struct MRCluster *MR_NewCluster(MRNodeProvider np); 
+struct MRCluster *MR_NewCluster(MRNodeProvider np, ShardFunc sharder); 
 
 // for now we use a really silly node provider
 MRNodeProvider MR_NewDummyNodeProvider(int num, int startPort);

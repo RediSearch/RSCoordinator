@@ -2,11 +2,12 @@
 #include "hiredis/adapters/libuv.h"
 #include <stdlib.h>
 
-MRCluster *MR_NewCluster(MRNodeProvider np) {
+MRCluster *MR_NewCluster(MRNodeProvider np, ShardFunc sf) {
   MRCluster *cl = malloc(sizeof(MRCluster));
   cl->nodes = np.GetEndpoints(np.ctx, &cl->numNodes);
   cl->conns = calloc(cl->numNodes, sizeof(redisAsyncContext *));
   cl->nodeProvider = np;
+  cl->sharder = sf;
   return cl;
 }
 
@@ -83,3 +84,4 @@ MRNodeProvider MR_NewDummyNodeProvider(int num, int startPort) {
 
     return (MRNodeProvider){.ctx = p, .GetEndpoints = __dummy_getNodes, .SetNotifier = NULL };
 }
+

@@ -5,7 +5,18 @@
 #include "rmr.h"
 #include "hiredis/async.h"
 #include "reply.h"
+#include "fnv.h"
 
+// just the stupidest shard function
+int stupidSharder(MRCommand *cmd, MREndpoint *nodes, int num) {
+
+  if (cmd->num < 2) {
+    return -1;
+  }
+    
+  u_int32_t hval = fnv_32a_buf((void *)cmd->args[1], strlen(cmd->args[1]), 0);
+  return hval % num;
+}
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -41,10 +52,14 @@ int SumAggCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return RedisModule_WrongArity(ctx);
   }
   RedisModule_AutoMemory(ctx);
+  MRCommand cmds[argc-1];
+  for (int i = 0; i < argc - 1; i++) {
+    cmds[i] = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[i+1], NULL));
+  }
 
-  MRCommand cmd = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[1], NULL));
+  MR_Map(MR_CreateCtx(ctx), sumReducer, cmds, argc-1);
   
-  MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
+  //MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -65,12 +80,9 @@ int TestCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
-  // if (cl == NULL) {
-  int N = 4;
-MR_Init(MR_NewDummyNodeProvider(N, 6375));
+  MR_Init(MR_NewDummyNodeProvider(4, 6375), stupidSharder);
 
-  //    }
-
+  
   if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

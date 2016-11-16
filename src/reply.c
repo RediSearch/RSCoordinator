@@ -124,7 +124,7 @@ int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
     case MR_REPLY_ARRAY: {
       RedisModule_ReplyWithArray(ctx, MRReply_Length(rep));
       for (size_t i = 0; i < MRReply_Length(rep); i++) {
-        __mr_replyWithMRReply(ctx, MRReply_ArrayElement(rep, i));
+        MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(rep, i));
       }
       break;
     }

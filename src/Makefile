@@ -20,11 +20,12 @@ else
 endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -fPIC -lc -lm -Og -std=gnu99  
 CC=gcc
+OBJS= module.o rmr.o reply.o cluster.o command.o
 
 all: module.so 
 
-module.so: module.o rmr.o reply.o cluster.o
-	$(LD) -o $@ module.o rmr.o reply.o cluster.o $(SHOBJ_LDFLAGS) $(LIBS) -lc -lpthread  -luv -L./hiredis -lhiredis 
+module.so: $(OBJS)
+	$(LD) -o $@ $(OBJS) $(SHOBJ_LDFLAGS) $(LIBS) -lc -lpthread  -luv -L./hiredis -lhiredis 
 
 clean:
 	rm -rf *.xo *.so *.o

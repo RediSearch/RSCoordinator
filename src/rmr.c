@@ -77,6 +77,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   MRCtx *ctx = privdata;
 
+
   ctx->replies[ctx->numReplied++] = mrReply_Duplicate(r);
 
   // If we've received the last reply - unblock the client
@@ -110,8 +111,7 @@ void MR_Init(MRNodeProvider np) {
 struct __mrRequestCtx {
   MRCtx *ctx;
   MRReduceFunc f;
-  int argc;
-  const char **argv;
+  MRCommand cmd;
 };
 
 /* The map request received in the event loop in a thread safe manner */
@@ -125,11 +125,12 @@ void __uvMapRequest(uv_work_t *wr) {
   for (int i = 0; i < __cluster->numNodes; i++) {
 
     redisAsyncContext *rcx = __cluster->conns[i];
-    redisAsyncCommandArgv(rcx, fanoutCallback, mc->ctx, mc->argc, mc->argv,
+    redisAsyncCommandArgv(rcx, fanoutCallback, mc->ctx, mc->cmd.num, mc->cmd.args,
                           NULL);
     // TODO: handle errors
   }
 
+  MRCommand_Free(&mc->cmd);
   free(mc);
 
   // return REDIS_OK;
@@ -137,14 +138,12 @@ void __uvMapRequest(uv_work_t *wr) {
 
 /* Fanout map - send the same command to all the shards, sending the collective
  * reply to the reducer callback */
-int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, int argc,
-              const char **argv) {
+int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;
-  rc->argv = argv;
-  rc->argc = argc;
+  rc->cmd = cmd;
 
   RedisModuleCtx *rx = ctx->privdata;
   ctx->privdata =

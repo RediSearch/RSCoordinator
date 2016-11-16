@@ -4,6 +4,7 @@
 
 #include "reply.h"
 #include "cluster.h"
+#include "command.h"
 
 struct MRCtx;
 
@@ -12,8 +13,7 @@ typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, MRReply **replies);
 
 /* Fanout map - send the same command to all the shards, sending the collective
  * reply to the reducer callback */
-int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, int argc,
-              const char **argv);
+int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
 /* Initialize the MapReduce engine with a node provider */
 void MR_Init(MRNodeProvider np);

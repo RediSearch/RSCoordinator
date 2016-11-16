@@ -40,13 +40,11 @@ int SumAggCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
+  RedisModule_AutoMemory(ctx);
 
-  const char **args = calloc(2, sizeof(char *));
-  args[0] = "GET";
-  args[1] = RedisModule_StringPtrLen(argv[1], NULL);
+  MRCommand cmd = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[1], NULL));
   
-  struct MRCtx *mc = MR_CreateCtx(ctx);
-  MR_Map(mc, sumReducer,2 , args);
+  MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -56,14 +54,10 @@ int TestCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
-
-  const char *args[argc-1];
-  for (int i = 0; i < argc - 1; i++) {
-    args[i] = RedisModule_StringPtrLen(argv[i + 1], NULL);
-  }
+  RedisModule_AutoMemory(ctx);
 
   struct MRCtx *mc = MR_CreateCtx(ctx);
-  MR_Map(mc, chainReplyReducer, argc - 1, args);
+  MR_Fanout(mc, chainReplyReducer, MR_NewCommandFromRedisStrings(argc - 1, &argv[1]));
   
   return REDISMODULE_OK;
 }

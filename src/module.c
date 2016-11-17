@@ -52,6 +52,7 @@ int SumAggCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return RedisModule_WrongArity(ctx);
   }
   RedisModule_AutoMemory(ctx);
+  
   MRCommand cmds[argc-1];
   for (int i = 0; i < argc - 1; i++) {
     cmds[i] = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[i+1], NULL));

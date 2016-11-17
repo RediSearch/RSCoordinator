@@ -4,10 +4,10 @@
 
 This is a **Proof of Concept** of a library, that allows redis modules to communicate with nodes in a cluster in an asynchronous way. 
 
-It allows the same command to be fanned-out to all the nodes, or send a list of commands, each to its relevant shard or node. 
+It allows the same command to be fanned-out to all the nodes; or sending a list of commands, each to its relevant shard or node. 
 
 It loosely follows a map/reduce pattern, where each command executed is considered a "map" operation, and a "reducer" callback is responsible for merging the results. 
-A reducer can reply to the client, or trigger another map/reduce step. 
+A reducer can reply to the client, *or trigger another map/reduce step*. 
 
 ## NOTE: 
 

@@ -18,14 +18,15 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -fPIC  -O1 -std=gnu99  
+CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC  -O1 -std=gnu99  
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= module.o rmr.o reply.o cluster.o command.o fnv.o search_cluster.o
+OBJS= ../src/search_cluster.o ../src/command.o ../src/fnv.o
 
-all: module.so 
+test_searchcluster:
+	$(CC) -o ./$@ $@.c $(OBJS) -lc -lpthread -luv
+	$(sh -c ./$@)
 
-module.so: $(OBJS)
-	$(LD) -o $@ $(OBJS) $(SHOBJ_LDFLAGS) $(LIBS) -lc -lpthread  -luv -L./hiredis -lhiredis 
+.PHONY: test_searchcluster
 
 clean:
 	rm -rf *.xo *.so *.o

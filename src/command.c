@@ -3,39 +3,54 @@
 #include <string.h>
 #include <stdarg.h>
 
-
 void MRCommand_Free(MRCommand *cmd) {
-    for (int i = 0; i < cmd->num; i++) {
-        free(cmd->args[i]);
-    }
-    free(cmd->args);
+  for (int i = 0; i < cmd->num; i++) {
+    free(cmd->args[i]);
+  }
+  free(cmd->args);
 }
 
 MRCommand MR_NewCommandArgv(int argc, char **argv) {
-    MRCommand cmd = (MRCommand){.num= argc, .args = calloc(argc, sizeof(char **))};
-    for (int i = 0; i < argc; i++) {
-        cmd.args[i] = strdup(argv[i]);
-    }
-    return cmd;
+  MRCommand cmd = (MRCommand){.num = argc, .args = calloc(argc, sizeof(char **))};
+  for (int i = 0; i < argc; i++) {
+    cmd.args[i] = strdup(argv[i]);
+  }
+  return cmd;
+}
+
+/* Create a deep copy of a command by duplicating all strings */
+MRCommand MRCommand_Copy(MRCommand *cmd) {
+  MRCommand ret = *cmd;
+  ret.args = calloc(cmd->num, sizeof(char *));
+  for (int i = 0; i < cmd->num; i++) {
+    ret.args[i] = strdup(cmd->args[i]);
+  }
+  return ret;
 }
 
 MRCommand MR_NewCommand(int argc, ...) {
-    MRCommand cmd = (MRCommand){.num= argc, .args = calloc(argc, sizeof(char **))};
-    va_list ap;
-    va_start(ap, argc);
-    for (int i = 0; i < argc; i++) {
-        cmd.args[i] = strdup(va_arg(ap, const char *));
-    }
-    va_end(ap);
+  MRCommand cmd = (MRCommand){.num = argc, .args = calloc(argc, sizeof(char **))};
+  va_list ap;
+  va_start(ap, argc);
+  for (int i = 0; i < argc; i++) {
+    cmd.args[i] = strdup(va_arg(ap, const char *));
+  }
+  va_end(ap);
 
-    return cmd;
+  return cmd;
 }
 
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
-    MRCommand cmd = (MRCommand){.num= argc, .args = calloc(argc, sizeof(char **))};
-    for (int i = 0; i < argc; i++) {
-        cmd.args[i] = strdup(RedisModule_StringPtrLen(argv[i], NULL));
-    }
-    return cmd;
+  MRCommand cmd = (MRCommand){.num = argc, .args = calloc(argc, sizeof(char **))};
+  for (int i = 0; i < argc; i++) {
+    cmd.args[i] = strdup(RedisModule_StringPtrLen(argv[i], NULL));
+  }
+  return cmd;
 }
 
+void MRCommand_Print(MRCommand *cmd) {
+  for (int i = 0; i < cmd->num; i++) {
+    printf("%s ", cmd->args[i]);
+  }
+  printf("\n");
+}

@@ -49,7 +49,7 @@ int MRNode_Connect(MRClusterNode *n) {
 MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
   // TODO: Switch to binary search
   for (int i = 0; i < cl->topo.numShards; i++) {
-    if (cl->topo.shards[i].startSlot <= slot && cl->topo.shards[i].endSlot <= slot) {
+    if (cl->topo.shards[i].startSlot <= slot && cl->topo.shards[i].endSlot >= slot) {
       return &cl->topo.shards[i];
     }
   }

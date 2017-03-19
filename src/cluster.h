@@ -9,40 +9,76 @@
 typedef struct MREndpoint {
   char *host;
   int port;
+  const char *unixSock;
 } MREndpoint;
 
-/* An interface for providing the cluster with the node list, and TODO allow node change notifications */
-typedef struct  {
-    void *ctx;
-    MREndpoint *(*GetEndpoints)(void *ctx, int *num);
-    void (*SetNotifier)(void (*callback)(void *ctx, MREndpoint *eps, int num));
-} MRNodeProvider;
+typedef struct {
+  MREndpoint endpoint;
+  const char *id;
+  int isSelf;
+  int isMaster;
+  redisAsyncContext *conn;
+} MRClusterNode;
 
+typedef struct {
+  uint startSlot;
+  uint endSlot;
+  size_t numNodes;
+  MRClusterNode *nodes;
+} MRClusterShard;
 
-/* A function that tells the cluster which shard to send a command to. should return -1 if not applicable */
-typedef int (*ShardFunc)(MRCommand *cmd, MREndpoint *nodes, int num);
+typedef struct {
+  size_t numSlots;
+  size_t numShards;
+  MRClusterShard *shards;
+
+} MRClusterTopology;
+
+// /* An interface for providing the cluster with the node list, and TODO allow node change
+//  * notifications */
+typedef struct {
+  void *ctx;
+  MRClusterTopology (*GetTopology)(void *ctx);
+} MRTopologyProvider;
+
+/* A function that tells the cluster which shard to send a command to. should return -1 if not
+ * applicable */
+typedef uint (*ShardFunc)(MRCommand *cmd, uint numSlots);
 
 /* A cluster has nodes and connections that can be used by the engine to send requests */
-typedef struct MRCluster {
-  int numNodes;
-  MREndpoint *nodes;
-  redisAsyncContext **conns;
-  MRNodeProvider nodeProvider;
-  ShardFunc sharder;
+typedef struct {
+  MRClusterTopology topo;
+  ShardFunc sf;
+  MRTopologyProvider tp;
 } MRCluster;
- 
-typedef void (*MRClusterNotifyCallback)(MREndpoint **, int);
 
-/* Create a new Endpoint object */
-MREndpoint *MR_NewEndpoint(const char *host, int port);
+// /* Create a new Endpoint object */
+// MRNode *MR_NewNode(const char *host, int port, const char *unixsock);
+/* Free an MRendpoint object */
+void MRNode_Free(MRClusterNode *n);
 
-/* Asynchronously connect to all nodes in the cluster. This must be called before the io loop is started */
+int MRNode_Connect(MRClusterNode *n);
+
+/* Asynchronously connect to all nodes in the cluster. This must be called before the io loop is
+ * started */
 int MRCluster_ConnectAll(MRCluster *cl);
 
+// int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata, int argc,
+//                           const char **argv, const size_t *argvlen) {
+int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
+
 /* Create a new cluster using a node provider */
-struct MRCluster *MR_NewCluster(MRNodeProvider np, ShardFunc sharder); 
-
+MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder);
 // for now we use a really silly node provider
-MRNodeProvider MR_NewDummyNodeProvider(int num, int startPort);
+// MRNodeProvider MR_NewDummyNodeProvider(int num, int startPort);
 
+typedef struct {
+
+  size_t numSlots;
+  size_t numNodes;
+  MRClusterNode *nodes;
+
+} StaticTopologyProvider;
+
+MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t num, ...);
 #endif

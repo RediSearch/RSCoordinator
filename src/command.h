@@ -3,7 +3,6 @@
 #include "redismodule.h"
 
 typedef struct {
-  char *command;
   char **args;
   int num;
   int keyPos;
@@ -12,7 +11,7 @@ typedef struct {
 void MRCommand_Free(MRCommand *cmd);
 
 MRCommand MR_NewCommandArgv(int argc, char **argv);
-MRCommand MR_NewCommand(const char *command, int argc, ...);
+MRCommand MR_NewCommand(int argc, ...);
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv);
 void MRCommand_SetKeyPos(MRCommand *cmd, int keyPos);
 int MRCommand_GetShardingKey(MRCommand *cmd);

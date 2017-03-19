@@ -12,15 +12,38 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf) {
   return cl;
 }
 
+void __timerConnect(uv_timer_t *tm) {
+  MRClusterNode *n = tm->data;
+  if (MRNode_Connect(n) == REDIS_ERR) {
+    uv_timer_start(tm, __timerConnect, 100, 0);
+  } else {
+   
+    free(tm);
+  }
+}
 void _MRNode_ConnectCallback(const redisAsyncContext *c, int status) {
+  MRClusterNode *n = c->data;
   if (status != REDIS_OK) {
-    printf("Error: %s\n", c->errstr);
+    printf("Error on connect: %s\n", c->errstr);
+    // redisFree(c);
+    // redisAsyncDisconnect(c);
+    n->connected = 0;
+    n->conn = NULL;
+    uv_timer_t *t = malloc(sizeof(uv_timer_t));
+    uv_timer_init(uv_default_loop(), t);
+    t->data = n;
+    uv_timer_start(t, __timerConnect, 100, 0);
     return;
   }
-  printf("Connected...\n");
+
+  n->connected = 1;
+  printf("Connected %s...\n", n->id);
 }
 
 void _MRNode_DisconnectCallback(const redisAsyncContext *c, int status) {
+  printf("Disconnected!\n");
+  MRClusterNode *n = c->data;
+  n->connected = 0;
   if (status != REDIS_OK) {
     printf("Error: %s\n", c->errstr);
     return;
@@ -31,12 +54,19 @@ void _MRNode_DisconnectCallback(const redisAsyncContext *c, int status) {
 /* Connect to a cluster node */
 int MRNode_Connect(MRClusterNode *n) {
 
-  n->conn = redisAsyncConnect(n->endpoint.host, n->endpoint.port);
-
-  if (n->conn->err) {
+  printf("Trying to connect to %s\n", n->id);
+  n->conn = NULL;
+  n->connected = 0;
+  redisAsyncContext *c = redisAsyncConnect(n->endpoint.host, n->endpoint.port);
+  printf("got err: %s\n", c->errstr);
+  if (c->err) {
+    redisAsyncFree(c);
+    perror("Could not connect");
     return REDIS_ERR;
   }
+  printf("Connect initialized to %s\n", n->id);
 
+  n->conn = c;
   n->conn->data = n;
 
   redisLibuvAttach(n->conn, uv_default_loop());
@@ -66,7 +96,7 @@ int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, vo
   MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
 
   /* We couldn't find a shard for this slot. Not command for you */
-  if (!sh) {
+  if (!sh || sh->nodes[0].conn == NULL || sh->nodes[0].connected == 0) {
     return REDIS_ERR;
   }
 
@@ -74,6 +104,23 @@ int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, vo
                                NULL);
 }
 
+void __connectLoop(uv_work_t *wr) {
+
+  MRClusterNode *n = wr->data;
+  printf("Connecting to %s\n", n->id);
+  if (MRNode_Connect(n) != REDIS_OK) {
+    printf("error connecting to %s:%d\n", n->endpoint.host, n->endpoint.port);
+    wr->data = n;
+
+    wr = malloc(sizeof(uv_work_t));
+    wr->data = n;
+    printf("Enqueueing reconnect\n");
+    uv_queue_work(uv_default_loop(), wr, __connectLoop, NULL);
+    // uv_queue_work(uv_default_loop(), wr, __connectLoop, NULL);
+    return;
+  }
+  printf("Connected to %s ok!\n", n->id);
+}
 /* Initialize the connections to all shards */
 int MRCluster_ConnectAll(MRCluster *cl) {
 
@@ -81,10 +128,12 @@ int MRCluster_ConnectAll(MRCluster *cl) {
 
     MRClusterShard *sh = &cl->topo.shards[i];
     for (int j = 0; j < sh->numNodes; j++) {
+
       if (MRNode_Connect(&sh->nodes[j]) != REDIS_OK) {
-        printf("error connecting to %s:%d\n", sh->nodes[j].endpoint.host,
-               sh->nodes[j].endpoint.port);
-        // TODO - what to do here?
+
+        uv_work_t *wr = malloc(sizeof(uv_work_t));
+        wr->data = &sh->nodes[j];
+        uv_queue_work(uv_default_loop(), wr, __connectLoop, NULL);
       }
     }
   }

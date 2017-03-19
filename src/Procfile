@@ -1,0 +1,4 @@
+redis1: redis-server --port 6375 --loadmodule ./module.so --save ""
+redis2: redis-server --port 6376 --loadmodule ./module.so --save ""
+#redis3: redis-server --port 6377 --loadmodule ./module.so --save ""
+#redis4: redis-server --port 6378 --loadmodule ./module.so --save ""

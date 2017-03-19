@@ -23,6 +23,7 @@ typedef struct {
   int isSelf;
   int isMaster;
   redisAsyncContext *conn;
+  int connected;
 } MRClusterNode;
 
 typedef struct {

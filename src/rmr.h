@@ -18,7 +18,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand *cmds, int num);
 
 /* Initialize the MapReduce engine with a node provider */
-void MR_Init(MRNodeProvider np, ShardFunc sf);
+void MR_Init(MRCluster *cl);
 
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
@@ -30,4 +30,4 @@ void MRCtx_Free(struct MRCtx *ctx);
  * this should be the RedisModuleCtx */
 struct MRCtx *MR_CreateCtx(void *ctx);
 
-#endif //__LIBRMR_H__
+#endif  //__LIBRMR_H__

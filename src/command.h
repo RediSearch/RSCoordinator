@@ -3,7 +3,7 @@
 #include "redismodule.h"
 
 typedef struct {
-  const char *command;
+  char *command;
   char **args;
   int num;
   int keyPos;

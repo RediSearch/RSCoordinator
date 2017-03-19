@@ -20,7 +20,7 @@ else
 endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -fPIC  -O1 -std=gnu99  
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= module.o rmr.o reply.o cluster.o command.o fnv.o search_cluster.o
+OBJS= module.o rmr.o reply.o cluster.o command.o fnv.o search_cluster.o dep/crc16.o
 
 all: module.so 
 

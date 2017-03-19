@@ -91,22 +91,33 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return REDIS_OK;
 }
 
-int Endpoint_Parse(const char *addr, MREndpoint *ep) {
+int MREndpoint_Parse(const char *addr, MREndpoint *ep) {
 
+  ep->host = NULL;
+  ep->unixSock = NULL;
   char *colon = strchr(addr, ':');
-
   if (!colon || colon == addr) {
     return REDIS_ERR;
   }
-  *colon = '\0';
 
-  ep->host = strdup(addr);
+  ep->host = strndup(addr, colon - addr);
   ep->port = atoi(colon + 1);
-  *colon = ':';
+
   if (ep->port <= 0 || ep->port > 0xFFFF) {
     return REDIS_ERR;
   }
   return REDIS_OK;
+}
+
+void MREndpoint_Free(MREndpoint *ep) {
+  if (ep->host) {
+    free(ep->host);
+    ep->host = NULL;
+  }
+  if (ep->unixSock) {
+    free(ep->unixSock);
+    ep->unixSock = NULL;
+  }
 }
 
 MRClusterTopology STP_GetTopology(void *ctx) {
@@ -137,7 +148,7 @@ MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, .
   int n = 0;
   for (size_t i = 0; i < numNodes; i++) {
     const char *ip_port = va_arg(ap, const char *);
-    if (Endpoint_Parse(ip_port, &nodes[n].endpoint) == REDIS_OK) {
+    if (MREndpoint_Parse(ip_port, &nodes[n].endpoint) == REDIS_OK) {
       nodes[n].id = strdup(ip_port);
       nodes[n].isMaster = 1;
       n++;

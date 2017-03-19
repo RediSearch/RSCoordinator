@@ -20,13 +20,21 @@ else
 endif
 CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC  -O1 -std=gnu99  
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../src/search_cluster.o ../src/command.o ../src/fnv.o
+OBJS= ../src/search_cluster.o ../src/command.o ../src/fnv.o ../src/cluster.o ../src/dep/crc16.o
+LIBS= ../src/hiredis/libhiredis.a
 
 test_searchcluster:
-	$(CC) -o ./$@ $@.c $(OBJS) -lc -lpthread -luv
+	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(sh -c ./$@)
+
+test_cluster:
+	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
 	$(sh -c ./$@)
 
 .PHONY: test_searchcluster
+
+.PHONY: test_cluster
+
 
 clean:
 	rm -rf *.xo *.so *.o

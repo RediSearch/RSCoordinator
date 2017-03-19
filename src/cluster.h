@@ -4,13 +4,18 @@
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
 #include "command.h"
-
+#ifndef uint
+typedef unsigned int uint;
+#endif
 /* A single endpoint in the cluster */
 typedef struct MREndpoint {
   char *host;
   int port;
-  const char *unixSock;
+  char *unixSock;
 } MREndpoint;
+
+int MREndpoint_Parse(const char *addr, MREndpoint *ep);
+void MREndpoint_Free(MREndpoint *ep);
 
 typedef struct {
   MREndpoint endpoint;
@@ -69,8 +74,8 @@ int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, vo
 
 /* Create a new cluster using a node provider */
 MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder);
-// for now we use a really silly node provider
-// MRNodeProvider MR_NewDummyNodeProvider(int num, int startPort);
+
+uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
 
 typedef struct {
 

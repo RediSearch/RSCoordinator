@@ -15,7 +15,9 @@ typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, MRReply **replies);
  * reply to the reducer callback */
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
-int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand *cmds, int num);
+int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds);
+
+int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
 /* Initialize the MapReduce engine with a node provider */
 void MR_Init(MRCluster *cl);

@@ -16,7 +16,7 @@ ifeq ($(uname_S),Linux)
 	SHOBJ_LDFLAGS ?= -shared -Bsymbolic -Bsymbolic-functions
 else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
-	SHOBJ_LDFLAGS ?= -bundle -exported_symbol _RedisModule_OnLoad
+	SHOBJ_LDFLAGS ?= -dylib -exported_symbol _RedisModule_OnLoad
 endif
 CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -ggdb -fPIC  -O0 -std=gnu99  
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')

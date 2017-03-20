@@ -6,7 +6,7 @@
 #include "hiredis/async.h"
 #include "reply.h"
 #include "fnv.h"
-
+#include "search_cluster.h"
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
@@ -14,54 +14,64 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
+    printf("Reply: %p\n", replies[i]);
     MR_ReplyWithMRReply(ctx, replies[i]);
   }
   return REDISMODULE_OK;
 }
 
-/* A reducer that sums up numeric replies from a request */
-int sumReducer(struct MRCtx *mc, int count, MRReply **replies) {
-
-  RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
-  long long sum = 0;
-  for (int i = 0; i < count; i++) {
-    long long n = 0;
-    if (MRReply_ToInteger(replies[i], &n)) {
-      sum += n;
-    }
-  }
-
-  return RedisModule_ReplyWithLongLong(ctx, sum);
-}
-
-int SumAggCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+/* DFT.ADD {index} ... */
+int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
   RedisModule_AutoMemory(ctx);
 
-  MRCommand cmds[argc - 1];
-  for (int i = 0; i < argc - 1; i++) {
-    cmds[i] = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[i + 1], NULL));
-  }
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own DFT command with FT. command */
+  char *tmp = cmd.args[0];
+  cmd.args[0] = strdup(cmd.args[0] + 1);
+  printf("Turning %s into %s\n", tmp, cmd.args[0]);
+  free(tmp);
+  cmd.keyPos = 1;
+  SearchCluster sc = NewSearchCluster(20, NewSimplePartitioner(20));
 
-  MR_Map(MR_CreateCtx(ctx), sumReducer, cmds, argc - 1);
+  SearchCluster_RewriteCommand(&sc, &cmd, 2);
+  MRCommand_Print(&cmd);
+  // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MR_MapSingle(MR_CreateCtx(ctx), chainReplyReducer, cmd);
+
+  MRCommand_Free(&cmd);
 
   // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
 
-int TestCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
   RedisModule_AutoMemory(ctx);
 
-  struct MRCtx *mc = MR_CreateCtx(ctx);
-  MR_Fanout(mc, chainReplyReducer, MR_NewCommandFromRedisStrings(argc - 1, &argv[1]));
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own DFT command with FT. command */
+  char *tmp = cmd.args[0];
+  cmd.args[0] = strdup(cmd.args[0] + 1);
+  printf("Turning %s into %s\n", tmp, cmd.args[0]);
+  free(tmp);
+
+  SearchCluster sc = NewSearchCluster(20, NewSimplePartitioner(20));
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MR_Map(MR_CreateCtx(ctx), chainReplyReducer, cg);
+
+  // MRCommand_Free(&cmd);
+  // cg.Free(cg.ctx);
+
+  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -78,10 +88,16 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
   // register index type
 
-  if (RedisModule_CreateCommand(ctx, "rmr.test", TestCmd, "readonly", 1, 1, 1) == REDISMODULE_ERR)
+  if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "write", 0, 0, 0) ==
+      REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "rmr.sum", SumAggCmd, "readonly", 1, 1, 1) == REDISMODULE_ERR)
+  if (RedisModule_CreateCommand(ctx, "dft.create", FanoutCommandHandler, "write", 0, 0, 0) ==
+      REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.search", FanoutCommandHandler, "readonly", 1, 1, 1) ==
+      REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
   return REDISMODULE_OK;

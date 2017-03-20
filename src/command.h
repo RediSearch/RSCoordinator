@@ -8,6 +8,23 @@ typedef struct {
   int keyPos;
 } MRCommand;
 
+/* A generator producing a list of commands on successive calls to Next(); */
+typedef struct {
+  /* Private context of what's actually going on */
+  void *ctx;
+
+  /* The number of commands in this generator. We must know it in advance */
+  size_t (*Len)(void *ctx);
+
+  /* Next callback - should yield 0 if we are at the end, 1 if not, and put the next valud in cmd */
+  int (*Next)(void *ctx, MRCommand *cmd);
+
+  /* Free callback - used to free the private context */
+  void (*Free)(void *ctx);
+} MRCommandGenerator;
+
+/* Free the command and all its strings. Doesn't free the actual commmand struct, as it is usually
+ * allocated on the stack */
 void MRCommand_Free(MRCommand *cmd);
 
 MRCommand MR_NewCommandArgv(int argc, char **argv);

@@ -12,17 +12,19 @@ const char *FNVTagFunc(const char *key, size_t len, size_t k);
 // }
 
 void testCommandMux() {
+
   SearchCluster sc = NewSearchCluster(100, NewSimplePartitioner(100));
   MRCommand cmd = MR_NewCommand(3, "FT.SEARCH", "idx", "foo");
 
-  SCCommandMuxIterator cm = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
 
   MRCommand mxcmd;
-  while (SCCommandMuxIterator_Next(&cm, &mxcmd)) {
+  // printf("Expected len: %d\n", cg.Len(cg.ctx));
+  while (cg.Next(cg.ctx, &mxcmd)) {
     MRCommand_Print(&mxcmd);
     MRCommand_Free(&mxcmd);
   }
-
+  cg.Free(cg.ctx);
   sc.part.Free(sc.part.ctx);
 }
 

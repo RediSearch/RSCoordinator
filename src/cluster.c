@@ -1,5 +1,6 @@
 #include "cluster.h"
 #include "hiredis/adapters/libuv.h"
+
 #include "dep/crc16.h"
 
 #include <stdlib.h>
@@ -17,22 +18,25 @@ void __timerConnect(uv_timer_t *tm) {
   if (MRNode_Connect(n) == REDIS_ERR) {
     uv_timer_start(tm, __timerConnect, 100, 0);
   } else {
-   
+
     free(tm);
   }
 }
+
+void _MRNode_StartReconnectLoop(MRClusterNode *n) {
+  n->connected = 0;
+  n->conn = NULL;
+  uv_timer_t *t = malloc(sizeof(uv_timer_t));
+  uv_timer_init(uv_default_loop(), t);
+  t->data = n;
+  uv_timer_start(t, __timerConnect, 100, 0);
+}
+
 void _MRNode_ConnectCallback(const redisAsyncContext *c, int status) {
   MRClusterNode *n = c->data;
   if (status != REDIS_OK) {
-    printf("Error on connect: %s\n", c->errstr);
-    // redisFree(c);
-    // redisAsyncDisconnect(c);
-    n->connected = 0;
-    n->conn = NULL;
-    uv_timer_t *t = malloc(sizeof(uv_timer_t));
-    uv_timer_init(uv_default_loop(), t);
-    t->data = n;
-    uv_timer_start(t, __timerConnect, 100, 0);
+    // printf("Error on connect: %s\n", c->errstr);
+    _MRNode_StartReconnectLoop(n);
     return;
   }
 
@@ -41,30 +45,23 @@ void _MRNode_ConnectCallback(const redisAsyncContext *c, int status) {
 }
 
 void _MRNode_DisconnectCallback(const redisAsyncContext *c, int status) {
-  printf("Disconnected!\n");
+
   MRClusterNode *n = c->data;
   n->connected = 0;
-  if (status != REDIS_OK) {
-    printf("Error: %s\n", c->errstr);
-    return;
-  }
-  printf("Disconnected...\n");
+  printf("Disconnected from %s\n", n->id);
+  _MRNode_StartReconnectLoop(n);
 }
 
 /* Connect to a cluster node */
 int MRNode_Connect(MRClusterNode *n) {
 
-  printf("Trying to connect to %s\n", n->id);
   n->conn = NULL;
   n->connected = 0;
   redisAsyncContext *c = redisAsyncConnect(n->endpoint.host, n->endpoint.port);
-  printf("got err: %s\n", c->errstr);
   if (c->err) {
     redisAsyncFree(c);
-    perror("Could not connect");
     return REDIS_ERR;
   }
-  printf("Connect initialized to %s\n", n->id);
 
   n->conn = c;
   n->conn->data = n;

@@ -28,10 +28,7 @@ typedef struct {
 
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
-SCCommandMuxIterator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd,
-                                                    int keyOffset);
+MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd, int keyOffset);
 
-/* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
-int SCCommandMuxIterator_Next(SCCommandMuxIterator *it, MRCommand *cmd);
-
+int SearchCluster_RewriteCommand(SearchCluster *c, MRCommand *cmd, int partitionKey);
 #endif

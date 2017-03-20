@@ -21,6 +21,7 @@ int MRReply_Type(MRReply *reply);
 long long MRReply_Integer(MRReply *reply);
 size_t MRReply_Length(MRReply *reply);
 char *MRReply_String(MRReply *reply, size_t *len);
+
 MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx);
 
 int MRReply_ToInteger(MRReply *reply, long long *i);

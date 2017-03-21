@@ -1,10 +1,6 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../
-endif
-
-ifndef RMUTIL_LIBDIR
-	RMUTIL_LIBDIR=../rmutil
+	RM_INCLUDE_DIR=$(shell pwd)
 endif
 
 # find the OS
@@ -18,14 +14,34 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -dylib -exported_symbol _RedisModule_OnLoad
 endif
-CFLAGS = -I$(RM_INCLUDE_DIR) -Wall -g -ggdb -fPIC  -O0 -std=gnu99  
+
+ifndef DEBUG
+	DEBUG = 0
+endif
+
+DEBUGFLAGS = -g -ggdb -O2
+ifeq ($(DEBUG), 1)
+	DEBUGFLAGS = -g -ggdb -O0
+endif
+
+
+CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= module.o rmr.o reply.o cluster.o command.o fnv.o search_cluster.o dep/crc16.o dep/heap.o
+OBJS = module.o fnv.o search_cluster.o dep/crc16.o dep/heap.o
+LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a
+export CFLAGS
+export DEBUGFLAGS
+
+
 
 all: module.so 
 
-module.so: $(OBJS)
-	$(LD) -o $@ $(OBJS) $(SHOBJ_LDFLAGS) $(LIBS) -lc -lpthread  -luv -L./hiredis -lhiredis 
+module.so: rmr $(OBJS)
+	$(LD) -o $@ $(OBJS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -luv 
+
+rmr:
+	$(MAKE) -C dep/rmr all
+.PHONY: rmr
 
 clean:
 	rm -rf *.xo *.so *.o

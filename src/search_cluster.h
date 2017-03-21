@@ -1,7 +1,7 @@
 #ifndef __SERACH_CLUSTER_H__
 #define __SERACH_CLUSTER_H__
 #include <stdint.h>
-#include "command.h"
+#include "dep/rmr/command.h"
 
 typedef struct {
   void *ctx;

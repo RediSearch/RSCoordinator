@@ -2,12 +2,13 @@
 #include <string.h>
 
 #include "redismodule.h"
-#include "rmr.h"
-#include "hiredis/async.h"
-#include "reply.h"
+#include "dep/rmr/rmr.h"
+#include "dep/rmr/hiredis/async.h"
+#include "dep/rmr/reply.h"
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
+
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 

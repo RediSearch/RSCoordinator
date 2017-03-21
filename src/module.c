@@ -8,6 +8,7 @@
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
+#include "config.h"
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -143,7 +144,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   printf("Turning %s into %s\n", tmp, cmd.args[0]);
   free(tmp);
 
-  SearchCluster sc = NewSearchCluster(20, NewSimplePartitioner(20));
+  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
+                                      NewSimplePartitioner(clusterConfig.numPartitions));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx), chainReplyReducer, cg);
@@ -168,7 +170,8 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   free(cmd.args[0]);
   cmd.args[0] = strdup("FT.SEARCH");
 
-  SearchCluster sc = NewSearchCluster(20, NewSimplePartitioner(20));
+  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
+                                      NewSimplePartitioner(clusterConfig.numPartitions));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx), searchResultReducer, cg);
@@ -181,16 +184,31 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) {
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+
+  /* Init cluster configs */
+  if (argc > 0) {
+    if (ParseConfig(&clusterConfig, argv, argc) == REDISMODULE_ERR) {
+      // printf("Could not parse module config\n");
+      RedisModule_Log(ctx, "warning", "Could not parse module config");
+      return REDISMODULE_ERR;
+    }
+  } else {
+    RedisModule_Log(ctx, "warning", "No module config, reverting to default settings");
+    clusterConfig = DEFAULT_CLUSTER_CONFIG;
+  }
+
+  RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %s",
+                  clusterConfig.numPartitions, clusterConfig.clusterType);
 
   MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375", "localhost:6376",
                                                     "localhost:6377", "localhost:6378");
   MRCluster *cl = MR_NewCluster(tp, CRC16ShardFunc);
   MR_Init(cl);
-
-  if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
-    return REDISMODULE_ERR;
-
   // register index type
 
   if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "write", 0, 0, 0) ==

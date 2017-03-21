@@ -31,17 +31,21 @@ export CFLAGS
 export DEBUGFLAGS
 
 OBJS = module.o fnv.o search_cluster.o dep/crc16.o dep/heap.o config.o
-LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a
+LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/rmutil/librmutil.a
 
 
 all: module.so 
 
-module.so: rmr $(OBJS)
+module.so: rmr rmutil $(OBJS)
 	$(LD) -o $@ $(OBJS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -luv 
 
 rmr:
 	$(MAKE) -C dep/rmr all
 .PHONY: rmr
+
+rmutil:
+	$(MAKE) -C dep/rmutil all
+.PHONY: rmutil
 
 clean:
 	rm -rvf *.xo *.so *.o *.a

@@ -29,6 +29,17 @@ typedef struct {
   MRReply *fields;
 } searchResult;
 
+typedef struct {
+  const char *queryString;
+  int offset;
+  int limit;
+  int withScores;
+  int noContent;
+} searchRequestCtx;
+
+searchRequestCtx *parseRequest(RedisModuleString **argv, int argc) {
+}
+
 int cmp_results(const void *p1, const void *p2, const void *udata) {
 
   const searchResult *r1 = p1, *r2 = p2;
@@ -49,7 +60,7 @@ searchResult *newResult(MRReply *arr, int j) {
 int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
   printf("Count: %d\n", count);
-  int N = 0;
+
   long long total = 0;
   double minScore = 0;
   heap_t *pq = malloc(heap_sizeof(10));

@@ -54,6 +54,27 @@ MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
   return cmd;
 }
 
+void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {
+  if (num <= 0) return;
+  int oldNum = cmd->num;
+  cmd->num += num;
+
+  cmd->args = realloc(cmd->args, cmd->num * sizeof(*cmd->args));
+  va_list(ap);
+  va_start(ap, num);
+  for (int i = oldNum; i < cmd->num; i++) {
+    cmd->args[i] = strdup(va_arg(ap, const char *));
+  }
+  va_end(ap);
+}
+
+void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg) {
+  if (index < 0 || index >= cmd->num) {
+    return;
+  }
+  free(cmd->args[index]);
+  cmd->args[index] = strdup(newArg);
+}
 int MRCommand_GetShardingKey(MRCommand *cmd) {
   if (cmd->keyPos == -1) {
     return cmd->num > 1 ? 1 : 0;

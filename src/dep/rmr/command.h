@@ -30,6 +30,11 @@ void MRCommand_Free(MRCommand *cmd);
 MRCommand MR_NewCommandArgv(int argc, char **argv);
 MRCommand MR_NewCommand(int argc, ...);
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv);
+
+void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
+
+void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
+
 void MRCommand_SetKeyPos(MRCommand *cmd, int keyPos);
 int MRCommand_GetShardingKey(MRCommand *cmd);
 

@@ -4,7 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
-#include "redismodule.h"
+#include <redismodule.h>
 
 typedef redisReply MRReply;
 
@@ -119,8 +119,11 @@ int MRReply_ToDouble(MRReply *reply, double *d) {
 }
 
 int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
+  if (rep == NULL) {
+    return RedisModule_ReplyWithNull(ctx);
+  }
   switch (MRReply_Type(rep)) {
-
+    
     case MR_REPLY_STRING: {
       size_t len;
       char *str = MRReply_String(rep, &len);

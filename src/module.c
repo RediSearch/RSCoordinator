@@ -5,6 +5,7 @@
 #include "dep/rmr/rmr.h"
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
+#include "dep/rmutil/util.h"
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
@@ -13,11 +14,10 @@
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
-  RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
 
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
-    printf("Reply: %p\n", replies[i]);
     MR_ReplyWithMRReply(ctx, replies[i]);
   }
   return REDISMODULE_OK;
@@ -27,17 +27,46 @@ typedef struct {
   MRReply *id;
   double score;
   MRReply *fields;
+  MRReply *payload;
 } searchResult;
 
 typedef struct {
-  const char *queryString;
-  int offset;
-  int limit;
+  char *queryString;
+  long long offset;
+  long long limit;
   int withScores;
+  int withPayload;
   int noContent;
 } searchRequestCtx;
 
+void searchRequestCtx_Free(searchRequestCtx *r) {
+  free(r->queryString);
+  free(r);
+}
+
 searchRequestCtx *parseRequest(RedisModuleString **argv, int argc) {
+  /* A search request must have at least 3 args */
+  if (argc < 3) {
+    return NULL;
+  }
+
+  searchRequestCtx *req = malloc(sizeof(searchRequestCtx));
+  req->queryString = strdup(RedisModule_StringPtrLen(argv[2], NULL));
+  req->limit = 10;
+  req->offset = 0;
+  // marks the user set WITHSCORES. internally it's always set
+  req->withScores = RMUtil_ArgExists("WITHSCORES", argv, argc, 3) != 0;
+
+  // Detect "NOCONTENT"
+  req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, 3) != 0;
+  req->withPayload = RMUtil_ArgExists("WITHPAYLOADS", argv, argc, 3) != 0;
+
+  // Parse LIMIT argument
+  RMUtil_ParseArgsAfter("LIMIT", argv, argc, "ll", &req->offset, &req->limit);
+  if (req->limit <= 0) req->limit = 10;
+  if (req->offset <= 0) req->offset = 0;
+
+  return req;
 }
 
 int cmp_results(const void *p1, const void *p2, const void *udata) {
@@ -49,17 +78,22 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
   return s1 < s2 ? 1 : (s1 > s2 ? -1 : 0);
 }
 
-searchResult *newResult(MRReply *arr, int j) {
+searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset) {
   searchResult *res = malloc(sizeof(searchResult));
   res->id = MRReply_ArrayElement(arr, j);
-  res->fields = MRReply_ArrayElement(arr, j + 2);
-  MRReply_ToDouble(MRReply_ArrayElement(arr, j + 1), &res->score);
+  // parse socre
+  MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score);
+  // get fields
+  res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
+  // get payloads
+  res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, j + payloadOffset) : NULL;
   return res;
 }
 
 int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-  RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
-  printf("Count: %d\n", count);
+
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
 
   long long total = 0;
   double minScore = 0;
@@ -71,8 +105,22 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
       // first element is always the total count
       total += MRReply_Integer(MRReply_ArrayElement(arr, 0));
       size_t len = MRReply_Length(arr);
-      for (int j = 1; j < len; j += 3) {
-        searchResult *res = newResult(arr, j);
+
+      int step = 3;  // 1 for key, 1 for score, 1 for fields
+      int scoreOffset = 1, fieldsOffset = 2, payloadOffset = -1;
+      if (req->withPayload) {  // save an extra step for payloads
+        step++;
+        payloadOffset = 2;
+        fieldsOffset = 3;
+      }
+      // nocontent - one less field, and the offset is -1 to avoid parsing it
+      if (req->noContent) {
+        step--;
+        fieldsOffset = -1;
+      }
+
+      for (int j = 1; j < len; j += step) {
+        searchResult *res = newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset);
 
         printf("Reply score: %f, minScore: %f\n", res->score, minScore);
 
@@ -103,9 +151,20 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
     searchResult *res = heap_poll(pq);
     MR_ReplyWithMRReply(ctx, res->id);
-    RedisModule_ReplyWithDouble(ctx, res->score);
-    MR_ReplyWithMRReply(ctx, res->fields);
-    len += 3;
+    len++;
+    if (req->withScores) {
+      RedisModule_ReplyWithDouble(ctx, res->score);
+      len++;
+    }
+    if (req->withPayload) {
+      
+      MR_ReplyWithMRReply(ctx, res->payload);
+      len++;
+    }
+    if (!req->noContent) {
+      MR_ReplyWithMRReply(ctx, res->fields);
+      len++;
+    }
   }
   RedisModule_ReplySetArrayLength(ctx, len);
 
@@ -127,12 +186,13 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   printf("Turning %s into %s\n", tmp, cmd.args[0]);
   free(tmp);
   cmd.keyPos = 1;
-  SearchCluster sc = NewSearchCluster(20, NewSimplePartitioner(20));
+  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
+                                      NewSimplePartitioner(clusterConfig.numPartitions));
 
   SearchCluster_RewriteCommand(&sc, &cmd, 2);
   MRCommand_Print(&cmd);
   // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
-  MR_MapSingle(MR_CreateCtx(ctx), chainReplyReducer, cmd);
+  MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);
 
   MRCommand_Free(&cmd);
 
@@ -159,7 +219,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
                                       NewSimplePartitioner(clusterConfig.numPartitions));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
-  MR_Map(MR_CreateCtx(ctx), chainReplyReducer, cg);
+  MR_Map(MR_CreateCtx(ctx, NULL), chainReplyReducer, cg);
 
   // MRCommand_Free(&cmd);
   // cg.Free(cg.ctx);
@@ -171,13 +231,22 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (argc < 2) {
+  if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
   RedisModule_AutoMemory(ctx);
 
+  searchRequestCtx *req = parseRequest(argv, argc);
+  if (!req) {
+    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+  }
+
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  if (!req->withScores) {
+    MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
+  }
   /* Replace our own DFT command with FT. command */
+  MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   free(cmd.args[0]);
   cmd.args[0] = strdup("FT.SEARCH");
 
@@ -185,7 +254,10 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
                                       NewSimplePartitioner(clusterConfig.numPartitions));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
-  MR_Map(MR_CreateCtx(ctx), searchResultReducer, cg);
+
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
+
+  MR_Map(mrctx, searchResultReducer, cg);
 
   // MRCommand_Free(&cmd);
   // cg.Free(cg.ctx);

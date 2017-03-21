@@ -31,10 +31,11 @@ typedef struct MRCtx {
   int repliesCap;
   MRReduceFunc reducer;
   void *privdata;
+  void *redisCtx;
 } MRCtx;
 
 /* Create a new MapReduce context */
-MRCtx *MR_CreateCtx(void *ctx) {
+MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   MRCtx *ret = malloc(sizeof(MRCtx));
   ret->startTime = time(NULL);
   ret->numReplied = 0;
@@ -43,7 +44,8 @@ MRCtx *MR_CreateCtx(void *ctx) {
   ret->repliesCap = __cluster->topo.numShards;
   ret->replies = calloc(__cluster->topo.numShards + 100, sizeof(redisReply *));
   ret->reducer = NULL;
-  ret->privdata = ctx;
+  ret->privdata = privdata;
+  ret->redisCtx = ctx;
   return ret;
 }
 
@@ -66,11 +68,15 @@ void *MRCtx_GetPrivdata(struct MRCtx *ctx) {
   return ctx->privdata;
 }
 
+RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
+  return ctx->redisCtx;
+}
+
 /* handler for unblocking redis commands, that calls the actual reducer */
 int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
-  mc->privdata = ctx;
+  mc->redisCtx = ctx;
 
   int rc = mc->reducer(mc, mc->numReplied, mc->replies);
 
@@ -78,6 +84,7 @@ int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   return rc;
 }
 
+// TODO: make this user configrable
 void __mrFreePrivdata(void *privdata) {
   free(privdata);
 }
@@ -101,7 +108,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   // If we've received the last reply - unblock the client
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
-    RedisModuleBlockedClient *bc = ctx->privdata;
+    RedisModuleBlockedClient *bc = ctx->redisCtx;
     RedisModule_UnblockClient(bc, ctx);
   }
 }
@@ -154,7 +161,7 @@ void __uvFanoutRequest(uv_work_t *wr) {
   }
 
   if (mrctx->numExpected == 0) {
-    RedisModuleBlockedClient *bc = mrctx->privdata;
+    RedisModuleBlockedClient *bc = mrctx->redisCtx;
     RedisModule_UnblockClient(bc, mrctx);
     // printf("could not send single command. hande fail please\n");
   }
@@ -203,8 +210,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
 
-  RedisModuleCtx *rx = ctx->privdata;
-  rc->ctx->privdata = RedisModule_BlockClient(rx, __mrUnblockHanlder, NULL, NULL, 0);
+  rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
   uv_work_t *wr = malloc(sizeof(uv_work_t));
   wr->data = rc;
@@ -225,8 +231,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
     }
   }
 
-  RedisModuleCtx *rx = ctx->privdata;
-  ctx->privdata = RedisModule_BlockClient(rx, __mrUnblockHanlder, NULL, NULL, 0);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
   uv_work_t *wr = malloc(sizeof(uv_work_t));
   wr->data = rc;
@@ -242,8 +247,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = MRCommand_Copy(&cmd);
 
-  RedisModuleCtx *rx = ctx->privdata;
-  ctx->privdata = RedisModule_BlockClient(rx, __mrUnblockHanlder, NULL, NULL, 0);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
   uv_work_t *wr = malloc(sizeof(uv_work_t));
   wr->data = rc;

@@ -31,4 +31,5 @@ typedef struct {
 MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd, int keyOffset);
 
 int SearchCluster_RewriteCommand(SearchCluster *c, MRCommand *cmd, int partitionKey);
+int SearchCluster_RewriteCommandArg(SearchCluster *c, MRCommand *cmd, int partitionKey, int arg);
 #endif

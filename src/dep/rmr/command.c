@@ -68,12 +68,17 @@ void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {
   va_end(ap);
 }
 
+void MRCommand_SetKeyPos(MRCommand *cmd, int keyPos) {
+  cmd->keyPos = keyPos;
+}
+
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg) {
   if (index < 0 || index >= cmd->num) {
     return;
   }
-  free(cmd->args[index]);
+  char *tmp = cmd->args[index];
   cmd->args[index] = strdup(newArg);
+  free(tmp);
 }
 int MRCommand_GetShardingKey(MRCommand *cmd) {
   if (cmd->keyPos == -1) {

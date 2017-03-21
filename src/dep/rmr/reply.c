@@ -123,7 +123,7 @@ int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
     return RedisModule_ReplyWithNull(ctx);
   }
   switch (MRReply_Type(rep)) {
-    
+
     case MR_REPLY_STRING: {
       size_t len;
       char *str = MRReply_String(rep, &len);

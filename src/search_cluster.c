@@ -52,6 +52,27 @@ SearchCluster NewSearchCluster(size_t size, Partitioner pt) {
   return (SearchCluster){.size = size, .part = pt};
 }
 
+int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
+
+  if (arg < 0) {
+    return 0;
+  }
+
+  // the partition arg is the arg which we select the partition on
+  char *partitionArg = cmd->args[partitionKey];
+  // the sharding arg is the arg that we will add the partition tag to
+  char *rewriteArg = cmd->args[arg];
+
+  char *tagged = malloc(strlen(rewriteArg) + 24);
+
+  size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
+  snprintf(tagged, strlen(rewriteArg) + 24, "%s{%s}", rewriteArg,
+           sc->part.PartitionTag(sc->part.ctx, part));
+  MRCommand_ReplaceArg(cmd, arg, tagged);
+
+  return 1;
+}
+
 int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitionKey) {
 
   int sk = -1;
@@ -65,8 +86,7 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
 
     size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
     sprintf(tagged, "%s{%s}", shardingArg, sc->part.PartitionTag(sc->part.ctx, part));
-    free(shardingArg);
-    cmd->args[sk] = tagged;
+    MRCommand_ReplaceArg(cmd, sk, tagged);
   }
   return 1;
 }

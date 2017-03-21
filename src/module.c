@@ -24,7 +24,7 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 }
 
 typedef struct {
-  MRReply *id;
+  char *id;
   double score;
   MRReply *fields;
   MRReply *payload;
@@ -80,7 +80,13 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
 
 searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset) {
   searchResult *res = malloc(sizeof(searchResult));
-  res->id = MRReply_ArrayElement(arr, j);
+
+  res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
+  // if the id contains curly braces, get rid of them now
+  char *brace = strchr(res->id, '{');
+  if (brace && strchr(brace, '}')) {
+    *brace = '\0';
+  }
   // parse socre
   MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score);
   // get fields
@@ -144,20 +150,21 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   }
   // TODO: Inverse this
   printf("Total: %d\n", total);
+
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   int len = 1;
   RedisModule_ReplyWithLongLong(ctx, total);
   while (heap_count(pq)) {
 
     searchResult *res = heap_poll(pq);
-    MR_ReplyWithMRReply(ctx, res->id);
+    RedisModule_ReplyWithStringBuffer(ctx, res->id, strlen(res->id));
     len++;
     if (req->withScores) {
       RedisModule_ReplyWithDouble(ctx, res->score);
       len++;
     }
     if (req->withPayload) {
-      
+
       MR_ReplyWithMRReply(ctx, res->payload);
       len++;
     }
@@ -181,15 +188,14 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own DFT command with FT. command */
-  char *tmp = cmd.args[0];
-  cmd.args[0] = strdup(cmd.args[0] + 1);
-  printf("Turning %s into %s\n", tmp, cmd.args[0]);
-  free(tmp);
-  cmd.keyPos = 1;
+  MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
+  MRCommand_SetKeyPos(&cmd, 1);
+
   SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
                                       NewSimplePartitioner(clusterConfig.numPartitions));
 
   SearchCluster_RewriteCommand(&sc, &cmd, 2);
+  SearchCluster_RewriteCommandArg(&sc, &cmd, 2, 2);
   MRCommand_Print(&cmd);
   // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);

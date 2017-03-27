@@ -1,29 +1,23 @@
 #ifndef __RMR_CLUSTER_H__
 #define __RMR_CLUSTER_H__
 
+#include "../triemap/triemap.h"
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
+#include "conn.h"
+#include "endpoint.h"
 #include "command.h"
+
 #ifndef uint
 typedef unsigned int uint;
 #endif
-/* A single endpoint in the cluster */
-typedef struct MREndpoint {
-  char *host;
-  int port;
-  char *unixSock;
-} MREndpoint;
-
-int MREndpoint_Parse(const char *addr, MREndpoint *ep);
-void MREndpoint_Free(MREndpoint *ep);
 
 typedef struct {
   MREndpoint endpoint;
   const char *id;
   int isSelf;
   int isMaster;
-  redisAsyncContext *conn;
-  int connected;
+
 } MRClusterNode;
 
 typedef struct {

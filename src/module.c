@@ -135,7 +135,6 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
           heap_offerx(pq, res);
 
         } else if (res->score > minScore) {
-          printf("Heap full!\n");
           searchResult *smallest = heap_poll(pq);
           heap_offerx(pq, res);
           free(smallest);

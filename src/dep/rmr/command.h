@@ -1,6 +1,6 @@
 #ifndef __MR_COMMAND_H__
 #define __MR_COMMAND_H__
-#include "redismodule.h"
+#include <redismodule.h>
 
 typedef struct {
   char **args;

@@ -4,6 +4,8 @@
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
 #include "endpoint.h"
+#include "command.h"
+
 #include "../triemap/triemap.h"
 
 typedef enum {
@@ -29,7 +31,7 @@ MRConn *MRConn_Get(MRConnManager *mgr, const char *id);
 int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
 
 /* Add a node to the connection manager */
-int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep);
+int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int connect);
 
 int MRConnManager_ConnectAll(MRConnManager *m);
 

@@ -10,6 +10,9 @@ typedef struct MREndpoint {
 
 int MREndpoint_Parse(const char *addr, MREndpoint *ep);
 
+/* Copy the endpoint's internal strings so freeing it will not hurt another copy of it */
+void MREndpoint_Copy(MREndpoint *dst, const MREndpoint *src);
+
 void MREndpoint_Free(MREndpoint *ep);
 
 #endif

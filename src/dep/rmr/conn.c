@@ -1,19 +1,16 @@
 #include "conn.h"
+#include "hiredis/adapters/libuv.h"
 
+#include <uv.h>
+
+MRConn *_MR_NewConn(MREndpoint *ep);
 int _MRConn_Connect(MRConn *conn);
 void _MRConn_StartReconnectLoop(MRConn *conn);
 void _MRConn_Stop(MRConn *conn);
+void _MRConn_Free(void *ptr);
 
 void MRConnManager_Init(MRConnManager *mgr) {
   mgr->map = NewTrieMap();
-}
-
-/* Free a connection object */
-void _MRConn_Free(void *ptr) {
-  MRConn *conn = ptr;
-
-  redisAsyncFree(conn->conn);
-  free(ptr);
 }
 
 /* Free the entire connection manager */
@@ -25,7 +22,7 @@ void MRConnManager_Free(MRConnManager *mgr) {
 /* Get the connection for a specific node by id, return NULL if this node is not in the pool */
 MRConn *MRConn_Get(MRConnManager *mgr, const char *id) {
 
-  void *ptr = TrieMap_Find(mgr->map, id, strlen(id));
+  void *ptr = TrieMap_Find(mgr->map, (char *)id, strlen(id));
   if (ptr != TRIEMAP_NOTFOUND) {
     return (MRConn *)ptr;
   }
@@ -41,12 +38,6 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
   }
 
   return redisAsyncCommandArgv(c->conn, fn, privdata, cmd->num, (const char **)cmd->args, NULL);
-}
-
-MRConn *_MR_NewConn(MREndpoint *ep) {
-  MRConn *conn = malloc(sizeof(MRConn));
-  *conn = (MRConn){.ep = *ep, .state = MRConn_Disconnected, .conn = NULL};
-  return conn;
 }
 
 /* Add a node to the connection manager. Return 1 if it's been added or 0 if it hasn't */
@@ -70,7 +61,7 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
     return 0;
   }
 
-  int rc = TrieMap_Add(m->map, id, strlen(id), conn, NULL);
+  int rc = TrieMap_Add(m->map, (char *)id, strlen(id), conn, NULL);
   if (connect) {
     _MRConn_Connect(conn);
   }
@@ -79,56 +70,43 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
 
 int MRConnManager_ConnectAll(MRConnManager *m) {
 
+  int n = 0;
   TrieMapIterator *it = TrieMap_Iterate(m->map, "", 0);
   char *key;
-  size_t len;
+  tm_len_t len;
   void *p;
-  while(TrieMapIterator_Next(it, &key, &len, &p) {
+  while (TrieMapIterator_Next(it, &key, &len, &p)) {
     MRConn *conn = p;
     if (conn && conn->state != MRConn_Connected) {
       if (_MRConn_Connect(conn) == REDIS_ERR) {
         _MRConn_StartReconnectLoop(conn);
+      } else {
+        n++;
       }
     }
   }
+  return n;
 }
 
-/* Disconnect all connections */
-int MRConnManager_DisconnectAll(MRConnManager *m) {
-  TrieMapIterator *it = TrieMap_Iterate(m->map, "", 0);
-  char *key;
-  size_t len;
-  void *p;
-  while(TrieMapIterator_Next(it, &key, &len, &p) {
-    MRConn *conn = p;
-    if (conn) {
-      _MRConn_Stop(conn);
-    }
+/* Explicitly disconnect a connection and remove it from the connection pool */
+int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
+
+  if (TrieMap_Delete(m->map, (char *)id, strlen(id), _MRConn_Free)) {
+    return REDIS_OK;
   }
+  return REDIS_ERR;
 }
 
-/* Timer async callback for reconnecting disconnected nodes */
-void __timerConnect(uv_timer_t *tm) {
-  MRClusterNode *n = tm->data;
-  if (MRNode_Connect(n) == REDIS_ERR) {
-    uv_timer_start(tm, __timerConnect, 100, 0);
-  } else {
-
-    free(tm);
-  }
-}
-
+/* Stop the connection and make sure it frees itself on disconnect */
 void _MRConn_Stop(MRConn *conn) {
   conn->state = MRConn_Stopped;
   redisAsyncDisconnect(conn->conn);
 }
-/* Explicitly disconnect a connection and remove it from the connection pool */
-int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
-  MRConn *conn = MRConn_Get(m, id);
-  if (!conn) {
-    return REDIS_OK;
-  }
 
+/* Free a connection object */
+void _MRConn_Free(void *ptr) {
+  MRConn *conn = ptr;
+  // stop frees the connection on disconnect callback
   _MRConn_Stop(conn);
 }
 
@@ -174,12 +152,18 @@ void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
   // MRConn_Stopped means the disconnect was initiated by us and not due to failure
   if (conn->state != MRConn_Stopped) {
     conn->state = MRConn_Disconnected;
-    _MRConn_StartReconnectLoop(n);
+    _MRConn_StartReconnectLoop(conn);
   } else {
     // this means we have a requested disconnect, and we remove the connection now
     redisAsyncFree(conn->conn);
     free(conn);
   }
+}
+
+MRConn *_MR_NewConn(MREndpoint *ep) {
+  MRConn *conn = malloc(sizeof(MRConn));
+  *conn = (MRConn){.ep = *ep, .state = MRConn_Disconnected, .conn = NULL};
+  return conn;
 }
 
 /* Connect to a cluster node */

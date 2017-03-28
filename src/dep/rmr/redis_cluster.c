@@ -1,7 +1,9 @@
 #include "cluster.h"
 #include <redismodule.h>
 
-MRClusterTopology *RedisCluste_GetTopology(void *p) {
+MRClusterTopology *RedisCluster_GetTopology(void *p) {
+  if (!p) return NULL;
+
   RedisModuleCtx *ctx = p;
 
   RedisModuleCallReply *r = RedisModule_Call(ctx, "CLUSTER", "c", "SLOTS");
@@ -9,6 +11,9 @@ MRClusterTopology *RedisCluste_GetTopology(void *p) {
     RedisModule_Log(ctx, "error", "Error calling CLUSTER SLOTS");
     return NULL;
   }
+  size_t x;
+  const char *proto = RedisModule_CallReplyProto(r, &x);
+  printf("%.*s\n", (int)x, proto);
 
   // TODO: Parse my id
 
@@ -22,6 +27,11 @@ MRClusterTopology *RedisCluste_GetTopology(void *p) {
       3) "821d8ca00d7ccf931ed3ffc7e3db0599d2271abf"*/
 
   size_t len = RedisModule_CallReplyLength(r);
+  if (len < 1) {
+    RedisModule_Log(ctx, "warning", "Got no slots in CLUSTER SLOTS");
+    return NULL;
+  }
+  printf("Creating a topology of %d slots\n", len);
   MRClusterTopology *topo = calloc(1, sizeof(MRClusterTopology));
 
   topo->numShards = 0;
@@ -32,7 +42,9 @@ MRClusterTopology *RedisCluste_GetTopology(void *p) {
   for (size_t i = 0; i < len; i++) {
     // e is slot range entry
     RedisModuleCallReply *e = RedisModule_CallReplyArrayElement(r, i);
-    if (RedisModule_CallReplyType(e) != REDIS_REPLY_ARRAY || RedisModule_CallReplyLength(e) < 3) {
+    if (RedisModule_CallReplyLength(e) < 3) {
+      printf("Invalid reply object for slot %d, type %d. len %d\n", i, RedisModule_CallReplyType(e),
+             RedisModule_CallReplyLength(e));
       goto err;
     }
     // parse the start and end slots
@@ -42,14 +54,16 @@ MRClusterTopology *RedisCluste_GetTopology(void *p) {
     int numNodes = RedisModule_CallReplyLength(e) - 2;
     sh.numNodes = 0;
     sh.nodes = calloc(numNodes, sizeof(MRClusterNode));
+    printf("Parsing slot %d, %d nodes", i, numNodes);
     // parse the nodes
     for (size_t n = 0; n < numNodes; n++) {
       RedisModuleCallReply *nd = RedisModule_CallReplyArrayElement(e, n + 2);
       // the array node must be 3 elements (future versions may add more...)
-      if (RedisModule_CallReplyType(nd) != REDIS_REPLY_ARRAY ||
-          RedisModule_CallReplyLength(nd) < 3) {
+      if (RedisModule_CallReplyLength(nd) < 3) {
         goto err;
       }
+
+      // Parse the node information (host, port, id)
       size_t hostlen, idlen;
       const char *host =
           RedisModule_CallReplyStringPtr(RedisModule_CallReplyArrayElement(nd, 0), &hostlen);
@@ -60,7 +74,7 @@ MRClusterTopology *RedisCluste_GetTopology(void *p) {
       sh.nodes[sh.numNodes++] = (MRClusterNode){
           .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .unixSock = NULL},
           .id = strndup(id, idlen),
-          .isMaster = n == 0,
+          .isMaster = n == 0,  // the first node is always the master
           .isSelf = 0,
       };
 
@@ -76,4 +90,10 @@ err:
   RedisModule_Log(ctx, "error", "Error parsing cluster topology");
   MRClusterTopology_Free(topo);
   return NULL;
+}
+
+MRTopologyProvider NewRedisClusterTopologyProvider(void *ctx) {
+  return (MRTopologyProvider){
+      .ctx = ctx, .GetTopology = RedisCluster_GetTopology,
+  };
 }

@@ -73,6 +73,9 @@ int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, vo
 /* Create a new cluster using a node provider */
 MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder);
 
+int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx);
+
+size_t MRCluster_NumShards(MRCluster *cl);
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
 
 typedef struct {

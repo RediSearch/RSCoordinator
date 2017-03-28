@@ -2,8 +2,11 @@
 #include "hiredis/adapters/libuv.h"
 
 #include <uv.h>
+#include <signal.h>
 
 MRConn *_MR_NewConn(MREndpoint *ep);
+void _MRConn_ConnectCallback(const redisAsyncContext *c, int status);
+void _MRConn_DisconnectCallback(const redisAsyncContext *, int);
 int _MRConn_Connect(MRConn *conn);
 void _MRConn_StartReconnectLoop(MRConn *conn);
 void _MRConn_Stop(MRConn *conn);
@@ -75,13 +78,17 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
   tm_len_t len;
   void *p;
   while (TrieMapIterator_Next(it, &key, &len, &p)) {
+    printf("Connecting %.*s. conn: %p\n", len, key, p);
     MRConn *conn = p;
-    if (conn && conn->state != MRConn_Connected) {
-      if (_MRConn_Connect(conn) == REDIS_ERR) {
-        _MRConn_StartReconnectLoop(conn);
-      } else {
-        n++;
-      }
+    if (conn && conn->state == MRConn_Disconnected) {
+      // if (_MRConn_Connect(conn) == REDIS_ERR) {
+      printf("Could not connect. starting loop\n");
+      _MRConn_StartReconnectLoop(conn);
+      n++;
+      // } else {
+      //   printf("Connecting to %.*s\n", len, key);
+      //   n++;
+      // }
     }
   }
   return n;
@@ -111,6 +118,7 @@ void _MRConn_Free(void *ptr) {
 
 /* Timer loop for retrying disconnected connections */
 void __timerConnect(uv_timer_t *tm) {
+  printf("Timer connect!\n");
   MRConn *conn = tm->data;
   if (_MRConn_Connect(conn) == REDIS_ERR) {
     uv_timer_start(tm, __timerConnect, 100, 0);
@@ -121,6 +129,8 @@ void __timerConnect(uv_timer_t *tm) {
 
 /* Start the timer reconnect loop for failed connection */
 void _MRConn_StartReconnectLoop(MRConn *conn) {
+
+  printf("timer --- default loop: %p\n", uv_default_loop());
   conn->state = MRConn_Disconnected;
   conn->conn = NULL;
   uv_timer_t *t = malloc(sizeof(uv_timer_t));
@@ -132,9 +142,10 @@ void _MRConn_StartReconnectLoop(MRConn *conn) {
 /* hiredis async connect callback */
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   MRConn *conn = c->data;
+  printf("Connect callback! status :%d\n", status);
   // if the connection is not stopped - try to reconnect
   if (status != REDIS_OK && conn->state != MRConn_Stopped) {
-    // printf("Error on connect: %s\n", c->errstr);
+    printf("Error on connect: %s\n", c->errstr);
     conn->state = MRConn_Disconnected;
     _MRConn_StartReconnectLoop(conn);
     return;
@@ -169,14 +180,16 @@ MRConn *_MR_NewConn(MREndpoint *ep) {
 int _MRConn_Connect(MRConn *conn) {
 
   if (conn->state == MRConn_Connected) {
+    printf("Already connected\n");
     return REDIS_OK;
   }
 
   conn->conn = NULL;
   conn->state = MRConn_Disconnected;
-
+  printf("Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
   if (c->err) {
+    printf("Could not connect to node: %s\n", c->errstr);
     redisAsyncFree(c);
     return REDIS_ERR;
   }
@@ -184,9 +197,9 @@ int _MRConn_Connect(MRConn *conn) {
   conn->conn = c;
   conn->conn->data = conn;
 
-  redisLibuvAttach(conn->conn, uv_default_loop());
+  printf("%d\n", redisLibuvAttach(conn->conn, uv_default_loop()));
   redisAsyncSetConnectCallback(conn->conn, _MRConn_ConnectCallback);
   redisAsyncSetDisconnectCallback(conn->conn, _MRConn_DisconnectCallback);
-
+  printf("Exiting connect!\n");
   return REDIS_OK;
 }

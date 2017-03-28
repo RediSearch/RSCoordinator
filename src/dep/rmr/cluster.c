@@ -5,6 +5,17 @@
 
 #include <stdlib.h>
 
+void _MRClsuter_UpdateNodes(MRCluster *cl) {
+  if (cl->topo) {
+    for (int sh = 0; sh < cl->topo->numShards; sh++) {
+      for (int n = 0; n < cl->topo->shards[sh].numNodes; n++) {
+        MRClusterNode *node = &cl->topo->shards[sh].nodes[n];
+        printf("Adding node %s:%d to cluster\n", node->endpoint.host, node->endpoint.port);
+        MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
+      }
+    }
+  }
+}
 MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf) {
   MRCluster *cl = malloc(sizeof(MRCluster));
   cl->sf = sf;
@@ -12,11 +23,8 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf) {
   cl->topo = tp.GetTopology(tp.ctx);
   MRConnManager_Init(&cl->mgr);
 
-  for (int sh = 0; sh < cl->topo->numShards; sh++) {
-    for (int n = 0; n < cl->topo->shards[sh].numNodes; n++) {
-      MRClusterNode *node = &cl->topo->shards[sh].nodes[n];
-      MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
-    }
+  if (cl->topo) {
+    _MRClsuter_UpdateNodes(cl);
   }
   return cl;
 }
@@ -34,6 +42,9 @@ MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
 /* Send a command to the right shard in the cluster */
 int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
 
+  if (!cl->topo) {
+    return REDIS_ERR;
+  }
   /* Get the cluster slot from the sharder */
   uint slot = cl->sf(cmd, cl->topo->numSlots);
 
@@ -117,7 +128,35 @@ void MRClusterTopology_Free(MRClusterTopology *t) {
   free(t);
 }
 
+size_t MRCluster_NumShards(MRCluster *cl) {
+  if (cl->topo) {
+    return cl->topo->numShards;
+  }
+  return 0;
+}
 void MRClusterNode_Free(MRClusterNode *n) {
   MREndpoint_Free(&n->endpoint);
   free((char *)n->id);
+}
+
+void _clusterConnectAllCB(uv_work_t *wrk) {
+  printf("Executing connect CB\n");
+  MRCluster *c = wrk->data;
+  MRCluster_ConnectAll(c);
+}
+
+int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
+  if (ctx) {
+    cl->tp.ctx = ctx;
+  }
+
+  cl->topo = cl->tp.GetTopology(cl->tp.ctx);
+  if (cl->topo) {
+    _MRClsuter_UpdateNodes(cl);
+
+    uv_work_t *wr = malloc(sizeof(uv_work_t));
+    wr->data = cl;
+    uv_queue_work(uv_default_loop(), wr, _clusterConnectAllCB, NULL);
+  }
+  return REDIS_OK;
 }

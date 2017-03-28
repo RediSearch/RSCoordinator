@@ -23,6 +23,8 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 /* Initialize the MapReduce engine with a node provider */
 void MR_Init(MRCluster *cl);
 
+int MR_UpdateTopology(void *ctx);
+
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
 

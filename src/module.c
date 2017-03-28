@@ -6,6 +6,7 @@
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
+#include "dep/rmr/redis_cluster.h"
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
@@ -179,7 +180,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
 /* DFT.ADD {index} ... */
 int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+  MR_UpdateTopology(ctx);
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -207,10 +208,11 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+  MR_UpdateTopology(ctx);
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
+
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -236,6 +238,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
+  MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
@@ -293,17 +296,17 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %s",
                   clusterConfig.numPartitions, clusterConfig.clusterType);
 
-  MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375", "localhost:6376",
-                                                    "localhost:6377", "localhost:6378");
-  MRCluster *cl = MR_NewCluster(tp, CRC16ShardFunc);
+  // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375", "localhost:6376",
+  //                                                   "localhost:6377", "localhost:6378");
+  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc);
   MR_Init(cl);
   // register index type
 
-  if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "write", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "dft.create", FanoutCommandHandler, "write", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.create", FanoutCommandHandler, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

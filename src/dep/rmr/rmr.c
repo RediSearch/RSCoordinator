@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/param.h>
 
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
@@ -34,6 +35,16 @@ typedef struct MRCtx {
   void *redisCtx;
 } MRCtx;
 
+int MR_UpdateTopology(void *ctx) {
+  printf("Updating topo!\n");
+  if (!__cluster->topo) {
+    MRCLuster_UpdateTopology(__cluster, ctx);
+  }
+
+  printf("Not really updating topo...\n");
+  return REDIS_OK;
+}
+
 /* Create a new MapReduce context */
 MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   MRCtx *ret = malloc(sizeof(MRCtx));
@@ -41,8 +52,8 @@ MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   ret->numReplied = 0;
   ret->numErrored = 0;
   ret->numExpected = 0;
-  ret->repliesCap = __cluster->topo.numShards;
-  ret->replies = calloc(__cluster->topo.numShards + 100, sizeof(redisReply *));
+  ret->repliesCap = MAX(1, MRCluster_NumShards(__cluster));
+  ret->replies = calloc(ret->repliesCap, sizeof(redisReply *));
   ret->reducer = NULL;
   ret->privdata = privdata;
   ret->redisCtx = ctx;
@@ -115,8 +126,12 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
 /* start the event loop side thread */
 void *sideThread(void *arg) {
-
-  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+  // uv_loop_configure(uv_default_loop(), UV_LOOP_BLOCK_SIGNAL)
+  while (1) {
+    if (uv_run(uv_default_loop(), UV_RUN_DEFAULT)) break;
+    usleep(1000);
+  }
+  printf("Uv loop exited!\n");
   return NULL;
 }
 
@@ -126,7 +141,7 @@ static pthread_t loop_th;
 void MR_Init(MRCluster *cl) {
 
   __cluster = cl;
-  MRCluster_ConnectAll(__cluster);
+  // MRCluster_ConnectAll(__cluster);
   printf("Creating thread...\n");
   if (pthread_create(&loop_th, NULL, sideThread, NULL) != 0) {
     perror("thread create");
@@ -152,11 +167,13 @@ void __uvFanoutRequest(uv_work_t *wr) {
   mrctx->reducer = mc->f;
   mrctx->numExpected = 0;
 
-  for (int i = 0; i < __cluster->topo.numShards; i++) {
-    printf("Sending %d/%zd\n", i, __cluster->topo.numShards);
-    MRCommand *cmd = &mc->cmds[0];
-    if (MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx) == REDIS_OK) {
-      mrctx->numExpected++;
+  if (__cluster->topo) {
+    for (int i = 0; i < __cluster->topo->numShards; i++) {
+      printf("Sending %d/%zd\n", i, __cluster->topo->numShards);
+      MRCommand *cmd = &mc->cmds[0];
+      if (MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx) == REDIS_OK) {
+        mrctx->numExpected++;
+      }
     }
   }
 
@@ -188,6 +205,11 @@ void __uvMapRequest(uv_work_t *wr) {
     if (MRCluster_SendCommand(__cluster, &mc->cmds[i], fanoutCallback, mrctx) == REDIS_OK) {
       mc->ctx->numExpected++;
     }
+  }
+  if (mrctx->numExpected == 0) {
+    RedisModuleBlockedClient *bc = mrctx->redisCtx;
+    RedisModule_UnblockClient(bc, mrctx);
+    // printf("could not send single command. hande fail please\n");
   }
 
   for (int i = 0; i < mc->numCmds; i++) {

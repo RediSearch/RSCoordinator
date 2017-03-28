@@ -17,7 +17,6 @@ typedef struct {
   const char *id;
   int isSelf;
   int isMaster;
-
 } MRClusterNode;
 
 typedef struct {
@@ -34,11 +33,14 @@ typedef struct {
 
 } MRClusterTopology;
 
+void MRClusterTopology_Free(MRClusterTopology *t);
+void MRClusterNode_Free(MRClusterNode *n);
+
 // /* An interface for providing the cluster with the node list, and TODO allow node change
 //  * notifications */
 typedef struct {
   void *ctx;
-  MRClusterTopology (*GetTopology)(void *ctx);
+  MRClusterTopology *(*GetTopology)(void *ctx);
 } MRTopologyProvider;
 
 /* A function that tells the cluster which shard to send a command to. should return -1 if not
@@ -47,7 +49,8 @@ typedef uint (*ShardFunc)(MRCommand *cmd, uint numSlots);
 
 /* A cluster has nodes and connections that can be used by the engine to send requests */
 typedef struct {
-  MRClusterTopology topo;
+  MRConnManager mgr;
+  MRClusterTopology *topo;
   ShardFunc sf;
   MRTopologyProvider tp;
 } MRCluster;

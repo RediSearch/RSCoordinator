@@ -33,10 +33,10 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
 /* Add a node to the connection manager */
 int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int connect);
 
+/* Connect all nodes to their destinations */
 int MRConnManager_ConnectAll(MRConnManager *m);
 
-int MRConnManager_DisconnectAll(MRConnManager *m);
-
+/* Disconnect a node */
 int MRConnManager_Disconnect(MRConnManager *m, const char *id);
 
 #endif

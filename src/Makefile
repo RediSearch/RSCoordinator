@@ -31,7 +31,7 @@ export CFLAGS
 export DEBUGFLAGS
 
 OBJS = module.o fnv.o search_cluster.o dep/crc16.o dep/heap.o config.o
-LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/rmutil/librmutil.a
+LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/rmutil/librmutil.a dep/triemap/libtriemap.a
 
 
 all: module.so 

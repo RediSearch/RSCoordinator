@@ -15,7 +15,6 @@ void MRConnManager_Init(MRConnManager *mgr) {
 
 /* Free the entire connection manager */
 void MRConnManager_Free(MRConnManager *mgr) {
-  MRConnManager_DisconnectAll(mgr);
   TrieMap_Free(mgr->map, _MRConn_Free);
 }
 

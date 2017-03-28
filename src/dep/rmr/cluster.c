@@ -112,8 +112,18 @@ MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, .
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
 
   const char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
+  // TODO: consider tags here
+  char *brace = strchr(k, '{');
+  size_t len = strlen(k);
+  if (brace) {
+    char *braceEnd = strchr(brace, '}');
+    if (braceEnd) {
 
-  uint16_t crc = crc16(k, strlen(k));
+      len = braceEnd - brace - 1;
+      k = brace + 1;
+    }
+  }
+  uint16_t crc = crc16(k, len);
   return crc % numSlots;
 }
 

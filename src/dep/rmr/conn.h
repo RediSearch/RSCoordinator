@@ -9,10 +9,11 @@
 typedef enum {
   MRConn_Disconnected,
   MRConn_Connected,
-  MRConn_Dead,
+  MRConn_Stopped,
 } MRConnState;
 
 typedef struct {
+  MREndpoint ep;
   redisAsyncContext *conn;
   MRConnState state;
 } MRConn;

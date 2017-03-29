@@ -129,10 +129,10 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
       for (int j = 1; j < len; j += step) {
         searchResult *res = newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset);
 
-        printf("Reply score: %f, minScore: %f\n", res->score, minScore);
+        // printf("Reply score: %f, minScore: %f\n", res->score, minScore);
 
         if (heap_count(pq) < heap_size(pq)) {
-          printf("Offering result score %f\n", res->score);
+          // printf("Offering result score %f\n", res->score);
           heap_offerx(pq, res);
 
         } else if (res->score > minScore) {
@@ -149,7 +149,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
   }
   // TODO: Inverse this
-  printf("Total: %d\n", total);
+  // printf("Total: %d\n", total);
 
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   int len = 1;
@@ -196,7 +196,7 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   SearchCluster_RewriteCommand(&sc, &cmd, 2);
   SearchCluster_RewriteCommandArg(&sc, &cmd, 2, 2);
-  MRCommand_Print(&cmd);
+  // MprintRCommand_Print(&cmd);
   // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);
 
@@ -219,7 +219,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   /* Replace our own DFT command with FT. command */
   char *tmp = cmd.args[0];
   cmd.args[0] = strdup(cmd.args[0] + 1);
-  printf("Turning %s into %s\n", tmp, cmd.args[0]);
+  // printf("Turning %s into %s\n", tmp, cmd.args[0]);
   free(tmp);
 
   SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,

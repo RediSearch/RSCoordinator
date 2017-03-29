@@ -19,13 +19,15 @@ LIBHIREDIS=hiredis/libhiredis.a
 
 hiredis:
 	$(MAKE) -C ./hiredis static
+.PHONY: hiredis
+
 triemap:
 	$(MAKE) -C ../triemap all
 .PHONY: triemap
 
 all: librmr.a
 
-librmr.a: hiredis triemap $(CC_OBJECTS)
+librmr.a: hiredis triemap | $(CC_OBJECTS)
 	ar rcs $@ $(CC_OBJECTS)
 
 clean:

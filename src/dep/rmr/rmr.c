@@ -36,7 +36,7 @@ typedef struct MRCtx {
 } MRCtx;
 
 int MR_UpdateTopology(void *ctx) {
-  printf("Updating topo!\n");
+  //printf("Updating topo!\n");
   return MRCLuster_UpdateTopology(__cluster, ctx);
 }
 
@@ -119,44 +119,99 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   }
 }
 
-/* start the event loop side thread */
-void *sideThread(void *arg) {
-  // uv_loop_configure(uv_default_loop(), UV_LOOP_BLOCK_SIGNAL)
-  while (1) {
-    if (uv_run(uv_default_loop(), UV_RUN_DEFAULT)) break;
-    usleep(1000);
-  }
-  printf("Uv loop exited!\n");
-  return NULL;
-}
-
-static pthread_t loop_th;
-
-/* Initialize the MapReduce engine with a node provider */
-void MR_Init(MRCluster *cl) {
-
-  __cluster = cl;
-  // MRCluster_ConnectAll(__cluster);
-  printf("Creating thread...\n");
-  if (pthread_create(&loop_th, NULL, sideThread, NULL) != 0) {
-    perror("thread create");
-    exit(-1);
-  }
-  printf("Thread created\n");
-}
-
 // temporary request context to pass to the event loop
 struct __mrRequestCtx {
   MRCtx *ctx;
   MRReduceFunc f;
   MRCommand *cmds;
   int numCmds;
+  void (*cb)(struct __mrRequestCtx *);
 };
 
-/* The fanout request received in the event loop in a thread safe manner */
-void __uvFanoutRequest(uv_work_t *wr) {
+typedef struct {
+  struct __mrRequestCtx **queue;
+  size_t sz;
+  size_t cap;
+  uv_mutex_t *lock;
+  uv_async_t async;
+} __mrRequestQueue;
 
-  struct __mrRequestCtx *mc = wr->data;
+void __rq_push(__mrRequestQueue *q, struct __mrRequestCtx *req) {
+  uv_mutex_lock(q->lock);
+  if (q->sz == q->cap) {
+    q->cap += q->cap ? q->cap : 1;
+    q->queue = realloc(q->queue, q->cap * sizeof(struct __mrRequestCtx *));
+  }
+  q->queue[q->sz++] = req;
+
+  uv_mutex_unlock(q->lock);
+  uv_async_send(&q->async);
+}
+
+struct __mrRequestCtx *__rq_pop(__mrRequestQueue *q) {
+  uv_mutex_lock(q->lock);
+  if (q->sz == 0) {
+    uv_mutex_unlock(q->lock);
+    return NULL;
+  }
+  struct __mrRequestCtx *r = q->queue[--q->sz];
+  uv_mutex_unlock(q->lock);
+  return r;
+}
+
+void __rq_async_cb(uv_async_t *async) {
+  __mrRequestQueue *q = async->data;
+  struct __mrRequestCtx *req;
+  while (NULL != (req = __rq_pop(q))) {
+    req->cb(req);
+  }
+}
+
+void __rq_init(__mrRequestQueue *q, size_t cap) {
+  q->sz = 0;
+  q->cap = cap;
+  q->lock = malloc(sizeof(*q->lock));
+  uv_mutex_init(q->lock);
+  q->queue = calloc(q->cap, sizeof(struct __mrRequestCtx *));
+  // TODO: Add close cb
+  uv_async_init(uv_default_loop(), &q->async, __rq_async_cb);
+  q->async.data = q;
+}
+
+__mrRequestQueue __rq;
+
+/* start the event loop side thread */
+void sideThread(void *arg) {
+  __rq_init(&__rq, 8);
+
+  // uv_loop_configure(uv_default_loop(), UV_LOOP_BLOCK_SIGNAL)
+  while (1) {
+    if (uv_run(uv_default_loop(), UV_RUN_DEFAULT)) break;
+    usleep(1000);
+  }
+  printf("Uv loop exited!\n");
+}
+
+uv_thread_t loop_th;
+
+/* Initialize the MapReduce engine with a node provider */
+void MR_Init(MRCluster *cl) {
+
+  __cluster = cl;
+
+  // MRCluster_ConnectAll(__cluster);
+  printf("Creating thread...\n");
+
+  if (uv_thread_create(&loop_th, sideThread, NULL) != 0) {
+    perror("thread create");
+    exit(-1);
+  }
+  printf("Thread created\n");
+}
+
+/* The fanout request received in the event loop in a thread safe manner */
+void __uvFanoutRequest(struct __mrRequestCtx *mc) {
+
   MRCtx *mrctx = mc->ctx;
   mrctx->numReplied = 0;
   mrctx->reducer = mc->f;
@@ -186,9 +241,7 @@ void __uvFanoutRequest(uv_work_t *wr) {
   // return REDIS_OK;
 }
 
-void __uvMapRequest(uv_work_t *wr) {
-
-  struct __mrRequestCtx *mc = wr->data;
+void __uvMapRequest(struct __mrRequestCtx *mc) {
 
   MRCtx *mrctx = mc->ctx;
   mrctx->numReplied = 0;
@@ -225,13 +278,16 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
-
   rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
-  uv_work_t *wr = malloc(sizeof(uv_work_t));
-  wr->data = rc;
-  uv_queue_work(uv_default_loop(), wr, __uvFanoutRequest, NULL);
-  return 0;
+  rc->cb = __uvFanoutRequest;
+  __rq_push(&__rq, rc);
+  return REDIS_OK;
+
+  // uv_work_t *wr = malloc(sizeof(uv_work_t));
+  // wr->data = rc;
+  // uv_queue_work(uv_default_loop(), wr, __uvFanoutRequest, NULL);
+  // return 0;
 }
 
 int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
@@ -249,10 +305,9 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
-  uv_work_t *wr = malloc(sizeof(uv_work_t));
-  wr->data = rc;
-  uv_queue_work(uv_default_loop(), wr, __uvMapRequest, NULL);
-  return 0;
+  rc->cb = __uvMapRequest;
+  __rq_push(&__rq, rc);
+  return REDIS_OK;
 }
 
 int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
@@ -265,8 +320,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
-  uv_work_t *wr = malloc(sizeof(uv_work_t));
-  wr->data = rc;
-  uv_queue_work(uv_default_loop(), wr, __uvMapRequest, NULL);
-  return 0;
+  rc->cb = __uvMapRequest;
+  __rq_push(&__rq, rc);
+  return REDIS_OK;
 }

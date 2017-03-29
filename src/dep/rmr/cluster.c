@@ -179,7 +179,7 @@ void MRClusterNode_Free(MRClusterNode *n) {
 }
 
 void _clusterConnectAllCB(uv_work_t *wrk) {
-  printf("Executing connect CB\n");
+  // printf("Executing connect CB\n");
   MRCluster *c = wrk->data;
   MRCluster_ConnectAll(c);
 }
@@ -191,7 +191,7 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   // only update the topology every N seconds
   time_t now = time(NULL);
   if (cl->topo != NULL && cl->lastTopologyUpdate + cl->topologyUpdateMinInterval > now) {
-    printf("Not updating topology...\n");
+    // printf("Not updating topology...\n");
     return REDIS_OK;
   }
   cl->lastTopologyUpdate = now;

@@ -42,7 +42,7 @@ module.so: rmr rmutil $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -luv 
 
 rmr:
-	$(MAKE) -C dep/rmr all
+	$(MAKE) -C dep/rmr hiredis all
 .PHONY: rmr
 
 rmutil:

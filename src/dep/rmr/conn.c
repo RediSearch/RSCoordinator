@@ -13,6 +13,8 @@ void _MRConn_StartReconnectLoop(MRConn *conn);
 void _MRConn_Stop(MRConn *conn);
 void _MRConn_Free(void *ptr);
 
+#define RSCONN_RECONNECT_TIMEOUT 250
+
 void MRConnManager_Init(MRConnManager *mgr) {
   mgr->map = NewTrieMap();
 }
@@ -85,7 +87,6 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
         _MRConn_StartReconnectLoop(conn);
         n++;
       } else {
-        printf("Connecting to %.*s\n", len, key);
         n++;
       }
     }
@@ -117,12 +118,10 @@ void _MRConn_Free(void *ptr) {
 
 /* Timer loop for retrying disconnected connections */
 void __timerConnect(uv_timer_t *tm) {
-  printf("Timer connect!\n");
   MRConn *conn = tm->data;
 
   if (_MRConn_Connect(conn) == REDIS_ERR) {
-    printf("Timeout: %d\n", MIN(1000, tm->timeout + 50));
-    uv_timer_start(tm, __timerConnect, MIN(1000, tm->timeout + 50), 0);
+    uv_timer_start(tm, __timerConnect, RSCONN_RECONNECT_TIMEOUT, 0);
   } else {
     free(tm);
   }
@@ -136,13 +135,13 @@ void _MRConn_StartReconnectLoop(MRConn *conn) {
   uv_timer_t *t = malloc(sizeof(uv_timer_t));
   uv_timer_init(uv_default_loop(), t);
   t->data = conn;
-  uv_timer_start(t, __timerConnect, 100, 0);
+  uv_timer_start(t, __timerConnect, RSCONN_RECONNECT_TIMEOUT, 0);
 }
 
 /* hiredis async connect callback */
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   MRConn *conn = c->data;
-  printf("Connect callback! status :%d\n", status);
+  // printf("Connect callback! status :%d\n", status);
   // if the connection is not stopped - try to reconnect
   if (status != REDIS_OK && conn->state != MRConn_Stopped) {
     printf("Error on connect: %s\n", c->errstr);
@@ -180,16 +179,15 @@ MRConn *_MR_NewConn(MREndpoint *ep) {
 int _MRConn_Connect(MRConn *conn) {
 
   if (conn->state == MRConn_Connected) {
-    printf("Already connected\n");
     return REDIS_OK;
   }
 
   conn->conn = NULL;
   conn->state = MRConn_Disconnected;
-  printf("Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
+  // printf("Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
   if (c->err) {
-    printf("Could not connect to node: %s\n", c->errstr);
+    printf("Could not connect to node %s:%d: %s\n", conn->ep.host, conn->ep.port, c->errstr);
     redisAsyncFree(c);
     return REDIS_ERR;
   }
@@ -197,9 +195,9 @@ int _MRConn_Connect(MRConn *conn) {
   conn->conn = c;
   conn->conn->data = conn;
 
-  printf("%d\n", redisLibuvAttach(conn->conn, uv_default_loop()));
+  redisLibuvAttach(conn->conn, uv_default_loop());
   redisAsyncSetConnectCallback(conn->conn, _MRConn_ConnectCallback);
   redisAsyncSetDisconnectCallback(conn->conn, _MRConn_DisconnectCallback);
-  printf("Exiting connect!\n");
+
   return REDIS_OK;
 }

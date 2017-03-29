@@ -1,25 +1,55 @@
 #include "cluster.h"
 #include "hiredis/adapters/libuv.h"
-
+#include "dep/triemap/triemap.h"
 #include "dep/crc16.h"
 
 #include <stdlib.h>
 
 void _MRClsuter_UpdateNodes(MRCluster *cl) {
   if (cl->topo) {
+
+    /* Get all the current node ids from the connection manager.  We will remove all the nodes that
+     * are in the new topology, and after the update, delete all the nodes that are in this map and
+     * not in the new topology */
+    TrieMap *currentNodes = NewTrieMap();
+    TrieMapIterator *it = TrieMap_Iterate(cl->mgr.map, "", 0);
+    char *k;
+    tm_len_t len;
+    void *p;
+    while (TrieMapIterator_Next(it, &k, &len, &p)) {
+      TrieMap_Add(currentNodes, k, len, NULL, NULL);
+    }
+
+    /* Walk the topology and add all nodes in it to the connection manager */
     for (int sh = 0; sh < cl->topo->numShards; sh++) {
       for (int n = 0; n < cl->topo->shards[sh].numNodes; n++) {
         MRClusterNode *node = &cl->topo->shards[sh].nodes[n];
         printf("Adding node %s:%d to cluster\n", node->endpoint.host, node->endpoint.port);
         MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
+
+        /* Remove the node id from the current node maps*/
+        TrieMap_Delete(currentNodes, (char *)node->id, strlen(node->id), NULL);
       }
     }
+
+    /* Remove all nodes that are still in the current node map and not in the new topology*/
+    it = TrieMap_Iterate(currentNodes, "", 0);
+    while (TrieMapIterator_Next(it, &k, &len, &p)) {
+      k[len] = '\0';
+      printf("Removing node %s from conn manager\n", k);
+      MRConnManager_Disconnect(&cl->mgr, k);
+    }
+
+    TrieMap_Free(currentNodes, NULL);
   }
 }
-MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf) {
+
+MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopologyUpdateInterval) {
   MRCluster *cl = malloc(sizeof(MRCluster));
   cl->sf = sf;
   cl->tp = tp;
+  cl->topologyUpdateMinInterval = minTopologyUpdateInterval;
+  cl->lastTopologyUpdate = 0;
   cl->topo = tp.GetTopology(tp.ctx);
   MRConnManager_Init(&cl->mgr);
 
@@ -112,7 +142,6 @@ MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, .
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
 
   const char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
-  // TODO: consider tags here
   char *brace = strchr(k, '{');
   size_t len = strlen(k);
   if (brace) {
@@ -159,6 +188,13 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   if (ctx) {
     cl->tp.ctx = ctx;
   }
+  // only update the topology every N seconds
+  time_t now = time(NULL);
+  if (cl->topo != NULL && cl->lastTopologyUpdate + cl->topologyUpdateMinInterval > now) {
+    printf("Not updating topology...\n");
+    return REDIS_OK;
+  }
+  cl->lastTopologyUpdate = now;
 
   cl->topo = cl->tp.GetTopology(cl->tp.ctx);
   if (cl->topo) {

@@ -298,7 +298,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
   // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375", "localhost:6376",
   //                                                   "localhost:6377", "localhost:6378");
-  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc);
+  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc, 2);
   MR_Init(cl);
   // register index type
 

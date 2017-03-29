@@ -30,14 +30,16 @@ endif
 export CFLAGS
 export DEBUGFLAGS
 
-OBJS = module.o fnv.o search_cluster.o dep/crc16.o dep/heap.o config.o
+SOURCEDIR=$(shell pwd -P)
+CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
+CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/rmutil/librmutil.a dep/triemap/libtriemap.a
 
 
 all: module.so 
 
-module.so: rmr rmutil $(OBJS)
-	$(LD) -o $@ $(OBJS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -luv 
+module.so: rmr rmutil $(CC_OBJECTS)
+	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -luv 
 
 rmr:
 	$(MAKE) -C dep/rmr all

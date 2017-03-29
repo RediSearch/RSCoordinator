@@ -53,6 +53,11 @@ typedef struct {
   MRClusterTopology *topo;
   ShardFunc sf;
   MRTopologyProvider tp;
+
+  // the time we last updated the topology
+  time_t lastTopologyUpdate;
+  // the minimum allowed interval between topology updates
+  long long topologyUpdateMinInterval;
 } MRCluster;
 
 // /* Create a new Endpoint object */
@@ -71,7 +76,8 @@ int MRCluster_ConnectAll(MRCluster *cl);
 int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
 
 /* Create a new cluster using a node provider */
-MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder);
+MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder,
+                         long long minTopologyUpdateInterval);
 
 int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx);
 

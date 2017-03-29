@@ -37,12 +37,7 @@ typedef struct MRCtx {
 
 int MR_UpdateTopology(void *ctx) {
   printf("Updating topo!\n");
-  if (!__cluster->topo) {
-    MRCLuster_UpdateTopology(__cluster, ctx);
-  }
-
-  printf("Not really updating topo...\n");
-  return REDIS_OK;
+  return MRCLuster_UpdateTopology(__cluster, ctx);
 }
 
 /* Create a new MapReduce context */
@@ -169,7 +164,6 @@ void __uvFanoutRequest(uv_work_t *wr) {
 
   if (__cluster->topo) {
     for (int i = 0; i < __cluster->topo->numShards; i++) {
-      printf("Sending %d/%zd\n", i, __cluster->topo->numShards);
       MRCommand *cmd = &mc->cmds[0];
       if (MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx) == REDIS_OK) {
         mrctx->numExpected++;

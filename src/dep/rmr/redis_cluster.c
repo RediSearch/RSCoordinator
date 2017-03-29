@@ -13,8 +13,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
   }
   size_t x;
   const char *proto = RedisModule_CallReplyProto(r, &x);
-  printf("%.*s\n", (int)x, proto);
-
+  
   // TODO: Parse my id
 
   /*1) 1) (integer) 0

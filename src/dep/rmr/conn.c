@@ -3,6 +3,7 @@
 
 #include <uv.h>
 #include <signal.h>
+#include <sys/param.h>
 
 MRConn *_MR_NewConn(MREndpoint *ep);
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status);
@@ -78,17 +79,15 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
   tm_len_t len;
   void *p;
   while (TrieMapIterator_Next(it, &key, &len, &p)) {
-    printf("Connecting %.*s. conn: %p\n", len, key, p);
     MRConn *conn = p;
     if (conn && conn->state == MRConn_Disconnected) {
-      // if (_MRConn_Connect(conn) == REDIS_ERR) {
-      printf("Could not connect. starting loop\n");
-      _MRConn_StartReconnectLoop(conn);
-      n++;
-      // } else {
-      //   printf("Connecting to %.*s\n", len, key);
-      //   n++;
-      // }
+      if (_MRConn_Connect(conn) == REDIS_ERR) {
+        _MRConn_StartReconnectLoop(conn);
+        n++;
+      } else {
+        printf("Connecting to %.*s\n", len, key);
+        n++;
+      }
     }
   }
   return n;
@@ -120,8 +119,10 @@ void _MRConn_Free(void *ptr) {
 void __timerConnect(uv_timer_t *tm) {
   printf("Timer connect!\n");
   MRConn *conn = tm->data;
+
   if (_MRConn_Connect(conn) == REDIS_ERR) {
-    uv_timer_start(tm, __timerConnect, 100, 0);
+    printf("Timeout: %d\n", MIN(1000, tm->timeout + 50));
+    uv_timer_start(tm, __timerConnect, MIN(1000, tm->timeout + 50), 0);
   } else {
     free(tm);
   }
@@ -130,7 +131,6 @@ void __timerConnect(uv_timer_t *tm) {
 /* Start the timer reconnect loop for failed connection */
 void _MRConn_StartReconnectLoop(MRConn *conn) {
 
-  printf("timer --- default loop: %p\n", uv_default_loop());
   conn->state = MRConn_Disconnected;
   conn->conn = NULL;
   uv_timer_t *t = malloc(sizeof(uv_timer_t));

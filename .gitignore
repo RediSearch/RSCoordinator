@@ -2,3 +2,7 @@
 *.o
 *.a
 *.so
+*.rdb
+*.conf
+*.aof
+*.zip

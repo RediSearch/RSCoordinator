@@ -2,11 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "search_cluster.h"
+#include "crc16_tags.h"
 #include "fnv.h"
 
 typedef struct {
   size_t size;
-  char **table;
+  const char **table;
+  size_t tableSize;
 } SimplePartitioner;
 
 size_t SP_PartitionForKey(void *ctx, const char *key, size_t len) {
@@ -16,10 +18,7 @@ size_t SP_PartitionForKey(void *ctx, const char *key, size_t len) {
 
 void SP_Free(void *ctx) {
   SimplePartitioner *sp = ctx;
-  for (size_t i = 0; i < sp->size; i++) {
-    free(sp->table[i]);
-  }
-  free(sp->table);
+  
   free(sp);
 }
 
@@ -30,17 +29,17 @@ const char *SP_PartitionTag(void *ctx, size_t partition) {
     return NULL;
   }
 
-  return sp->table[partition];
+  // index = partition * (sp->tableSize / sp->size);
+  return sp->table[partition * (sp->tableSize / sp->size)];
 }
 
-Partitioner NewSimplePartitioner(size_t size) {
+Partitioner NewSimplePartitioner(size_t numPartitions, const char **table, size_t tableSize) {
 
   SimplePartitioner *sp = malloc(sizeof(SimplePartitioner));
-  *sp = (SimplePartitioner){.size = size, .table = calloc(size, sizeof(const char *))};
-  for (size_t i = 0; i < size; i++) {
-    sp->table[i] = malloc(8);
-    snprintf(sp->table[i], 8, "%02zx", i);
-  }
+  *sp = (SimplePartitioner){.size = numPartitions,
+                            .table = calloc(numPartitions, sizeof(const char *))};
+  sp->table = table;
+  sp->tableSize = tableSize;
 
   return (Partitioner){.ctx = sp,
                        .PartitionForKey = SP_PartitionForKey,

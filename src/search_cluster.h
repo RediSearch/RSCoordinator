@@ -10,7 +10,7 @@ typedef struct {
   void (*Free)(void *ctx);
 } Partitioner;
 
-Partitioner NewSimplePartitioner(size_t size);
+Partitioner NewSimplePartitioner(size_t numPartitions, const char **table, size_t tableSize);
 
 typedef struct {
   size_t size;

@@ -7,17 +7,11 @@
 #include "conn.h"
 #include "endpoint.h"
 #include "command.h"
+#include "node.h"
 
 #ifndef uint
 typedef unsigned int uint;
 #endif
-
-typedef struct {
-  MREndpoint endpoint;
-  const char *id;
-  int isSelf;
-  int isMaster;
-} MRClusterNode;
 
 typedef struct {
   uint startSlot;
@@ -53,6 +47,8 @@ typedef struct {
   MRClusterTopology *topo;
   ShardFunc sf;
   MRTopologyProvider tp;
+  // map of nodes by ip:port
+  TrieMap *nodeMap;
 
   // the time we last updated the topology
   time_t lastTopologyUpdate;
@@ -60,6 +56,17 @@ typedef struct {
   long long topologyUpdateMinInterval;
 } MRCluster;
 
+/* Define the coordination strategy of a coordination command */
+typedef enum {
+  /* Send the coordination command to all nodes marked as coordinators */
+  MRCluster_AllCoordinators,
+  /* Send the command to one coordinator per physical machine (identified by its IP address) */
+  MRCluster_CoordinatorPerServer
+} MRCoordinationStrategy;
+
+/* Multiplex a command to all coordinators, using a specific coordination strategy */
+int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
+                                      MRCommand *cmd, redisCallbackFn *fn, void *privdata);
 // /* Create a new Endpoint object */
 // MRNode *MR_NewNode(const char *host, int port, const char *unixsock);
 /* Free an MRendpoint object */

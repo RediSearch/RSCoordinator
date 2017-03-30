@@ -2,14 +2,52 @@
 #include "hiredis/adapters/libuv.h"
 #include "dep/triemap/triemap.h"
 #include "dep/crc16.h"
+#include "dep/rmutil/vector.h"
 
 #include <stdlib.h>
+
+void *_node_replace(void *oldval, void *newval) {
+  return newval;
+}
+
+void _nodemap_free(void *ptr) {
+  // do not delete anything - the object is allocated elsewhere
+}
+void _MRCluster_NodeMapAdd(MRCluster *cl, MRClusterNode *n) {
+  char addr[strlen(n->endpoint.host) + 10];
+  sprintf(addr, "%s:%d", n->endpoint.host, n->endpoint.port);
+  TrieMap_Add(cl->nodeMap, addr, strlen(addr), n, _node_replace);
+}
+
+/* Get all the nodes in the cluster by their IP host */
+Vector *_MRCluster_GetNodesByHost(MRCluster *cl, const char *host) {
+  TrieMapIterator *it = TrieMap_Iterate(cl->nodeMap, host, strlen(host));
+  char *k;
+  tm_len_t len;
+  void *p;
+  Vector *ret = NULL;
+  while (TrieMapIterator_Next(it, &k, &len, &p)) {
+    if (!ret) {
+      ret = NewVector(MRClusterNode *, 2);
+    }
+    Vector_Push(ret, (MRClusterNode *)p);
+  }
+  return ret;
+}
 
 void _MRClsuter_UpdateNodes(MRCluster *cl) {
   if (cl->topo) {
 
-    /* Get all the current node ids from the connection manager.  We will remove all the nodes that
-     * are in the new topology, and after the update, delete all the nodes that are in this map and
+    /* Reallocate the cluster's node map */
+    if (cl->nodeMap) {
+      TrieMap_Free(cl->nodeMap, _nodemap_free);
+    }
+    cl->nodeMap = NewTrieMap();
+
+    /* Get all the current node ids from the connection manager.  We will remove all the nodes
+     * that
+     * are in the new topology, and after the update, delete all the nodes that are in this map
+     * and
      * not in the new topology */
     TrieMap *currentNodes = NewTrieMap();
     TrieMapIterator *it = TrieMap_Iterate(cl->mgr.map, "", 0);
@@ -26,6 +64,9 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
         MRClusterNode *node = &cl->topo->shards[sh].nodes[n];
         printf("Adding node %s:%d to cluster\n", node->endpoint.host, node->endpoint.port);
         MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
+
+        /* Add the node to the node map */
+        _MRCluster_NodeMapAdd(cl, node);
 
         /* Remove the node id from the current node maps*/
         TrieMap_Delete(currentNodes, (char *)node->id, strlen(node->id), NULL);
@@ -51,9 +92,11 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopol
   cl->topologyUpdateMinInterval = minTopologyUpdateInterval;
   cl->lastTopologyUpdate = 0;
   cl->topo = tp.GetTopology(tp.ctx);
+  cl->nodeMap = NULL;
   MRConnManager_Init(&cl->mgr);
 
   if (cl->topo) {
+    _MRCluster_CreateNodeMap(cl);
     _MRClsuter_UpdateNodes(cl);
   }
   return cl;
@@ -196,13 +239,23 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   }
   cl->lastTopologyUpdate = now;
 
+  MRClusterTopology *old = cl->topo;
   cl->topo = cl->tp.GetTopology(cl->tp.ctx);
   if (cl->topo) {
     _MRClsuter_UpdateNodes(cl);
 
+    // TODO: Fix this!
     uv_work_t *wr = malloc(sizeof(uv_work_t));
     wr->data = cl;
     uv_queue_work(uv_default_loop(), wr, _clusterConnectAllCB, NULL);
   }
+  if (old) {
+    MRClusterTopology_Free(old);
+  }
   return REDIS_OK;
+}
+
+/* Multiplex a command to all coordinators, using a specific coordination strategy */
+int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
+                                      MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
 }

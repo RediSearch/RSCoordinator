@@ -6,7 +6,9 @@
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
+#include "crc16_tags.h"
 #include "dep/rmr/redis_cluster.h"
+#include "dep/rmr/redise.h"
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
@@ -191,8 +193,9 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
   MRCommand_SetKeyPos(&cmd, 1);
 
-  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
-                                      NewSimplePartitioner(clusterConfig.numPartitions));
+  SearchCluster sc =
+      NewSearchCluster(clusterConfig.numPartitions,
+                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
 
   SearchCluster_RewriteCommand(&sc, &cmd, 2);
   SearchCluster_RewriteCommandArg(&sc, &cmd, 2, 2);
@@ -222,8 +225,9 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // printf("Turning %s into %s\n", tmp, cmd.args[0]);
   free(tmp);
 
-  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
-                                      NewSimplePartitioner(clusterConfig.numPartitions));
+  SearchCluster sc =
+      NewSearchCluster(clusterConfig.numPartitions,
+                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx, NULL), chainReplyReducer, cg);
@@ -258,8 +262,9 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   free(cmd.args[0]);
   cmd.args[0] = strdup("FT.SEARCH");
 
-  SearchCluster sc = NewSearchCluster(clusterConfig.numPartitions,
-                                      NewSimplePartitioner(clusterConfig.numPartitions));
+  SearchCluster sc =
+      NewSearchCluster(clusterConfig.numPartitions,
+                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
 
@@ -273,6 +278,10 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
+}
+
+int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  return RedisModule_ReplyWithError(ctx, "NOT IMPLEMENTED");
 }
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -311,6 +320,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

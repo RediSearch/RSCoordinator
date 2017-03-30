@@ -157,7 +157,7 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
 void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
 
   MRConn *conn = c->data;
-  printf("Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
+  //printf("Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
   // MRConn_Stopped means the disconnect was initiated by us and not due to failure
   if (conn->state != MRConn_Stopped) {
     conn->state = MRConn_Disconnected;

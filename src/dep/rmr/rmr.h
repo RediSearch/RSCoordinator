@@ -16,6 +16,9 @@ typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, MRReply **replies);
  * reply to the reducer callback */
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
+int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd,
+                    MRCoordinationStrategy strategy);
+
 int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds);
 
 int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);

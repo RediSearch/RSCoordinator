@@ -85,6 +85,7 @@ searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset,
   searchResult *res = malloc(sizeof(searchResult));
 
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
+  printf("Res id: %s\n", res->id);
   // if the id contains curly braces, get rid of them now
   char *brace = strchr(res->id, '{');
   if (brace && strchr(brace, '}')) {
@@ -239,8 +240,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   return REDISMODULE_OK;
 }
-
-int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   MR_UpdateTopology(ctx);
   if (argc < 3) {
@@ -261,7 +261,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   free(cmd.args[0]);
   cmd.args[0] = strdup("FT.SEARCH");
-
+  MRCommand_Print(&cmd);
   SearchCluster sc =
       NewSearchCluster(clusterConfig.numPartitions,
                        NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
@@ -271,6 +271,38 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
 
   MR_Map(mrctx, searchResultReducer, cg);
+
+  // MRCommand_Free(&cmd);
+  // cg.Free(cg.ctx);
+
+  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
+
+  return REDISMODULE_OK;
+}
+
+int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  MR_UpdateTopology(ctx);
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  MRCommand_ReplaceArg(&cmd, 0, "DFT.SEARCH");
+
+  searchRequestCtx *req = parseRequest(argv, argc);
+  if (!req) {
+    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+  }
+  if (!req->withScores) {
+    MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
+  }
+  MRCommand_Print(&cmd);
+
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
+
+  MR_MRCoordinate(mrctx, searchResultReducer, cmd, MRCluster_CoordinatorPerServer);
 
   // MRCommand_Free(&cmd);
   // cg.Free(cg.ctx);
@@ -305,7 +337,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %s",
                   clusterConfig.numPartitions, clusterConfig.clusterType);
 
-  // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375", "localhost:6376",
+  // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375",
+  // "localhost:6376",
   //                                                   "localhost:6377", "localhost:6378");
   MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc, 2);
   MR_Init(cl);
@@ -319,8 +352,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.xsearch", SearchCommandHandler, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.search", LocalSearchCommandHandler, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, 0) ==

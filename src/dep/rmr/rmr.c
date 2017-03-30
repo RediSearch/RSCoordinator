@@ -36,7 +36,7 @@ typedef struct MRCtx {
 } MRCtx;
 
 int MR_UpdateTopology(void *ctx) {
-  //printf("Updating topo!\n");
+  // printf("Updating topo!\n");
   return MRCLuster_UpdateTopology(__cluster, ctx);
 }
 
@@ -268,6 +268,26 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
   // return REDIS_OK;
 }
 
+void __uvCoordinateRequest(struct __mrRequestCtx *mc) {
+
+  MRCtx *mrctx = mc->ctx;
+  mrctx->numReplied = 0;
+  mrctx->reducer = mc->f;
+  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, MRCluster_CoordinatorPerServer,
+                                                         &mc->cmds[0], fanoutCallback, mrctx);
+  if (mrctx->numExpected == 0) {
+    RedisModuleBlockedClient *bc = mrctx->redisCtx;
+    RedisModule_UnblockClient(bc, mrctx);
+    printf("could not send single command. hande fail please\n");
+  }
+
+  for (int i = 0; i < mc->numCmds; i++) {
+    MRCommand_Free(&mc->cmds[i]);
+  }
+  free(mc->cmds);
+  free(mc);
+}
+
 /* Fanout map - send the same command to all the shards, sending the collective
  * reply to the reducer callback */
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
@@ -321,6 +341,23 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
   rc->cb = __uvMapRequest;
+  __rq_push(&__rq, rc);
+  return REDIS_OK;
+}
+
+int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd,
+                    MRCoordinationStrategy strategy) {
+  struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
+  rc->ctx = ctx;
+  rc->f = reducer;
+  rc->cmds = calloc(1, sizeof(MRCommand));
+  rc->numCmds = 1;
+  rc->cmds[0] = MRCommand_Copy(&cmd);
+
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
+
+  // TODO: don't ignore strategy
+  rc->cb = __uvCoordinateRequest;
   __rq_push(&__rq, rc);
   return REDIS_OK;
 }

@@ -13,7 +13,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
   }
   size_t x;
   const char *proto = RedisModule_CallReplyProto(r, &x);
-  
+
   // TODO: Parse my id
 
   /*1) 1) (integer) 0
@@ -73,12 +73,11 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
       sh.nodes[sh.numNodes++] = (MRClusterNode){
           .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .unixSock = NULL},
           .id = strndup(id, idlen),
-          .isMaster = n == 0,  // the first node is always the master
-          .isSelf = 0,
+          .flags = MRNode_Coordinator | (n == 0 ? MRNode_Master : 0),
       };
 
       printf("Added node id %s, %s:%d master? %d\n", sh.nodes[n].id, sh.nodes[n].endpoint.host,
-             sh.nodes[n].endpoint.port, sh.nodes[n].isMaster);
+             sh.nodes[n].endpoint.port, sh.nodes[n].flags & MRNode_Master);
     }
     printf("Added shard %d..%d with %d nodes\n", sh.startSlot, sh.endSlot, numNodes);
     topo->shards[topo->numShards++] = sh;

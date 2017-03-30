@@ -48,7 +48,7 @@ typedef struct {
   ShardFunc sf;
   MRTopologyProvider tp;
   // map of nodes by ip:port
-  TrieMap *nodeMap;
+  MRNodeMap *nodeMap;
 
   // the time we last updated the topology
   time_t lastTopologyUpdate;

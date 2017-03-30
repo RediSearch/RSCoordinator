@@ -3,10 +3,39 @@
 #include "dep/triemap/triemap.h"
 #include "dep/triemap/triemap.h"
 
-typedef struct MRNodeMap {
-  TrieMap *nodes;
-  TrieMap *hosts;
-} MRNodeMap;
+void MRNodeMapIterator_Free(MRNodeMapIterator *it) {
+  TrieMapIterator_Free(it->iter);
+}
+
+MRClusterNode *_nmi_allNext(MRNodeMapIterator *it) {
+  char *str;
+  tm_len_t len;
+  void *p;
+  if (!TrieMapIterator_Next(it->iter, &str, &len, &p)) {
+    return NULL;
+  }
+  return p;
+}
+
+MRClusterNode *_nmi_randomNext(MRNodeMapIterator *it) {
+  char *host;
+  tm_len_t len;
+  void *p;
+  if (!TrieMapIterator_Next(it->iter, &host, &len, &p)) {
+    return NULL;
+  }
+
+  return TrieMap_RandomValueByPrefix(it->m->nodes, host, len);
+}
+
+MRNodeMapIterator MRNodeMap_IterateAll(MRNodeMap *m) {
+  return (MRNodeMapIterator){
+      .Next = _nmi_allNext, .m = m, .iter = TrieMap_Iterate(m->nodes, "", 0)};
+}
+MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m) {
+  return (MRNodeMapIterator){
+      .Next = _nmi_randomNext, .m = m, .iter = TrieMap_Iterate(m->hosts, "", 0)};
+}
 
 void *_node_replace(void *oldval, void *newval) {
   return newval;
@@ -42,7 +71,7 @@ MRClusterNode *MRNodeMap_RandomNode(MRNodeMap *m) {
   char *k;
   tm_len_t len;
   void *p;
-  MRNodeMap *ret = NULL;
+  MRClusterNode *ret = NULL;
   if (TrieMap_RandomKey(m->nodes, &k, &len, &p)) {
     ret = TrieMap_Find(m->nodes, k, len);
     free(k);

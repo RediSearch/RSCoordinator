@@ -6,43 +6,14 @@
 
 #include <stdlib.h>
 
-void *_node_replace(void *oldval, void *newval) {
-  return newval;
-}
-
-void _nodemap_free(void *ptr) {
-  // do not delete anything - the object is allocated elsewhere
-}
-void _MRCluster_NodeMapAdd(MRCluster *cl, MRClusterNode *n) {
-  char addr[strlen(n->endpoint.host) + 10];
-  sprintf(addr, "%s:%d", n->endpoint.host, n->endpoint.port);
-  TrieMap_Add(cl->nodeMap, addr, strlen(addr), n, _node_replace);
-}
-
-/* Get all the nodes in the cluster by their IP host */
-Vector *_MRCluster_GetNodesByHost(MRCluster *cl, const char *host) {
-  TrieMapIterator *it = TrieMap_Iterate(cl->nodeMap, host, strlen(host));
-  char *k;
-  tm_len_t len;
-  void *p;
-  Vector *ret = NULL;
-  while (TrieMapIterator_Next(it, &k, &len, &p)) {
-    if (!ret) {
-      ret = NewVector(MRClusterNode *, 2);
-    }
-    Vector_Push(ret, (MRClusterNode *)p);
-  }
-  return ret;
-}
-
 void _MRClsuter_UpdateNodes(MRCluster *cl) {
   if (cl->topo) {
 
     /* Reallocate the cluster's node map */
     if (cl->nodeMap) {
-      TrieMap_Free(cl->nodeMap, _nodemap_free);
+      MRNodeMap_Free(cl->nodeMap);
     }
-    cl->nodeMap = NewTrieMap();
+    cl->nodeMap = MR_NewNodeMap();
 
     /* Get all the current node ids from the connection manager.  We will remove all the nodes
      * that
@@ -66,9 +37,9 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
         MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
 
         /* Add the node to the node map */
-        _MRCluster_NodeMapAdd(cl, node);
+        MRNodeMap_Add(cl->nodeMap, node);
 
-        /* Remove the node id from the current node maps*/
+        /* Remove the node id from the current nodes ids map*/
         TrieMap_Delete(currentNodes, (char *)node->id, strlen(node->id), NULL);
       }
     }
@@ -96,7 +67,6 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopol
   MRConnManager_Init(&cl->mgr);
 
   if (cl->topo) {
-    _MRCluster_CreateNodeMap(cl);
     _MRClsuter_UpdateNodes(cl);
   }
   return cl;
@@ -166,8 +136,9 @@ MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, .
   for (size_t i = 0; i < numNodes; i++) {
     const char *ip_port = va_arg(ap, const char *);
     if (MREndpoint_Parse(ip_port, &nodes[n].endpoint) == REDIS_OK) {
+
       nodes[n].id = strdup(ip_port);
-      nodes[n].isMaster = 1;
+      nodes[n].flags = MRNode_Master | MRNode_Coordinator;
       n++;
     }
   }
@@ -249,13 +220,40 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
     wr->data = cl;
     uv_queue_work(uv_default_loop(), wr, _clusterConnectAllCB, NULL);
   }
-  if (old) {
-    MRClusterTopology_Free(old);
-  }
+  // if (old) {
+  //   MRClusterTopology_Free(old);
+  // }
   return REDIS_OK;
 }
 
-/* Multiplex a command to all coordinators, using a specific coordination strategy */
+/* Multiplex a command to all coordinators, using a specific coordination strategy. Returns the
+ * number of sent commands */
 int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
                                       MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
+  if (!cl->nodeMap) {
+    return 0;
+  }
+
+  MRNodeMapIterator it;
+  switch (strategy) {
+    case MRCluster_CoordinatorPerServer:
+      it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap);
+      break;
+    case MRCluster_AllCoordinators:
+    default:
+      it = MRNodeMap_IterateAll(cl->nodeMap);
+  }
+
+  int ret = 0;
+  MRClusterNode *n;
+  while (NULL != (n = it.Next(&it))) {
+    MRConn *conn = MRConn_Get(&cl->mgr, n->id);
+    printf("Sending coordination command to %s:%d\n", conn->ep.host, conn->ep.port);
+    if (conn) {
+      if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
+        ret++;
+      }
+    }
+  }
+  return ret;
 }

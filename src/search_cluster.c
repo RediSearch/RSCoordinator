@@ -29,7 +29,7 @@ const char *SP_PartitionTag(void *ctx, size_t partition) {
     return NULL;
   }
 
-  // index = partition * (sp->tableSize / sp->size);
+  //printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
   return sp->table[partition * (sp->tableSize / sp->size)];
 }
 

@@ -11,6 +11,9 @@ typedef struct {
   MRNodeFlags flags;
 } MRClusterNode;
 
+/* Free an MRendpoint object */
+void MRNode_Free(MRClusterNode *n);
+
 typedef struct MRNodeMap {
   TrieMap *nodes;
   TrieMap *hosts;
@@ -30,5 +33,6 @@ MRNodeMap *MR_NewNodeMap();
 void MRNodeMap_Free(MRNodeMap *m);
 void MRNodeMap_Add(MRNodeMap *m, MRClusterNode *n);
 MRClusterNode *MRNodeMap_RandomNode(MRNodeMap *m);
-
+size_t MRNodeMap_NumHosts(MRNodeMap *m);
+size_t MRNodeMap_NumNodes(MRNodeMap *m);
 #endif

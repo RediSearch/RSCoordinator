@@ -51,6 +51,14 @@ void MRNodeMap_Free(MRNodeMap *m) {
   free(m);
 }
 
+size_t MRNodeMap_NumHosts(MRNodeMap *m) {
+  return m->hosts->cardinality;
+}
+
+size_t MRNodeMap_NumNodes(MRNodeMap *m) {
+  return m->nodes->cardinality;
+}
+
 MRNodeMap *MR_NewNodeMap() {
   MRNodeMap *m = malloc(sizeof(*m));
   m->hosts = NewTrieMap();

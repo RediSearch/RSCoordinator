@@ -124,6 +124,7 @@ struct __mrRequestCtx {
   MRCtx *ctx;
   MRReduceFunc f;
   MRCommand *cmds;
+  MRCoordinationStrategy strategy;
   int numCmds;
   void (*cb)(struct __mrRequestCtx *);
 };
@@ -273,8 +274,8 @@ void __uvCoordinateRequest(struct __mrRequestCtx *mc) {
   MRCtx *mrctx = mc->ctx;
   mrctx->numReplied = 0;
   mrctx->reducer = mc->f;
-  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, MRCluster_CoordinatorPerServer,
-                                                         &mc->cmds[0], fanoutCallback, mrctx);
+  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, mc->strategy, &mc->cmds[0],
+                                                         fanoutCallback, mrctx);
   if (mrctx->numExpected == 0) {
     RedisModuleBlockedClient *bc = mrctx->redisCtx;
     RedisModule_UnblockClient(bc, mrctx);
@@ -296,6 +297,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
+  rc->strategy = MRCluster_NoCoordination;
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
   rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
@@ -315,6 +317,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(cmds.Len(cmds.ctx), sizeof(MRCommand));
+  rc->strategy = MRCluster_NoCoordination;
   rc->numCmds = cmds.Len(cmds.ctx);
   for (int i = 0; i < rc->numCmds; i++) {
     if (!cmds.Next(cmds.ctx, &rc->cmds[i])) {
@@ -334,6 +337,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;
+  rc->strategy = MRCluster_NoCoordination;
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = MRCommand_Copy(&cmd);
@@ -345,11 +349,16 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   return REDIS_OK;
 }
 
-int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd,
-                    MRCoordinationStrategy strategy) {
+int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
+  /* Return ERR if we only have one physical machine */
+  if (MRCluster_NumHosts(__cluster) < 2) {
+    return REDIS_ERR;
+  }
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;
+  rc->strategy = MRCluster_CoordinatorPerServer;
+
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = MRCommand_Copy(&cmd);

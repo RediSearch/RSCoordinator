@@ -257,3 +257,11 @@ int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy stra
   }
   return ret;
 }
+
+size_t MRCluster_NumHosts(MRCluster *cl) {
+  return cl->nodeMap ? MRNodeMap_NumHosts(cl->nodeMap) : 0;
+}
+
+size_t MRCluster_NumNodes(MRCluster *cl) {
+  return cl->nodeMap ? MRNodeMap_NumNodes(cl->nodeMap) : 0;
+}

@@ -58,6 +58,7 @@ typedef struct {
 
 /* Define the coordination strategy of a coordination command */
 typedef enum {
+  MRCluster_NoCoordination,
   /* Send the coordination command to all nodes marked as coordinators */
   MRCluster_AllCoordinators,
   /* Send the command to one coordinator per physical machine (identified by its IP address) */
@@ -67,13 +68,10 @@ typedef enum {
 /* Multiplex a command to all coordinators, using a specific coordination strategy */
 int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
                                       MRCommand *cmd, redisCallbackFn *fn, void *privdata);
-// /* Create a new Endpoint object */
-// MRNode *MR_NewNode(const char *host, int port, const char *unixsock);
-/* Free an MRendpoint object */
-void MRNode_Free(MRClusterNode *n);
 
-int MRNode_Connect(MRClusterNode *n);
+size_t MRCluster_NumHosts(MRCluster *cl);
 
+size_t MRCluster_NumNodes(MRCluster *cl);
 /* Asynchronously connect to all nodes in the cluster. This must be called before the io loop is
  * started */
 int MRCluster_ConnectAll(MRCluster *cl);

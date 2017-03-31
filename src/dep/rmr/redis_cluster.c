@@ -5,16 +5,21 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
   if (!p) return NULL;
 
   RedisModuleCtx *ctx = p;
+  const char *myId = NULL;
+  RedisModuleCallReply *r = RedisModule_Call(ctx, "CLUSTER", "c", "MYID");
+  if (r == NULL || RedisModule_CallReplyType(r) != REDISMODULE_REPLY_STRING) {
+    RedisModule_Log(ctx, "error", "Error calling CLUSTER MYID§");
+    return NULL;
+  }
+  size_t idlen;
+  myId = RedisModule_CallReplyStringPtr(r, &idlen);
+  printf("myId: %.*s\n", (int)idlen, myId);
 
-  RedisModuleCallReply *r = RedisModule_Call(ctx, "CLUSTER", "c", "SLOTS");
+  r = RedisModule_Call(ctx, "CLUSTER", "c", "SLOTS");
   if (r == NULL || RedisModule_CallReplyType(r) != REDISMODULE_REPLY_ARRAY) {
     RedisModule_Log(ctx, "error", "Error calling CLUSTER SLOTS");
     return NULL;
   }
-  size_t x;
-  const char *proto = RedisModule_CallReplyProto(r, &x);
-
-  // TODO: Parse my id
 
   /*1) 1) (integer) 0
    2) (integer) 5460
@@ -43,7 +48,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     RedisModuleCallReply *e = RedisModule_CallReplyArrayElement(r, i);
     if (RedisModule_CallReplyLength(e) < 3) {
       printf("Invalid reply object for slot %d, type %d. len %d\n", i, RedisModule_CallReplyType(e),
-             RedisModule_CallReplyLength(e));
+             (int)RedisModule_CallReplyLength(e));
       goto err;
     }
     // parse the start and end slots
@@ -70,11 +75,20 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
       const char *id =
           RedisModule_CallReplyStringPtr(RedisModule_CallReplyArrayElement(nd, 2), &idlen);
 
-      sh.nodes[sh.numNodes++] = (MRClusterNode){
+      MRClusterNode node = {
           .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .unixSock = NULL},
           .id = strndup(id, idlen),
-          .flags = MRNode_Coordinator | (n == 0 ? MRNode_Master : 0),
+          .flags = MRNode_Coordinator,
       };
+      // the first node in every shard is the master
+      if (n == 0) node.flags |= MRNode_Master;
+
+      // compare the node id to our id
+      if (!strncmp(node.id, myId, idlen)) {
+        printf("Found myself %s!\n", myId);
+        node.flags |= MRNode_Self;
+      }
+      sh.nodes[sh.numNodes++] = node;
 
       printf("Added node id %s, %s:%d master? %d\n", sh.nodes[n].id, sh.nodes[n].endpoint.host,
              sh.nodes[n].endpoint.port, sh.nodes[n].flags & MRNode_Master);

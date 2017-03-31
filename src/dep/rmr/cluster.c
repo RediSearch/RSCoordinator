@@ -41,6 +41,12 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
 
         /* Remove the node id from the current nodes ids map*/
         TrieMap_Delete(currentNodes, (char *)node->id, strlen(node->id), NULL);
+
+        /* See if this is us - if so we need to update the cluster's host and current id */
+        if (node->flags & MRNode_Self) {
+          printf("This is us! %s:%d\n", node->endpoint.host, node->endpoint.port);
+          cl->myNode = node;
+        }
       }
     }
 
@@ -64,6 +70,7 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopol
   cl->lastTopologyUpdate = 0;
   cl->topo = tp.GetTopology(tp.ctx);
   cl->nodeMap = NULL;
+  cl->myNode = NULL;  // tODO: discover local ip/port
   MRConnManager_Init(&cl->mgr);
 
   if (cl->topo) {
@@ -80,6 +87,27 @@ MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
     }
   }
   return NULL;
+}
+
+int MRCluster_SendCommandLocal(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
+  if (!cl->topo || !cl->myNode) {
+    return REDIS_ERR;
+  }
+  /* Get the cluster slot from the sharder */
+  uint slot = cl->sf(cmd, cl->topo->numSlots);
+  MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
+  if (!sh) return REDIS_ERR;
+
+  /* Find a local node for this shard */
+  for (size_t i = 0; i < sh->numNodes; i++) {
+    if (!strcmp(sh->nodes[i].endpoint.host, cl->myNode->endpoint.host)) {
+
+      MRConn *conn = MRConn_Get(&cl->mgr, sh->nodes[0].id);
+      if (!conn) continue;
+      return MRConn_SendCommand(conn, cmd, fn, privdata);
+    }
+  }
+  return REDIS_ERR;
 }
 
 /* Send a command to the right shard in the cluster */

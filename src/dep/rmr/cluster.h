@@ -45,12 +45,14 @@ typedef uint (*ShardFunc)(MRCommand *cmd, uint numSlots);
 typedef struct {
   MRConnManager mgr;
   MRClusterTopology *topo;
+  MRClusterNode *myNode;
   ShardFunc sf;
   MRTopologyProvider tp;
   // map of nodes by ip:port
   MRNodeMap *nodeMap;
 
   // the time we last updated the topology
+  // TODO: use millisecond precision time here
   time_t lastTopologyUpdate;
   // the minimum allowed interval between topology updates
   long long topologyUpdateMinInterval;
@@ -62,7 +64,9 @@ typedef enum {
   /* Send the coordination command to all nodes marked as coordinators */
   MRCluster_AllCoordinators,
   /* Send the command to one coordinator per physical machine (identified by its IP address) */
-  MRCluster_CoordinatorPerServer
+  MRCluster_CoordinatorPerServer,
+  /* Send the command to local nodes only - i.e. nodes working on the same physical host */
+  MRCluster_LocalCoordination,
 } MRCoordinationStrategy;
 
 /* Multiplex a command to all coordinators, using a specific coordination strategy */
@@ -79,6 +83,8 @@ int MRCluster_ConnectAll(MRCluster *cl);
 // int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata, int argc,
 //                           const char **argv, const size_t *argvlen) {
 int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
+
+int MRCluster_SendCommandLocal(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
 
 /* Create a new cluster using a node provider */
 MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder,

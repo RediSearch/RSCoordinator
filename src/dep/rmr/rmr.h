@@ -22,6 +22,8 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds);
 
 int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
+void MR_SetCoordinationStrategy(struct MRCtx *ctx, MRCoordinationStrategy strategy);
+
 /* Initialize the MapReduce engine with a node provider */
 void MR_Init(MRCluster *cl);
 

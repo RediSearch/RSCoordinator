@@ -33,8 +33,12 @@ typedef struct MRCtx {
   MRReduceFunc reducer;
   void *privdata;
   void *redisCtx;
+  MRCoordinationStrategy strategy;
 } MRCtx;
 
+void MR_SetCoordinationStrategy(MRCtx *ctx, MRCoordinationStrategy strategy) {
+  ctx->strategy = strategy;
+}
 int MR_UpdateTopology(void *ctx) {
   // printf("Updating topo!\n");
   return MRCLuster_UpdateTopology(__cluster, ctx);
@@ -124,7 +128,6 @@ struct __mrRequestCtx {
   MRCtx *ctx;
   MRReduceFunc f;
   MRCommand *cmds;
-  MRCoordinationStrategy strategy;
   int numCmds;
   void (*cb)(struct __mrRequestCtx *);
 };
@@ -221,7 +224,10 @@ void __uvFanoutRequest(struct __mrRequestCtx *mc) {
   if (__cluster->topo) {
     for (int i = 0; i < __cluster->topo->numShards; i++) {
       MRCommand *cmd = &mc->cmds[0];
-      if (MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx) == REDIS_OK) {
+      int rc = mrctx->strategy != MRCluster_LocalCoordination
+                   ? MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx)
+                   : MRCluster_SendCommandLocal(__cluster, cmd, fanoutCallback, mrctx);
+      if (rc == REDIS_OK) {
         mrctx->numExpected++;
       }
     }
@@ -250,8 +256,11 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
   mrctx->numExpected = 0;
   for (int i = 0; i < mc->numCmds; i++) {
 
-    if (MRCluster_SendCommand(__cluster, &mc->cmds[i], fanoutCallback, mrctx) == REDIS_OK) {
-      mc->ctx->numExpected++;
+    int rc = mrctx->strategy != MRCluster_LocalCoordination
+                 ? MRCluster_SendCommand(__cluster, &mc->cmds[i], fanoutCallback, mrctx)
+                 : MRCluster_SendCommandLocal(__cluster, &mc->cmds[i], fanoutCallback, mrctx);
+    if (rc == REDIS_OK) {
+      mrctx->numExpected++;
     }
   }
   if (mrctx->numExpected == 0) {
@@ -274,7 +283,7 @@ void __uvCoordinateRequest(struct __mrRequestCtx *mc) {
   MRCtx *mrctx = mc->ctx;
   mrctx->numReplied = 0;
   mrctx->reducer = mc->f;
-  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, mc->strategy, &mc->cmds[0],
+  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, mrctx->strategy, &mc->cmds[0],
                                                          fanoutCallback, mrctx);
   if (mrctx->numExpected == 0) {
     RedisModuleBlockedClient *bc = mrctx->redisCtx;
@@ -297,7 +306,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
-  rc->strategy = MRCluster_NoCoordination;
+  // rc->strategy = MRCluster_NoCoordination;
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
   rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
@@ -317,8 +326,8 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(cmds.Len(cmds.ctx), sizeof(MRCommand));
-  rc->strategy = MRCluster_NoCoordination;
   rc->numCmds = cmds.Len(cmds.ctx);
+  // copy the commands from the iterator to the conext's array
   for (int i = 0; i < rc->numCmds; i++) {
     if (!cmds.Next(cmds.ctx, &rc->cmds[i])) {
       rc->numCmds = i;
@@ -337,7 +346,6 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;
-  rc->strategy = MRCluster_NoCoordination;
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = MRCommand_Copy(&cmd);
@@ -357,7 +365,6 @@ int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;
-  rc->strategy = MRCluster_CoordinatorPerServer;
 
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;

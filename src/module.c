@@ -240,6 +240,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   return REDISMODULE_OK;
 }
+
+
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   MR_UpdateTopology(ctx);
@@ -269,6 +271,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination);
 
   MR_Map(mrctx, searchResultReducer, cg);
 
@@ -347,7 +350,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375",
   // "localhost:6376",
   //                                                   "localhost:6377", "localhost:6378");
-  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc, 2);
+  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc, 10);
   MR_Init(cl);
   // register index type
 

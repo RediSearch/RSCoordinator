@@ -241,7 +241,6 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   MR_UpdateTopology(ctx);
@@ -292,6 +291,10 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   RedisModule_AutoMemory(ctx);
   MR_UpdateTopology(ctx);
 
+  if (MR_NumHosts() < 2) {
+    return LocalSearchCommandHandler(ctx, argv, argc);
+  }
+
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   MRCommand_ReplaceArg(&cmd, 0, "DFT.SEARCH");
 
@@ -305,21 +308,9 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-
-  if (MR_MRCoordinate(mrctx, searchResultReducer, cmd) == REDIS_ERR) {
-
-    searchRequestCtx_Free(req);
-    MRCtx_Free(mrctx);
-    MRCommand_Free(&cmd);
-    return LocalSearchCommandHandler(ctx, argv, argc);
-  }
-
-  // MRCommand_Free(&cmd);
-  // cg.Free(cg.ctx);
-
-  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
-
-  return REDISMODULE_OK;
+  MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
+  MR_Fanout(mrctx, searchResultReducer, cmd);
+  return REDIS_OK;
 }
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {

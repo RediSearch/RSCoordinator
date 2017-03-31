@@ -32,6 +32,11 @@ MRNodeMapIterator MRNodeMap_IterateAll(MRNodeMap *m) {
   return (MRNodeMapIterator){
       .Next = _nmi_allNext, .m = m, .iter = TrieMap_Iterate(m->nodes, "", 0)};
 }
+
+MRNodeMapIterator MRNodeMap_IterateHost(MRNodeMap *m, const char *host) {
+  return (MRNodeMapIterator){
+      .Next = _nmi_allNext, .m = m, .iter = TrieMap_Iterate(m->nodes, host, strlen(host))};
+}
 MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m) {
   return (MRNodeMapIterator){
       .Next = _nmi_randomNext, .m = m, .iter = TrieMap_Iterate(m->hosts, "", 0)};
@@ -49,6 +54,11 @@ void MRNodeMap_Free(MRNodeMap *m) {
   TrieMap_Free(m->hosts, NULL);
   TrieMap_Free(m->nodes, _nodemap_free);
   free(m);
+}
+
+/* Return 1 both nodes have the same host */
+int MRNode_IsSameHost(MRClusterNode *n, MRClusterNode *other) {
+  return strcasecmp(n->endpoint.host, other->endpoint.host) == 0;
 }
 
 size_t MRNodeMap_NumHosts(MRNodeMap *m) {

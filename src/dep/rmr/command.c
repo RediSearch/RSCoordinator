@@ -87,6 +87,11 @@ int MRCommand_GetShardingKey(MRCommand *cmd) {
   return cmd->keyPos;
 }
 
+/* Return 1 if the command should not be sharded (i.e a coordination command or system command) */
+int MRCommand_IsUnsharded(MRCommand *cmd) {
+  return cmd->keyPos <= 0;
+}
+
 void MRCommand_Print(MRCommand *cmd) {
 
   for (int i = 0; i < cmd->num; i++) {

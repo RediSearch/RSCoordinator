@@ -14,6 +14,9 @@ typedef struct {
 /* Free an MRendpoint object */
 void MRNode_Free(MRClusterNode *n);
 
+/* Return 1 both nodes have the same host */
+int MRNode_IsSameHost(MRClusterNode *n, MRClusterNode *other);
+
 typedef struct MRNodeMap {
   TrieMap *nodes;
   TrieMap *hosts;
@@ -27,6 +30,7 @@ typedef struct MRNodeMapIterator {
 
 MRNodeMapIterator MRNodeMap_IterateAll(MRNodeMap *m);
 MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m);
+MRNodeMapIterator MRNodeMap_IterateHost(MRNodeMap *m, const char *host);
 void MRNodeMapIterator_Free(MRNodeMapIterator *it);
 
 MRNodeMap *MR_NewNodeMap();

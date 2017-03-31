@@ -89,42 +89,113 @@ MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
   return NULL;
 }
 
-int MRCluster_SendCommandLocal(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
-  if (!cl->topo || !cl->myNode) {
-    return REDIS_ERR;
-  }
-  /* Get the cluster slot from the sharder */
-  uint slot = cl->sf(cmd, cl->topo->numSlots);
-  MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
-  if (!sh) return REDIS_ERR;
+MRClusterNode *_MRClusterShard_SelectNode(MRClusterShard *sh, MRClusterNode *myNode,
+                                          MRCoordinationStrategy strategy) {
 
-  /* Find a local node for this shard */
-  for (size_t i = 0; i < sh->numNodes; i++) {
-    if (!strcmp(sh->nodes[i].endpoint.host, cl->myNode->endpoint.host)) {
+  switch (strategy & ~MRCluster_MastersOnly) {
 
-      MRConn *conn = MRConn_Get(&cl->mgr, sh->nodes[0].id);
-      if (!conn) continue;
-      return MRConn_SendCommand(conn, cmd, fn, privdata);
-    }
+    case MRCluster_LocalCoordination:
+      for (int i = 0; i < sh->numNodes; i++) {
+        MRClusterNode *n = &sh->nodes[i];
+        // skip slaves if this is a master only request
+        if (strategy & MRCluster_MastersOnly && !(n->flags & MRNode_Master)) {
+          continue;
+        }
+        if (MRNode_IsSameHost(n, myNode)) {
+          return n;
+        }
+      }
+      // Not found...
+      return NULL;
+
+    case MRCluster_RemoteCoordination:
+      for (int i = 0; i < sh->numNodes; i++) {
+        MRClusterNode *n = &sh->nodes[i];
+        // skip slaves if this is a master only request
+        if (strategy & MRCluster_MastersOnly && !(n->flags & MRNode_Master)) {
+          continue;
+        }
+        if (!MRNode_IsSameHost(n, myNode)) {
+          return n;
+        }
+      }
+      // Not found...
+      return NULL;
+
+    case MRCluster_FlatCoordination:
+      // if we only want masters - find the master of this shard
+      if (strategy & MRCluster_MastersOnly) {
+        for (int i = 0; i < sh->numNodes; i++) {
+          if (sh->nodes[i].flags & MRNode_Master) {
+            return &sh->nodes[i];
+          }
+        }
+        return NULL;
+      }
+      // if we don't care - select a random node
+      return &sh->nodes[rand() % sh->numNodes];
   }
-  return REDIS_ERR;
+  return NULL;
 }
 
-/* Send a command to the right shard in the cluster */
-int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
+/* Send a single command to the right shard in the cluster, with an optoinal control over node
+ * selection */
+int MRCluster_SendCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCommand *cmd,
+                          redisCallbackFn *fn, void *privdata) {
 
   if (!cl->topo) {
     return REDIS_ERR;
   }
+
   /* Get the cluster slot from the sharder */
   uint slot = cl->sf(cmd, cl->topo->numSlots);
 
   /* Get the shard from the slotmap */
   MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
+  if (!sh) {
+    return REDIS_ERR;
+  }
 
-  MRConn *conn = MRConn_Get(&cl->mgr, sh->nodes[0].id);
+  MRClusterNode *node = _MRClusterShard_SelectNode(sh, cl->myNode, strategy);
+  if (!node) return REDIS_ERR;
+
+  MRConn *conn = MRConn_Get(&cl->mgr, node->id);
   if (!conn) return REDIS_ERR;
   return MRConn_SendCommand(conn, cmd, fn, privdata);
+}
+
+/* Multiplex a command to all coordinators, using a specific coordination strategy. Returns the
+ * number of sent commands */
+int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCommand *cmd,
+                            redisCallbackFn *fn, void *privdata) {
+  if (!cl->nodeMap) {
+    return 0;
+  }
+
+  MRNodeMapIterator it;
+  switch (strategy) {
+    case MRCluster_RemoteCoordination:
+      it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap);
+      break;
+    case MRCluster_LocalCoordination:
+      it = MRNodeMap_IterateHost(cl->nodeMap, cl->myNode->endpoint.host);
+      break;
+    default:
+      it = MRNodeMap_IterateAll(cl->nodeMap);
+  }
+
+  int ret = 0;
+  MRClusterNode *n;
+  while (NULL != (n = it.Next(&it))) {
+    MRConn *conn = MRConn_Get(&cl->mgr, n->id);
+    printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
+    if (conn) {
+      if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
+        ret++;
+      }
+    }
+  }
+  return ret;
 }
 
 /* Initialize the connections to all shards */
@@ -252,38 +323,6 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   //   MRClusterTopology_Free(old);
   // }
   return REDIS_OK;
-}
-
-/* Multiplex a command to all coordinators, using a specific coordination strategy. Returns the
- * number of sent commands */
-int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
-                                      MRCommand *cmd, redisCallbackFn *fn, void *privdata) {
-  if (!cl->nodeMap) {
-    return 0;
-  }
-
-  MRNodeMapIterator it;
-  switch (strategy) {
-    case MRCluster_CoordinatorPerServer:
-      it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap);
-      break;
-    case MRCluster_AllCoordinators:
-    default:
-      it = MRNodeMap_IterateAll(cl->nodeMap);
-  }
-
-  int ret = 0;
-  MRClusterNode *n;
-  while (NULL != (n = it.Next(&it))) {
-    MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    printf("Sending coordination command to %s:%d\n", conn->ep.host, conn->ep.port);
-    if (conn) {
-      if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
-        ret++;
-      }
-    }
-  }
-  return ret;
 }
 
 size_t MRCluster_NumHosts(MRCluster *cl) {

@@ -37,6 +37,8 @@ void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
 
 void MRCommand_SetKeyPos(MRCommand *cmd, int keyPos);
 int MRCommand_GetShardingKey(MRCommand *cmd);
+/* Return 1 if the command should not be sharded */
+int MRCommand_IsUnsharded(MRCommand *cmd);
 
 void MRCommand_Print(MRCommand *cmd);
 /* Create a copy of a command by duplicating all strings */

@@ -55,6 +55,7 @@ MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   ret->replies = calloc(ret->repliesCap, sizeof(redisReply *));
   ret->reducer = NULL;
   ret->privdata = privdata;
+  ret->strategy = MRCluster_FlatCoordination;
   ret->redisCtx = ctx;
   return ret;
 }
@@ -224,12 +225,8 @@ void __uvFanoutRequest(struct __mrRequestCtx *mc) {
   if (__cluster->topo) {
     for (int i = 0; i < __cluster->topo->numShards; i++) {
       MRCommand *cmd = &mc->cmds[0];
-      int rc = mrctx->strategy != MRCluster_LocalCoordination
-                   ? MRCluster_SendCommand(__cluster, cmd, fanoutCallback, mrctx)
-                   : MRCluster_SendCommandLocal(__cluster, cmd, fanoutCallback, mrctx);
-      if (rc == REDIS_OK) {
-        mrctx->numExpected++;
-      }
+      mrctx->numExpected =
+          MRCluster_FanoutCommand(__cluster, mrctx->strategy, cmd, fanoutCallback, mrctx);
     }
   }
 
@@ -256,13 +253,12 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
   mrctx->numExpected = 0;
   for (int i = 0; i < mc->numCmds; i++) {
 
-    int rc = mrctx->strategy != MRCluster_LocalCoordination
-                 ? MRCluster_SendCommand(__cluster, &mc->cmds[i], fanoutCallback, mrctx)
-                 : MRCluster_SendCommandLocal(__cluster, &mc->cmds[i], fanoutCallback, mrctx);
-    if (rc == REDIS_OK) {
+    if (MRCluster_SendCommand(__cluster, mrctx->strategy, &mc->cmds[i], fanoutCallback, mrctx) ==
+        REDIS_OK) {
       mrctx->numExpected++;
     }
   }
+
   if (mrctx->numExpected == 0) {
     RedisModuleBlockedClient *bc = mrctx->redisCtx;
     RedisModule_UnblockClient(bc, mrctx);
@@ -278,26 +274,6 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
   // return REDIS_OK;
 }
 
-void __uvCoordinateRequest(struct __mrRequestCtx *mc) {
-
-  MRCtx *mrctx = mc->ctx;
-  mrctx->numReplied = 0;
-  mrctx->reducer = mc->f;
-  mrctx->numExpected = MRCluster_SendCoordinationCommand(__cluster, mrctx->strategy, &mc->cmds[0],
-                                                         fanoutCallback, mrctx);
-  if (mrctx->numExpected == 0) {
-    RedisModuleBlockedClient *bc = mrctx->redisCtx;
-    RedisModule_UnblockClient(bc, mrctx);
-    printf("could not send single command. hande fail please\n");
-  }
-
-  for (int i = 0; i < mc->numCmds; i++) {
-    MRCommand_Free(&mc->cmds[i]);
-  }
-  free(mc->cmds);
-  free(mc);
-}
-
 /* Fanout map - send the same command to all the shards, sending the collective
  * reply to the reducer callback */
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
@@ -306,7 +282,6 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
-  // rc->strategy = MRCluster_NoCoordination;
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
   rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
@@ -357,23 +332,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   return REDIS_OK;
 }
 
-int MR_MRCoordinate(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
-  /* Return ERR if we only have one physical machine */
-  if (MRCluster_NumHosts(__cluster) < 2) {
-    return REDIS_ERR;
-  }
-  struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
-  rc->ctx = ctx;
-  rc->f = reducer;
-
-  rc->cmds = calloc(1, sizeof(MRCommand));
-  rc->numCmds = 1;
-  rc->cmds[0] = MRCommand_Copy(&cmd);
-
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
-
-  // TODO: don't ignore strategy
-  rc->cb = __uvCoordinateRequest;
-  __rq_push(&__rq, rc);
-  return REDIS_OK;
+/* Return the active cluster's host count */
+size_t MR_NumHosts() {
+  return __cluster ? MRCluster_NumHosts(__cluster) : 0;
 }

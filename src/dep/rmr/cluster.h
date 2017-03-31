@@ -60,18 +60,23 @@ typedef struct {
 
 /* Define the coordination strategy of a coordination command */
 typedef enum {
-  MRCluster_NoCoordination,
-  /* Send the coordination command to all nodes marked as coordinators */
-  MRCluster_AllCoordinators,
+  /* Send the coordination command to all nodes */
+  MRCluster_FlatCoordination = 0x01,
   /* Send the command to one coordinator per physical machine (identified by its IP address) */
-  MRCluster_CoordinatorPerServer,
+  MRCluster_RemoteCoordination = 0x02,
   /* Send the command to local nodes only - i.e. nodes working on the same physical host */
-  MRCluster_LocalCoordination,
+  MRCluster_LocalCoordination = 0x04,
+
+  MRCluster_MastersOnly = 0x08,
+
 } MRCoordinationStrategy;
 
 /* Multiplex a command to all coordinators, using a specific coordination strategy */
-int MRCluster_SendCoordinationCommand(MRCluster *cl, MRCoordinationStrategy strategy,
-                                      MRCommand *cmd, redisCallbackFn *fn, void *privdata);
+int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCommand *cmd,
+                            redisCallbackFn *fn, void *privdata);
+
+int MRCluster_SendCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCommand *cmd,
+                          redisCallbackFn *fn, void *privdata);
 
 size_t MRCluster_NumHosts(MRCluster *cl);
 
@@ -79,12 +84,6 @@ size_t MRCluster_NumNodes(MRCluster *cl);
 /* Asynchronously connect to all nodes in the cluster. This must be called before the io loop is
  * started */
 int MRCluster_ConnectAll(MRCluster *cl);
-
-// int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata, int argc,
-//                           const char **argv, const size_t *argvlen) {
-int MRCluster_SendCommand(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
-
-int MRCluster_SendCommandLocal(MRCluster *cl, MRCommand *cmd, redisCallbackFn *fn, void *privdata);
 
 /* Create a new cluster using a node provider */
 MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder,

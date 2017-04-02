@@ -14,6 +14,7 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleString **argv, int argc) {
 
   /* Parse the partition number */
   long long numPartitions = 0;
+
   if (RedisModule_StringToLongLong(argv[0], &numPartitions) == REDISMODULE_ERR ||
       numPartitions <= 0) {
     printf("Invalid num partitions");
@@ -23,11 +24,12 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleString **argv, int argc) {
 
   /* Parse the cluster type and make sure it's valid */
   const char *clusterType = RedisModule_StringPtrLen(argv[1], NULL);
-  const char *clusterTypes[] = {CLUSTER_TYPE_OSS, CLUSTER_TYPE_RLABS, CLUSTER_TYPE_STATIC};
+  const char *clusterTypes[] = {[ClusterType_RedisOSS] = CLUSTER_TYPE_OSS,
+                                [ClusterType_RedisLabs] = CLUSTER_TYPE_RLABS};
   int found = 0;
   for (int i = 0; !found && i < sizeof(clusterTypes) / sizeof(const char *); i++) {
     if (!strcmp(clusterType, clusterTypes[i])) {
-      conf->clusterType = clusterTypes[i];
+      conf->type = i;
       found = 1;
       break;
     }

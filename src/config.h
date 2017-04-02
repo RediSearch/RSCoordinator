@@ -3,24 +3,26 @@
 
 #include "redismodule.h"
 
+typedef enum { ClusterType_RedisOSS = 0, ClusterType_RedisLabs = 1 } MRClusterType;
+
 typedef struct {
   size_t numPartitions;
-  const char *clusterType;
+  MRClusterType type;
 } SearchClusterConfig;
 
 extern SearchClusterConfig clusterConfig;
 
 #define CLUSTER_TYPE_OSS "redis_oss"
-#define CLUSTER_TYPE_STATIC "redis_static"
 #define CLUSTER_TYPE_RLABS "redislabs"
 
-#define DEFAULT_CLUSTER_CONFIG                             \
-  (SearchClusterConfig) {                                  \
-    .numPartitions = 1, .clusterType = CLUSTER_TYPE_STATIC \
+#define DEFAULT_CLUSTER_CONFIG                       \
+  (SearchClusterConfig) {                            \
+    .numPartitions = 1, .type = ClusterType_RedisOSS \
   }
 
 /* Load the configuration from the module arguments.
- * Argument format: {num_partitions} {cluster type} */
+ * Argument format: PARTITIONS {num_partitions} TYPE {cluster type} ENDPOINT {[password@]host:port}
+ */
 int ParseConfig(SearchClusterConfig *conf, RedisModuleString **argv, int argc);
 
 #endif

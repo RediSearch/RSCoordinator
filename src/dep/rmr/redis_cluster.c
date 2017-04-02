@@ -76,7 +76,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
           RedisModule_CallReplyStringPtr(RedisModule_CallReplyArrayElement(nd, 2), &idlen);
 
       MRClusterNode node = {
-          .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .unixSock = NULL},
+          .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .auth= NULL, .unixSock = NULL},
           .id = strndup(id, idlen),
           .flags = MRNode_Coordinator,
       };
@@ -95,7 +95,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     }
     printf("Added shard %d..%d with %d nodes\n", sh.startSlot, sh.endSlot, numNodes);
     topo->shards[topo->numShards++] = sh;
-  }
+  } 
 
   return topo;
 err:

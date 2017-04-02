@@ -35,6 +35,8 @@ struct RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx);
 /* Free the MapReduce context */
 void MRCtx_Free(struct MRCtx *ctx);
 
+MRClusterTopology *MR_GetCurrentTopology();
+
 /* Create a new MapReduce context with a given private data. In a redis module
  * this should be the RedisModuleCtx */
 struct MRCtx *MR_CreateCtx(struct RedisModuleCtx *ctx, void *privdata);

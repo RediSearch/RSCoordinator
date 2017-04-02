@@ -214,6 +214,9 @@ void MR_Init(MRCluster *cl) {
   printf("Thread created\n");
 }
 
+MRClusterTopology *MR_GetCurrentTopology() {
+  return __cluster->topo;
+}
 /* The fanout request received in the event loop in a thread safe manner */
 void __uvFanoutRequest(struct __mrRequestCtx *mc) {
 

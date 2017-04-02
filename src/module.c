@@ -14,6 +14,8 @@
 #include "search_cluster.h"
 #include "config.h"
 
+SearchCluster __searchCluster;
+
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
@@ -194,12 +196,8 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
   MRCommand_SetKeyPos(&cmd, 1);
 
-  SearchCluster sc =
-      NewSearchCluster(clusterConfig.numPartitions,
-                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
-
-  SearchCluster_RewriteCommand(&sc, &cmd, 2);
-  SearchCluster_RewriteCommandArg(&sc, &cmd, 2, 2);
+  SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
+  SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
   // MprintRCommand_Print(&cmd);
   // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
   MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);
@@ -226,17 +224,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // printf("Turning %s into %s\n", tmp, cmd.args[0]);
   free(tmp);
 
-  SearchCluster sc =
-      NewSearchCluster(clusterConfig.numPartitions,
-                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
-
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx, NULL), chainReplyReducer, cg);
-
-  // MRCommand_Free(&cmd);
-  // cg.Free(cg.ctx);
-
-  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -260,14 +249,8 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   }
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
-  free(cmd.args[0]);
-  cmd.args[0] = strdup("FT.SEARCH");
-  MRCommand_Print(&cmd);
-  SearchCluster sc =
-      NewSearchCluster(clusterConfig.numPartitions,
-                       NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384));
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination);
@@ -313,6 +296,55 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDIS_OK;
 }
 
+int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+
+  int n = 0;
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+  RedisModule_ReplyWithSimpleString(ctx, "num_partitions");
+  n++;
+  RedisModule_ReplyWithLongLong(ctx, clusterConfig.numPartitions);
+  n++;
+  RedisModule_ReplyWithSimpleString(ctx, "cluster_type");
+  n++;
+  RedisModule_ReplyWithSimpleString(
+      ctx, clusterConfig.type == ClusterType_RedisLabs ? "redislabs" : "redis_oss");
+  n++;
+
+  RedisModule_ReplyWithSimpleString(ctx, "slots");
+  n++;
+  MRClusterTopology *topo = MR_GetCurrentTopology();
+  if (!topo) {
+    RedisModule_ReplyWithNull(ctx);
+    n++;
+
+  } else {
+    for (int i = 0; i < topo->numShards; i++) {
+      MRClusterShard *sh = &topo->shards[i];
+      RedisModule_ReplyWithArray(ctx, 2 + sh->numNodes);
+      n++;
+      RedisModule_ReplyWithLongLong(ctx, sh->startSlot);
+      RedisModule_ReplyWithLongLong(ctx, sh->endSlot);
+      for (int j = 0; j < sh->numNodes; j++) {
+        MRClusterNode *node = &sh->nodes[j];
+        RedisModule_ReplyWithArray(ctx, 3);
+        RedisModule_ReplyWithSimpleString(ctx, node->id);
+        RedisModule_ReplyWithSimpleString(ctx, node->endpoint.host);
+        RedisModule_ReplyWithLongLong(ctx, node->endpoint.port);
+      }
+    }
+  }
+
+  RedisModule_ReplySetArrayLength(ctx, n);
+  return REDISMODULE_OK;
+}
+
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return RedisModule_ReplyWithError(ctx, "NOT IMPLEMENTED");
 }
@@ -335,22 +367,33 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     clusterConfig = DEFAULT_CLUSTER_CONFIG;
   }
 
-  RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %s",
-                  clusterConfig.numPartitions, clusterConfig.clusterType);
+  RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %d",
+                  clusterConfig.numPartitions, clusterConfig.type);
 
   MRTopologyProvider tp;
-  // switch (clusterConfig.clusterType) {
-  //   case CLUSTER_TYPE_OSS:
-  //     tp = NewRedisClusterTopologyProvider(NULL);
-  //     break;
-  //   case CLUSTER_TYPE_STATIC:
-  //   default:
-  tp = NewStaticTopologyProvider(4096, "foobar", 4, "localhost:6375", "localhost:6376",
-                                 "localhost:6377", "localhost:6378");
-  //}
+  ShardFunc sf;
+  Partitioner pt;
+  switch (clusterConfig.type) {
+    case ClusterType_RedisLabs:
+      printf("ABORTING _ RLEC not supported yet!\n");
+      return REDIS_ERR;
+      tp = NewRedisClusterTopologyProvider(NULL);
+      // tp = NewRedisEnterpriseTopologyProvider();
+      sf = CRC16ShardFunc;  // TODO: Switch to CRC12
+      // TODO: Switch to partitioner with RL slot table
+      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
+      break;
+    case ClusterType_RedisOSS:
+    default:
+      tp = NewRedisClusterTopologyProvider(NULL);
+      sf = CRC16ShardFunc;
+      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
+  }
 
-  MRCluster *cl = MR_NewCluster(tp, CRC16ShardFunc, 10);
+  MRCluster *cl = MR_NewCluster(tp, sf, 10);
   MR_Init(cl);
+  __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
+
   // register index type
 
   if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
@@ -370,6 +413,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.info", ClusterInfoCommand, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

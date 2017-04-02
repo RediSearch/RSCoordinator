@@ -103,14 +103,18 @@ searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset,
 }
 
 int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
 
+  // got no replies - this means timeout
+  if (count == 0 || req->limit < 0) {
+    RedisModule_ReplyWithError(ctx, "Could not send query to cluter");
+  }
+
   long long total = 0;
   double minScore = 0;
-  heap_t *pq = malloc(heap_sizeof(10));
-  heap_init(pq, cmp_results, NULL, 10);
+  heap_t *pq = malloc(heap_sizeof(req->offset + req->limit));
+  heap_init(pq, cmp_results, NULL, req->offset + req->limit);
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
     if (MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 0) {
@@ -143,25 +147,29 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         } else if (res->score > minScore) {
           searchResult *smallest = heap_poll(pq);
           heap_offerx(pq, res);
+          minScore = smallest->score;
           free(smallest);
         } else {
           free(res);
         }
-        if (res->score < minScore) {
-          minScore = res->score;
-        }
       }
     }
   }
-  // TODO: Inverse this
-  // printf("Total: %d\n", total);
+
+  // Reverse the top N results
+  size_t qlen = heap_count(pq);
+  size_t pos = qlen;
+  searchResult *results[qlen];
+  while (pos) {
+    results[--pos] = heap_poll(pq);
+  }
+  heap_free(pq);
 
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   int len = 1;
   RedisModule_ReplyWithLongLong(ctx, total);
-  while (heap_count(pq)) {
-
-    searchResult *res = heap_poll(pq);
+  for (pos = req->offset; pos < qlen && pos < req->offset + req->limit; pos++) {
+    searchResult *res = results[pos];
     RedisModule_ReplyWithStringBuffer(ctx, res->id, strlen(res->id));
     len++;
     if (req->withScores) {
@@ -180,12 +188,18 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   }
   RedisModule_ReplySetArrayLength(ctx, len);
 
+  for (pos = 0; pos < qlen; pos++) {
+    free(results[pos]);
+  }
+
   return REDISMODULE_OK;
 }
 
 /* DFT.ADD {index} ... */
 int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MR_UpdateTopology(NULL);
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -194,7 +208,6 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
-  MRCommand_SetKeyPos(&cmd, 1);
 
   SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
   SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
@@ -210,7 +223,9 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MR_UpdateTopology(NULL);
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -219,10 +234,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own DFT command with FT. command */
-  char *tmp = cmd.args[0];
-  cmd.args[0] = strdup(cmd.args[0] + 1);
-  // printf("Turning %s into %s\n", tmp, cmd.args[0]);
-  free(tmp);
+  MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx, NULL), chainReplyReducer, cg);
@@ -231,7 +243,9 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 }
 
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
   // MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
@@ -247,9 +261,18 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
+
+  // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N from the
+  // shards
+  int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
+  if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
+    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
+  }
+
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
 
+  MRCommand_Print(&cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
@@ -266,7 +289,9 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
@@ -293,6 +318,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
   MR_Fanout(mrctx, searchResultReducer, cmd);
+
   return REDIS_OK;
 }
 
@@ -375,7 +401,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   Partitioner pt;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
-      printf("ABORTING _ RLEC not supported yet!\n");
+      printf("ABORTING -       RLEC not supported yet!\n");
       return REDIS_ERR;
       tp = NewRedisClusterTopologyProvider(NULL);
       // tp = NewRedisEnterpriseTopologyProvider();

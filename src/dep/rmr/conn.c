@@ -183,7 +183,8 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     conn->state = MRConn_Authenticating;
 
     // if we failed to send the auth command, start a reconnect loop
-    if (redisAsyncCommand(c, _MRConn_AuthCallback, conn, "AUTH %s", conn->ep.auth) == REDIS_ERR) {
+    if (redisAsyncCommand((redisAsyncContext *)c, _MRConn_AuthCallback, conn, "AUTH %s",
+                          conn->ep.auth) == REDIS_ERR) {
       conn->state = MRConn_Disconnected;
       _MRConn_StartReconnectLoop(conn);
     }

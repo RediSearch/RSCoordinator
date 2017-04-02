@@ -13,8 +13,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
   }
   size_t idlen;
   myId = RedisModule_CallReplyStringPtr(r, &idlen);
-  printf("myId: %.*s\n", (int)idlen, myId);
-
+  
   r = RedisModule_Call(ctx, "CLUSTER", "c", "SLOTS");
   if (r == NULL || RedisModule_CallReplyType(r) != REDISMODULE_REPLY_ARRAY) {
     RedisModule_Log(ctx, "error", "Error calling CLUSTER SLOTS");
@@ -35,7 +34,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     RedisModule_Log(ctx, "warning", "Got no slots in CLUSTER SLOTS");
     return NULL;
   }
-  printf("Creating a topology of %d slots\n", len);
+  printf("Creating a topology of %zd slots\n", len);
   MRClusterTopology *topo = calloc(1, sizeof(MRClusterTopology));
 
   topo->numShards = 0;
@@ -47,8 +46,8 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     // e is slot range entry
     RedisModuleCallReply *e = RedisModule_CallReplyArrayElement(r, i);
     if (RedisModule_CallReplyLength(e) < 3) {
-      printf("Invalid reply object for slot %d, type %d. len %d\n", i, RedisModule_CallReplyType(e),
-             (int)RedisModule_CallReplyLength(e));
+      printf("Invalid reply object for slot %zd, type %d. len %d\n", i,
+             RedisModule_CallReplyType(e), (int)RedisModule_CallReplyLength(e));
       goto err;
     }
     // parse the start and end slots
@@ -58,7 +57,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     int numNodes = RedisModule_CallReplyLength(e) - 2;
     sh.numNodes = 0;
     sh.nodes = calloc(numNodes, sizeof(MRClusterNode));
-    printf("Parsing slot %d, %d nodes", i, numNodes);
+    printf("Parsing slot %zd, %d nodes", i, numNodes);
     // parse the nodes
     for (size_t n = 0; n < numNodes; n++) {
       RedisModuleCallReply *nd = RedisModule_CallReplyArrayElement(e, n + 2);
@@ -76,7 +75,9 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
           RedisModule_CallReplyStringPtr(RedisModule_CallReplyArrayElement(nd, 2), &idlen);
 
       MRClusterNode node = {
-          .endpoint = (MREndpoint){.host = strndup(host, hostlen), .port = port, .auth= NULL, .unixSock = NULL},
+          .endpoint =
+              (MREndpoint){
+                  .host = strndup(host, hostlen), .port = port, .auth = NULL, .unixSock = NULL},
           .id = strndup(id, idlen),
           .flags = MRNode_Coordinator,
       };
@@ -95,7 +96,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
     }
     printf("Added shard %d..%d with %d nodes\n", sh.startSlot, sh.endSlot, numNodes);
     topo->shards[topo->numShards++] = sh;
-  } 
+  }
 
   return topo;
 err:

@@ -15,7 +15,9 @@ void _MRConn_Free(void *ptr);
 
 #define RSCONN_RECONNECT_TIMEOUT 250
 
+/* Init the connection manager */
 void MRConnManager_Init(MRConnManager *mgr) {
+  /* Create the connection map */
   mgr->map = NewTrieMap();
 }
 
@@ -73,6 +75,8 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
   return rc;
 }
 
+/* Connect all connections in the manager. Return the number of connections we successfully started.
+ * If we cannot connect, we initialize a retry loop */
 int MRConnManager_ConnectAll(MRConnManager *m) {
 
   int n = 0;
@@ -105,7 +109,7 @@ int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
 
 /* Stop the connection and make sure it frees itself on disconnect */
 void _MRConn_Stop(MRConn *conn) {
-  conn->state = MRConn_Stopped;
+  conn->state = MRConn_Stopping;
   redisAsyncDisconnect(conn->conn);
 }
 
@@ -138,6 +142,29 @@ void _MRConn_StartReconnectLoop(MRConn *conn) {
   uv_timer_start(t, __timerConnect, RSCONN_RECONNECT_TIMEOUT, 0);
 }
 
+void _MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
+  MRConn *conn = c->data;
+  if (c->err || !r) {
+    printf("Error sending auth. Reconnecting...");
+    conn->state = MRConn_Disconnected;
+    _MRConn_StartReconnectLoop(conn);
+  }
+
+  redisReply *rep = r;
+
+  /* AUTH error */
+  if (rep->type == REDIS_REPLY_ERROR) {
+    printf("Error authenticating: %s\n", rep->str);
+    conn->state = MRConn_AuthDenied;
+    /*we don't try to reconnect to failed connections */
+    return;
+  }
+
+  /* Success! we are now connected! */
+  printf("Connected and authenticated to %s:%d\n", conn->ep.host, conn->ep.port);
+  conn->state = MRConn_Connected;
+}
+
 /* hiredis async connect callback */
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   MRConn *conn = c->data;
@@ -150,6 +177,20 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     return;
   }
 
+  // If this is an authenticated connection, we need to atu
+  if (conn->ep.auth) {
+    // the connection is now in authenticating state
+    conn->state = MRConn_Authenticating;
+
+    // if we failed to send the auth command, start a reconnect loop
+    if (redisAsyncCommand(c, _MRConn_AuthCallback, conn, "AUTH %s", conn->ep.auth) == REDIS_ERR) {
+      conn->state = MRConn_Disconnected;
+      _MRConn_StartReconnectLoop(conn);
+    }
+
+    printf("Authenticating %s\n", conn->ep.host, conn->ep.port);
+    return;
+  }
   conn->state = MRConn_Connected;
   printf("Connected %s:%d...\n", conn->ep.host, conn->ep.port);
 }
@@ -157,12 +198,13 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
 void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
 
   MRConn *conn = c->data;
-  //printf("Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
+  // printf("Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
   // MRConn_Stopped means the disconnect was initiated by us and not due to failure
-  if (conn->state != MRConn_Stopped) {
+  if (conn->state != MRConn_Stopping) {
     conn->state = MRConn_Disconnected;
     _MRConn_StartReconnectLoop(conn);
   } else {
+    conn->state = MRConn_Stopped;
     // this means we have a requested disconnect, and we remove the connection now
     redisAsyncFree(conn->conn);
     free(conn);
@@ -178,13 +220,14 @@ MRConn *_MR_NewConn(MREndpoint *ep) {
 /* Connect to a cluster node */
 int _MRConn_Connect(MRConn *conn) {
 
-  if (conn->state == MRConn_Connected) {
+  if (conn->state == MRConn_Connected || conn->state == MRConn_Authenticating) {
     return REDIS_OK;
   }
 
   conn->conn = NULL;
   conn->state = MRConn_Disconnected;
   // printf("Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
+
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
   if (c->err) {
     printf("Could not connect to node %s:%d: %s\n", conn->ep.host, conn->ep.port, c->errstr);

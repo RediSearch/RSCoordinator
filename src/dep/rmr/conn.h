@@ -8,9 +8,27 @@
 
 #include "../triemap/triemap.h"
 
+/* The state of the connection */
 typedef enum {
+  /* initial state - new connection or disconnected connection due to error */
   MRConn_Disconnected,
+
+  /* Connection is trying to connect */
+  MRConn_Connecting,
+
+  /* Connected but still needs authentication */
+  MRConn_Authenticating,
+
+  /* Auth failed state */
+  MRConn_AuthDenied,
+
+  /* Connected, authenticated and active */
   MRConn_Connected,
+
+  /* Stopping due to user request */
+  MRConn_Stopping,
+
+  /* Stopped due to user request */
   MRConn_Stopped,
 } MRConnState;
 

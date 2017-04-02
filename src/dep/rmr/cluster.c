@@ -16,10 +16,8 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
     cl->nodeMap = MR_NewNodeMap();
 
     /* Get all the current node ids from the connection manager.  We will remove all the nodes
-     * that
-     * are in the new topology, and after the update, delete all the nodes that are in this map
-     * and
-     * not in the new topology */
+     * that are in the new topology, and after the update, delete all the nodes that are in this map
+     * and not in the new topology */
     TrieMap *currentNodes = NewTrieMap();
     TrieMapIterator *it = TrieMap_Iterate(cl->mgr.map, "", 0);
     char *k;
@@ -79,6 +77,7 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopol
   return cl;
 }
 
+/* Find the shard responsible for a given slot */
 MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
   // TODO: Switch to binary search
   for (int i = 0; i < cl->topo->numShards; i++) {
@@ -89,6 +88,7 @@ MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot) {
   return NULL;
 }
 
+/* Select a node from the shard according to the coordination strategy */
 MRClusterNode *_MRClusterShard_SelectNode(MRClusterShard *sh, MRClusterNode *myNode,
                                           MRCoordinationStrategy strategy) {
 
@@ -227,7 +227,8 @@ MRClusterTopology *STP_GetTopology(void *ctx) {
   return topo;
 }
 
-MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, ...) {
+MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, const char *auth, size_t numNodes,
+                                             ...) {
   MRClusterNode *nodes = calloc(numNodes, sizeof(MRClusterNode));
   va_list ap;
   va_start(ap, numNodes);
@@ -235,7 +236,7 @@ MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, size_t numNodes, .
   for (size_t i = 0; i < numNodes; i++) {
     const char *ip_port = va_arg(ap, const char *);
     if (MREndpoint_Parse(ip_port, &nodes[n].endpoint) == REDIS_OK) {
-
+      nodes[n].endpoint.auth = auth;
       nodes[n].id = strdup(ip_port);
       nodes[n].flags = MRNode_Master | MRNode_Coordinator;
       n++;

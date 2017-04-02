@@ -183,7 +183,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
 /* DFT.ADD {index} ... */
 int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MR_UpdateTopology(ctx);
+  MR_UpdateTopology(NULL);
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -212,7 +212,7 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MR_UpdateTopology(ctx);
+  MR_UpdateTopology(NULL);
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -243,7 +243,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  MR_UpdateTopology(ctx);
+  // MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
@@ -289,7 +289,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   }
 
   RedisModule_AutoMemory(ctx);
-  MR_UpdateTopology(ctx);
+  // MR_UpdateTopology(ctx);
 
   if (MR_NumHosts() < 2) {
     return LocalSearchCommandHandler(ctx, argv, argc);
@@ -338,10 +338,18 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %s",
                   clusterConfig.numPartitions, clusterConfig.clusterType);
 
-  // MRTopologyProvider tp = NewStaticTopologyProvider(4096, 2, "localhost:6375",
-  // "localhost:6376",
-  //                                                   "localhost:6377", "localhost:6378");
-  MRCluster *cl = MR_NewCluster(NewRedisClusterTopologyProvider(NULL), CRC16ShardFunc, 10);
+  MRTopologyProvider tp;
+  // switch (clusterConfig.clusterType) {
+  //   case CLUSTER_TYPE_OSS:
+  //     tp = NewRedisClusterTopologyProvider(NULL);
+  //     break;
+  //   case CLUSTER_TYPE_STATIC:
+  //   default:
+  tp = NewStaticTopologyProvider(4096, "foobar", 4, "localhost:6375", "localhost:6376",
+                                 "localhost:6377", "localhost:6378");
+  //}
+
+  MRCluster *cl = MR_NewCluster(tp, CRC16ShardFunc, 10);
   MR_Init(cl);
   // register index type
 

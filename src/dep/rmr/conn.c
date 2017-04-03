@@ -55,7 +55,8 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
 
     // if the address has changed - we stop the connection and we'll re-initiate it later
     if (strcmp(conn->ep.host, ep->host) || conn->ep.port != ep->port) {
-      // printf("node id %s changed from %s:%d to %s:%d\n", id, conn->ep.host, conn->ep.port, ep->host,
+      // printf("node id %s changed from %s:%d to %s:%d\n", id, conn->ep.host, conn->ep.port,
+      // ep->host,
       //        ep->port);
       MRConn_Stop(conn);
     } else {
@@ -102,6 +103,7 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
       n++;
     }
   }
+  TrieMapIterator_Free(it);
   return n;
 }
 

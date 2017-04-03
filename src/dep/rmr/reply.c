@@ -78,10 +78,10 @@ MRReply *mrReply_Duplicate(redisReply *rep) {
   if (rep->element && rep->elements) {
     ret->element = calloc(rep->elements, sizeof(redisReply *));
     for (int i = 0; i < rep->elements; i++) {
-      ret->element[i] = rep->element[i];
+      ret->element[i] = mrReply_Duplicate(rep->element[i]);
     }
   }
-  memset(rep, 0, sizeof(*rep));
+  // memset(rep, 0, sizeof(*rep));
   return ret;
 }
 

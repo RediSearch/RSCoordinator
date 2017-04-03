@@ -31,7 +31,7 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
     for (int sh = 0; sh < cl->topo->numShards; sh++) {
       for (int n = 0; n < cl->topo->shards[sh].numNodes; n++) {
         MRClusterNode *node = &cl->topo->shards[sh].nodes[n];
-        printf("Adding node %s:%d to cluster\n", node->endpoint.host, node->endpoint.port);
+        // printf("Adding node %s:%d to cluster\n", node->endpoint.host, node->endpoint.port);
         MRConnManager_Add(&cl->mgr, node->id, &node->endpoint, 0);
 
         /* Add the node to the node map */
@@ -42,7 +42,6 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
 
         /* See if this is us - if so we need to update the cluster's host and current id */
         if (node->flags & MRNode_Self) {
-          printf("This is us! %s:%d\n", node->endpoint.host, node->endpoint.port);
           cl->myNode = node;
         }
       }
@@ -52,7 +51,7 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
     it = TrieMap_Iterate(currentNodes, "", 0);
     while (TrieMapIterator_Next(it, &k, &len, &p)) {
       k[len] = '\0';
-      printf("Removing node %s from conn manager\n", k);
+      // printf("Removing node %s from conn manager\n", k);
       MRConnManager_Disconnect(&cl->mgr, k);
     }
 

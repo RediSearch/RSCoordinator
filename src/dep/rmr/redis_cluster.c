@@ -10,18 +10,27 @@ typedef struct {
   MRConn *conn;
 } _redisClusterTP;
 
-void _updateCB(redisAsyncContext *c, void *r, void *privdata) {
-  printf("Update result: %s\n", c->errstr);
-}
+void _updateTimerCB(uv_timer_t *tm);
+void _updateCB(redisAsyncContext *c, void *r, void *privdata);
 
 /* Timer loop for retrying disconnected connections */
 void _updateTimerCB(uv_timer_t *tm) {
   _redisClusterTP *tp = tm->data;
-  printf("TODO: Update timer\n");
+  printf("Timer update called\n");
   if (tp->conn->state == MRConn_Connected) {
-    redisAsyncCommand(tp->conn->conn, _updateCB, NULL, "dft.clusterrefresh");
+    redisAsyncCommand(tp->conn->conn, _updateCB, tm, "dft.clusterrefresh");
+  } else {
+    uv_timer_start(tm, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
   }
+}
+
+void _updateCB(redisAsyncContext *c, void *r, void *privdata) {
+  uv_timer_t *tm = privdata;
   uv_timer_start(tm, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
+}
+
+void _startUpdateTimer(_redisClusterTP *tp) {
+  // start a refresh timer
 }
 
 int _redisCluster_init(_redisClusterTP *rc) {
@@ -34,7 +43,6 @@ int _redisCluster_init(_redisClusterTP *rc) {
     return REDIS_ERR;
   }
 
-  // start a refresh timer
   uv_timer_t *t = malloc(sizeof(uv_timer_t));
   uv_timer_init(uv_default_loop(), t);
   t->data = rc;

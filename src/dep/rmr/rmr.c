@@ -81,7 +81,7 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
 
 /* handler for unblocking redis commands, that calls the actual reducer */
 int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
+  RedisModule_AutoMemory(ctx);
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
   mc->redisCtx = ctx;
 
@@ -339,6 +339,7 @@ size_t MR_NumHosts() {
 /* on-loop update topology request. This can't be done from the main thread */
 void __uvUpdateTopologyRequest(struct __mrRequestCtx *mc) {
   MRCLuster_UpdateTopology(__cluster, (MRClusterTopology *)mc->ctx);
+  free(mc);
 }
 
 /* Set a new topology for the cluster */

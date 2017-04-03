@@ -209,6 +209,8 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     free(results[pos]);
   }
 
+  searchRequestCtx_Free(req);
+
   return REDISMODULE_OK;
 }
 
@@ -226,13 +228,8 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
   SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
-  // MprintRCommand_Print(&cmd);
-  // MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+
   MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);
-
-  MRCommand_Free(&cmd);
-
-  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -386,7 +383,12 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 }
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  return RedisModule_ReplyWithError(ctx, "NOT IMPLEMENTED");
+  RedisModule_AutoMemory(ctx);
+  MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
+  MR_UpdateTopology(topo);
+  RedisModule_ReplyWithSimpleString(ctx, "OK");
+
+  return REDISMODULE_OK;
 }
 
 /* Perform basic configurations and init all threads and global structures */

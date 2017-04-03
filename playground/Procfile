@@ -1,6 +1,6 @@
-#redis-7000: redis-server ./7000/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
-redis-7001: redis-server ./7001/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
-redis-7002: redis-server ./7002/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
-redis-7003: redis-server ./7003/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
-redis-7004: redis-server ./7004/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
-redis-7005: redis-server ./7005/redis.conf --loglevel verbose --loadmodule ../src/module.so 5 redis_oss --loadmodule ../../RediSearch/src/module.so
+#redis-7000: redis-server ./7000/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT localhost:7000 --loadmodule ../../RediSearch/src/module.so
+redis-7001: redis-server ./7001/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT foo@localhost:7001 --loadmodule ../../RediSearch/src/module.so
+redis-7002: redis-server ./7002/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT localhost:7002 --loadmodule ../../RediSearch/src/module.so
+redis-7003: redis-server ./7003/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT localhost:7003 --loadmodule ../../RediSearch/src/module.so
+redis-7004: redis-server ./7004/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT localhost:7004 --loadmodule ../../RediSearch/src/module.so
+redis-7005: redis-server ./7005/redis.conf --loglevel verbose --loadmodule ../src/module.so PARTITIONS 5 TYPE redis_oss ENDPOINT localhost:7005 --loadmodule ../../RediSearch/src/module.so

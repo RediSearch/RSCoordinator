@@ -8,8 +8,17 @@ int MREndpoint_Parse(const char *addr, MREndpoint *ep) {
   ep->host = NULL;
   ep->unixSock = NULL;
   ep->auth = NULL;
+
+  // see if we have an auth password
+  char *at = strchr(addr, '@');
+  if (at) {
+    ep->auth = strndup(addr, at - addr);
+    addr = at + 1;
+  }
+
   char *colon = strchr(addr, ':');
   if (!colon || colon == addr) {
+    MREndpoint_Free(ep);
     return REDIS_ERR;
   }
 
@@ -17,6 +26,7 @@ int MREndpoint_Parse(const char *addr, MREndpoint *ep) {
   ep->port = atoi(colon + 1);
 
   if (ep->port <= 0 || ep->port > 0xFFFF) {
+    MREndpoint_Free(ep);
     return REDIS_ERR;
   }
   return REDIS_OK;

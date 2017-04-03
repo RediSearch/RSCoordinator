@@ -28,6 +28,24 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
+// a reducer that expects "OK" reply for all replies, and stops at the first error and returns it
+int allOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  if (count == 0) {
+    RedisModule_ReplyWithError(ctx, "Could not distribute comand");
+    return REDISMODULE_OK;
+  }
+  for (int i = 0; i < count; i++) {
+    if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
+      MR_ReplyWithMRReply(ctx, replies[i]);
+      return REDISMODULE_OK;
+    }
+  }
+
+  RedisModule_ReplyWithSimpleString(ctx, "OK");
+  return REDISMODULE_OK;
+}
+
 typedef struct {
   char *id;
   double score;
@@ -87,7 +105,6 @@ searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset,
   searchResult *res = malloc(sizeof(searchResult));
 
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
-  printf("Res id: %s\n", res->id);
   // if the id contains curly braces, get rid of them now
   char *brace = strchr(res->id, '{');
   if (brace && strchr(brace, '}')) {
@@ -237,7 +254,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
-  MR_Map(MR_CreateCtx(ctx, NULL), chainReplyReducer, cg);
+  MR_Map(MR_CreateCtx(ctx, NULL), allOKReducer, cg);
 
   return REDISMODULE_OK;
 }
@@ -262,8 +279,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
 
-  // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N from the
-  // shards
+  // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
   if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
     MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
@@ -276,19 +292,17 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination);
+  // we prefer the next level to be local - we will only approach nodes on our own shard
+  // we also ask only masters to serve the request, to avoid duplications by random
+  MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination | MRCluster_MastersOnly);
 
   MR_Map(mrctx, searchResultReducer, cg);
-
-  // MRCommand_Free(&cmd);
-  // cg.Free(cg.ctx);
-
-  // MR_Fanout(MR_CreateCtx(ctx), sumReducer, cmd);
 
   return REDISMODULE_OK;
 }
 
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
   if (clusterConfig.type == ClusterType_RedisOSS) {
     MR_UpdateTopology(ctx);
   }
@@ -299,6 +313,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   RedisModule_AutoMemory(ctx);
   // MR_UpdateTopology(ctx);
 
+  // If this a one-node cluster, we revert to a simple, flat one level coordination
   if (MR_NumHosts() < 2) {
     return LocalSearchCommandHandler(ctx, argv, argc);
   }
@@ -310,6 +325,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!req) {
     return RedisModule_ReplyWithError(ctx, "Invalid search request");
   }
+  // Internally we must have WITHSCORES set, even if the usr didn't set it
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
@@ -371,19 +387,29 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   return REDISMODULE_OK;
 }
 
+// A special command for redis cluster OSS, that refreshes the cluster state
+int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    MR_UpdateTopology(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+  RedisModule_ReplyWithSimpleString(ctx, "OK");
+
+  return REDISMODULE_OK;
+}
+
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return RedisModule_ReplyWithError(ctx, "NOT IMPLEMENTED");
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
+/* Perform basic configurations and init all threads and global structures */
+int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   /* Init cluster configs */
   if (argc > 0) {
-    if (ParseConfig(&clusterConfig, argv, argc) == REDISMODULE_ERR) {
+    if (ParseConfig(&clusterConfig, ctx, argv, argc) == REDISMODULE_ERR) {
       // printf("Could not parse module config\n");
       RedisModule_Log(ctx, "warning", "Could not parse module config");
       return REDISMODULE_ERR;
@@ -401,7 +427,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   Partitioner pt;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
-      printf("ABORTING -       RLEC not supported yet!\n");
+      printf("ABORTING - RLEC not supported yet!\n");
       return REDIS_ERR;
       tp = NewRedisClusterTopologyProvider(NULL);
       // tp = NewRedisEnterpriseTopologyProvider();
@@ -420,29 +446,73 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   MR_Init(cl);
   __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
 
-  // register index type
+  return REDISMODULE_OK;
+}
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
+  if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+
+  // Init the configuration and global cluster structs
+  if (initSearchCluster(ctx, argv, argc) == REDISMODULE_ERR) {
+    RedisModule_Log(ctx, "error", "Could not init MR search cluster");
+    return REDISMODULE_ERR;
+  }
+
+  /*********************************************************
+  * Single-shard simple commands
+  **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
-      REDISMODULE_ERR)
+      REDISMODULE_ERR) {
     return REDISMODULE_ERR;
+  }
+  if (RedisModule_CreateCommand(ctx, "dft.del", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+  if (RedisModule_CreateCommand(ctx, "dft.addhash", SingleShardCommandHandler, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
 
+  /*********************************************************
+   * Multi shard, fanout commands
+   **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.create", FanoutCommandHandler, "readonly", 0, 0, 0) ==
-      REDISMODULE_ERR)
+      REDISMODULE_ERR) {
     return REDISMODULE_ERR;
-
-  if (RedisModule_CreateCommand(ctx, "dft.xsearch", SearchCommandHandler, "readonly", 0, 0, 0) ==
-      REDISMODULE_ERR)
+  }
+  if (RedisModule_CreateCommand(ctx, "dft.drop", FanoutCommandHandler, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR) {
     return REDISMODULE_ERR;
+  }
 
-  if (RedisModule_CreateCommand(ctx, "dft.search", LocalSearchCommandHandler, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR)
+  /*********************************************************
+  * Complex coordination search commands
+  **********************************************************/
+  if (RedisModule_CreateCommand(ctx, "dft.lsearch", LocalSearchCommandHandler, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
+  }
 
+  if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+
+  /*********************************************************
+  * RS Cluster specific commands
+  **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "dft.info", ClusterInfoCommand, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.clusterrefresh", RefreshClusterCommand, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.clusterinfo", ClusterInfoCommand, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

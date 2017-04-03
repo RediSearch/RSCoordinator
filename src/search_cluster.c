@@ -29,8 +29,9 @@ const char *SP_PartitionTag(void *ctx, size_t partition) {
     return NULL;
   }
 
+  size_t step = sp->tableSize / sp->size;
   // printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
-  return sp->table[partition * (sp->tableSize / sp->size)];
+  return sp->table[((partition+1)*step - 1) % sp->tableSize];
 }
 
 Partitioner NewSimplePartitioner(size_t numPartitions, const char **table, size_t tableSize) {

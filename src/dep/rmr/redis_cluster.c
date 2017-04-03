@@ -42,10 +42,7 @@ int _redisCluster_init(_redisClusterTP *rc) {
   return REDIS_OK;
 }
 
-MRClusterTopology *RedisCluster_GetTopology(void *p, void *rc) {
-  RedisModuleCtx *ctx = rc;
-  _redisClusterTP *tp = p;
-  if (!p || !ctx) return NULL;
+MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
 
   const char *myId = NULL;
   RedisModuleCallReply *r = RedisModule_Call(ctx, "CLUSTER", "c", "MYID");
@@ -147,12 +144,14 @@ err:
   return NULL;
 }
 
-MRTopologyProvider NewRedisClusterTopologyProvider(MREndpoint *currentEndpoint) {
-  _redisClusterTP *tp = malloc(sizeof(*tp));
-  tp->localEndpoint = currentEndpoint;
-  tp->conn = NULL;
-  _redisCluster_init(tp);
-  return (MRTopologyProvider){
-      .ctx = tp, .GetTopology = RedisCluster_GetTopology,
-  };
+_redisClusterTP *__redisTP = NULL;
+
+int InitRedisTopologyUpdater(MREndpoint *currentEndpoint) {
+  if (!currentEndpoint) {
+    return REDIS_ERR;
+  }
+  __redisTP = malloc(sizeof(*__redisTP));
+  __redisTP->localEndpoint = currentEndpoint;
+  __redisTP->conn = NULL;
+  return _redisCluster_init(__redisTP);
 }

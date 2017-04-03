@@ -25,7 +25,11 @@ void MR_SetCoordinationStrategy(struct MRCtx *ctx, MRCoordinationStrategy strate
 /* Initialize the MapReduce engine with a node provider */
 void MR_Init(MRCluster *cl);
 
-int MR_UpdateTopology(void *ctx);
+/* Set a new topology for the cluster */
+int MR_UpdateTopology(MRClusterTopology *newTopology);
+
+/* Get the current cluster topology */
+MRClusterTopology *MR_GetCurrentTopology();
 
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
@@ -34,8 +38,6 @@ struct RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx);
 
 /* Free the MapReduce context */
 void MRCtx_Free(struct MRCtx *ctx);
-
-MRClusterTopology *MR_GetCurrentTopology();
 
 /* Create a new MapReduce context with a given private data. In a redis module
  * this should be the RedisModuleCtx */

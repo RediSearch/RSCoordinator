@@ -60,13 +60,13 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
   }
 }
 
-MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopologyUpdateInterval) {
+MRCluster *MR_NewCluster(MRClusterTopology *initialTopolgy, ShardFunc sf,
+                         long long minTopologyUpdateInterval) {
   MRCluster *cl = malloc(sizeof(MRCluster));
   cl->sf = sf;
-  cl->tp = tp;
   cl->topologyUpdateMinInterval = minTopologyUpdateInterval;
   cl->lastTopologyUpdate = 0;
-  cl->topo = tp.GetTopology(tp.ctx, NULL);
+  cl->topo = initialTopolgy;
   cl->nodeMap = NULL;
   cl->myNode = NULL;  // tODO: discover local ip/port
   MRConnManager_Init(&cl->mgr);
@@ -204,55 +204,6 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return MRConnManager_ConnectAll(&cl->mgr);
 }
 
-MRClusterTopology *STP_GetTopology(void *ctx, void *reqCtx) {
-  StaticTopologyProvider *stp = ctx;
-
-  MRClusterTopology *topo = malloc(sizeof(*topo));
-  topo->numShards = stp->numNodes;
-  topo->numSlots = stp->numSlots;
-  topo->shards = calloc(stp->numNodes, sizeof(MRClusterShard));
-  size_t slotRange = topo->numSlots / topo->numShards;
-  int i = 0;
-  for (size_t slot = 0; slot < topo->numSlots; slot += slotRange) {
-    topo->shards[i] = (MRClusterShard){
-        .startSlot = slot, .endSlot = slot + slotRange - 1, .numNodes = 1,
-
-    };
-    topo->shards[i].nodes = calloc(1, sizeof(MRClusterNode)),
-    topo->shards[i].nodes[0] = stp->nodes[i];
-
-    i++;
-  }
-
-  return topo;
-}
-
-MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, const char *auth, size_t numNodes,
-                                             ...) {
-  MRClusterNode *nodes = calloc(numNodes, sizeof(MRClusterNode));
-  va_list ap;
-  va_start(ap, numNodes);
-  int n = 0;
-  for (size_t i = 0; i < numNodes; i++) {
-    const char *ip_port = va_arg(ap, const char *);
-    if (MREndpoint_Parse(ip_port, &nodes[n].endpoint) == REDIS_OK) {
-      nodes[n].endpoint.auth = auth;
-      nodes[n].id = strdup(ip_port);
-      nodes[n].flags = MRNode_Master | MRNode_Coordinator;
-      n++;
-    }
-  }
-  va_end(ap);
-
-  StaticTopologyProvider *prov = malloc(sizeof(StaticTopologyProvider));
-  prov->nodes = nodes;
-  prov->numNodes = n;
-  prov->numSlots = numSlots;
-  return (MRTopologyProvider){
-      .ctx = prov, .GetTopology = STP_GetTopology,
-  };
-}
-
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
 
   const char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
@@ -298,7 +249,7 @@ void _clusterConnectAllCB(uv_work_t *wrk) {
   MRCluster_ConnectAll(c);
 }
 
-int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
+int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
 
   // only update the topology every N seconds
   time_t now = time(NULL);
@@ -309,18 +260,15 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   cl->lastTopologyUpdate = now;
 
   MRClusterTopology *old = cl->topo;
-  cl->topo = cl->tp.GetTopology(cl->tp.ctx, ctx);
+  cl->topo = newTopo;
   if (cl->topo) {
     _MRClsuter_UpdateNodes(cl);
 
-    // TODO: Fix this!
-    uv_work_t *wr = malloc(sizeof(uv_work_t));
-    wr->data = cl;
-    uv_queue_work(uv_default_loop(), wr, _clusterConnectAllCB, NULL);
+    MRCluster_ConnectAll(cl);
   }
-  // if (old) {
-  //   MRClusterTopology_Free(old);
-  // }
+  if (old) {
+    MRClusterTopology_Free(old);
+  }
   return REDIS_OK;
 }
 

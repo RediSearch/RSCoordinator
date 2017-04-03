@@ -55,6 +55,8 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
 
     // if the address has changed - we stop the connection and we'll re-initiate it later
     if (strcmp(conn->ep.host, ep->host) || conn->ep.port != ep->port) {
+      // printf("node id %s changed from %s:%d to %s:%d\n", id, conn->ep.host, conn->ep.port, ep->host,
+      //        ep->port);
       MRConn_Stop(conn);
     } else {
       // TODO: What if the connection's detils changed?
@@ -114,8 +116,11 @@ int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
 
 /* Stop the connection and make sure it frees itself on disconnect */
 void MRConn_Stop(MRConn *conn) {
+  printf("Stopping conn to %s:%d\n", conn->ep.host, conn->ep.port);
   conn->state = MRConn_Stopping;
-  redisAsyncDisconnect(conn->conn);
+  if (conn->conn) {
+    redisAsyncDisconnect(conn->conn);
+  }
 }
 
 /* Free a connection object */
@@ -194,7 +199,7 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
       _MRConn_StartReconnectLoop(conn);
     }
 
-    printf("Authenticating %s\n", conn->ep.host, conn->ep.port);
+    printf("Authenticating %s:%d\n", conn->ep.host, conn->ep.port);
     return;
   }
   conn->state = MRConn_Connected;
@@ -212,14 +217,16 @@ void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
   } else {
     conn->state = MRConn_Stopped;
     // this means we have a requested disconnect, and we remove the connection now
-    redisAsyncFree(conn->conn);
+    // redisAsyncFree(conn->conn);
+    MREndpoint_Free(&conn->ep);
     free(conn);
   }
 }
 
 MRConn *MR_NewConn(MREndpoint *ep) {
   MRConn *conn = malloc(sizeof(MRConn));
-  *conn = (MRConn){.ep = *ep, .state = MRConn_Disconnected, .conn = NULL};
+  *conn = (MRConn){.state = MRConn_Disconnected, .conn = NULL};
+  MREndpoint_Copy(&conn->ep, ep);
   return conn;
 }
 

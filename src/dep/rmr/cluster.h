@@ -35,13 +35,6 @@ void MRClusterTopology_Free(MRClusterTopology *t);
 
 void MRClusterNode_Free(MRClusterNode *n);
 
-// /* An interface for providing the cluster with the node list, and TODO allow node change
-//  * notifications */
-typedef struct {
-  void *ctx;
-  MRClusterTopology *(*GetTopology)(void *privdata, void *reqCtx);
-} MRTopologyProvider;
-
 /* A function that tells the cluster which shard to send a command to. should return -1 if not
  * applicable */
 typedef uint (*ShardFunc)(MRCommand *cmd, uint numSlots);
@@ -56,8 +49,7 @@ typedef struct {
   MRClusterNode *myNode;
   /* The sharding functino, responsible for transforming keys into slots */
   ShardFunc sf;
-  /* A provider from which the cluster can update its topology */
-  MRTopologyProvider tp;
+
   /* map of nodes by ip:port */
   MRNodeMap *nodeMap;
 
@@ -99,30 +91,21 @@ size_t MRCluster_NumHosts(MRCluster *cl);
 /* The number of nodes in the cluster */
 size_t MRCluster_NumNodes(MRCluster *cl);
 
+/* The number of shard instances in the cluster */
+size_t MRCluster_NumShards(MRCluster *cl);
+
 /* Asynchronously connect to all nodes in the cluster. This must be called before the io loop is
  * started */
 int MRCluster_ConnectAll(MRCluster *cl);
 
 /* Create a new cluster using a node provider */
-MRCluster *MR_NewCluster(MRTopologyProvider np, ShardFunc sharder,
+MRCluster *MR_NewCluster(MRClusterTopology *topology, ShardFunc sharder,
                          long long minTopologyUpdateInterval);
 
 /* Update the topology by calling the topology provider explicitly with ctx. If ctx is NULL, the
  * provider's current context is used. Otherwise, we call its function with the given context */
-int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx);
-
-/* The number of shard instances in the cluster */
-size_t MRCluster_NumShards(MRCluster *cl);
+int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopology);
 
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
 
-typedef struct {
-
-  size_t numSlots;
-  size_t numNodes;
-  MRClusterNode *nodes;
-
-} StaticTopologyProvider;
-
-MRTopologyProvider NewStaticTopologyProvider(size_t numSlots, const char *auth, size_t num, ...);
 #endif

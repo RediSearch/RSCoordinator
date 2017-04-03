@@ -377,11 +377,9 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 // A special command for redis cluster OSS, that refreshes the cluster state
 int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
-
   RedisModule_AutoMemory(ctx);
+  MRClusterTopology *topo = RedisCluster_GetTopology(ctx);
+  MR_UpdateTopology(topo);
   RedisModule_ReplyWithSimpleString(ctx, "OK");
 
   return REDISMODULE_OK;
@@ -409,27 +407,29 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %d",
                   clusterConfig.numPartitions, clusterConfig.type);
 
-  MRTopologyProvider tp;
   ShardFunc sf;
   Partitioner pt;
+  MRClusterTopology *initialTopology = NULL;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
       printf("ABORTING - RLEC not supported yet!\n");
-      return REDIS_ERR;
-      tp = NewRedisClusterTopologyProvider(clusterConfig.myEndpoint);
-      // tp = NewRedisEnterpriseTopologyProvider();
+      return REDISMODULE_ERR;
       sf = CRC16ShardFunc;  // TODO: Switch to CRC12
       // TODO: Switch to partitioner with RL slot table
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
       break;
     case ClusterType_RedisOSS:
     default:
-      tp = NewRedisClusterTopologyProvider(clusterConfig.myEndpoint);
+      // init the redis topology pro
+      if (InitRedisTopologyUpdater(clusterConfig.myEndpoint) == REDIS_ERR) {
+        RedisModule_Log(ctx, "error", "Could not init redis cluster topology updater. Aborting");
+        return REDISMODULE_ERR;
+      }
       sf = CRC16ShardFunc;
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
   }
 
-  MRCluster *cl = MR_NewCluster(tp, sf, 10);
+  MRCluster *cl = MR_NewCluster(initialTopology, sf, 10);
   MR_Init(cl);
   __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
 

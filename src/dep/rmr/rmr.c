@@ -39,10 +39,6 @@ typedef struct MRCtx {
 void MR_SetCoordinationStrategy(MRCtx *ctx, MRCoordinationStrategy strategy) {
   ctx->strategy = strategy;
 }
-int MR_UpdateTopology(void *ctx) {
-  // printf("Updating topo!\n");
-  return MRCLuster_UpdateTopology(__cluster, ctx);
-}
 
 /* Create a new MapReduce context */
 MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
@@ -114,7 +110,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
       ctx->repliesCap *= 2;
       ctx->replies = realloc(ctx->replies, ctx->repliesCap * sizeof(redisReply *));
     }
-    ctx->replies[ctx->numReplied++] = rp;
+    ctx->replies[ctx->numReplied++] = (MRReply *)rp;
   }
 
   // If we've received the last reply - unblock the client
@@ -126,7 +122,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
 // temporary request context to pass to the event loop
 struct __mrRequestCtx {
-  MRCtx *ctx;
+  void *ctx;
   MRReduceFunc f;
   MRCommand *cmds;
   int numCmds;
@@ -282,12 +278,12 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
-  rc->ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 
   rc->cb = __uvFanoutRequest;
   __rq_push(&__rq, rc);
@@ -338,4 +334,22 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 /* Return the active cluster's host count */
 size_t MR_NumHosts() {
   return __cluster ? MRCluster_NumHosts(__cluster) : 0;
+}
+
+/* on-loop update topology request. This can't be done from the main thread */
+void __uvUpdateTopologyRequest(struct __mrRequestCtx *mc) {
+  MRCLuster_UpdateTopology(__cluster, (MRClusterTopology *)mc->ctx);
+}
+
+/* Set a new topology for the cluster */
+int MR_UpdateTopology(MRClusterTopology *newTopo) {
+  if (__cluster == NULL) {
+    return REDIS_ERR;
+  }
+  // enqueue a request on the io thread, this can't be done from the main thread
+  struct __mrRequestCtx *rc = calloc(1, sizeof(*rc));
+  rc->ctx = newTopo;
+  rc->cb = __uvUpdateTopologyRequest;
+  __rq_push(&__rq, rc);
+  return REDIS_OK;
 }

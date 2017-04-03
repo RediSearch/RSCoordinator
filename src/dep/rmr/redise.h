@@ -5,7 +5,6 @@
 
 typedef struct { MRClusterTopology *topology; } RedisEnterpriseCtx;
 /* Redis^e cluster topology provider */
-MRTopologyProvider NewRedisEnterpriseTopologyProvider();
 
 MRClusterTopology *RedisEnterprise_GetTopology(void *p);
 

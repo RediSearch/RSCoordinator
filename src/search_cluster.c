@@ -18,7 +18,7 @@ size_t SP_PartitionForKey(void *ctx, const char *key, size_t len) {
 
 void SP_Free(void *ctx) {
   SimplePartitioner *sp = ctx;
-  
+
   free(sp);
 }
 
@@ -29,7 +29,7 @@ const char *SP_PartitionTag(void *ctx, size_t partition) {
     return NULL;
   }
 
-  //printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
+  // printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
   return sp->table[partition * (sp->tableSize / sp->size)];
 }
 
@@ -61,12 +61,10 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   char *partitionArg = cmd->args[partitionKey];
   // the sharding arg is the arg that we will add the partition tag to
   char *rewriteArg = cmd->args[arg];
-
-  char *tagged = malloc(strlen(rewriteArg) + 24);
+  char *tagged;
 
   size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
-  snprintf(tagged, strlen(rewriteArg) + 24, "%s{%s}", rewriteArg,
-           sc->part.PartitionTag(sc->part.ctx, part));
+  asprintf(&tagged, "%s{%s}", rewriteArg, sc->part.PartitionTag(sc->part.ctx, part));
   MRCommand_ReplaceArg(cmd, arg, tagged);
 
   return 1;
@@ -81,10 +79,10 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
     // the sharding arg is the arg that we will add the partition tag to
     char *shardingArg = cmd->args[sk];
 
-    char *tagged = malloc(strlen(shardingArg) + 16);
+    char *tagged;
 
     size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
-    sprintf(tagged, "%s{%s}", shardingArg, sc->part.PartitionTag(sc->part.ctx, part));
+    asprintf(&tagged, "%s{%s}", shardingArg, sc->part.PartitionTag(sc->part.ctx, part));
     MRCommand_ReplaceArg(cmd, sk, tagged);
   }
   return 1;
@@ -116,6 +114,12 @@ size_t SCCommandMuxIterator_Len(void *ctx) {
   return it->cluster->size;
 }
 
+void SCCommandMuxIterator_Free(void *ctx) {
+  SCCommandMuxIterator *it = ctx;
+  MRCommand_Free(it->cmd);
+  free(it);
+}
+
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
 MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd, int keyOffset) {
@@ -123,6 +127,8 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
   SCCommandMuxIterator *mux = malloc(sizeof(SCCommandMuxIterator));
   *mux = (SCCommandMuxIterator){.cluster = c, .cmd = cmd, .keyOffset = keyOffset, .offset = 0};
 
-  return (MRCommandGenerator){
-      .Next = SCCommandMuxIterator_Next, .Free = free, .Len = SCCommandMuxIterator_Len, .ctx = mux};
+  return (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
+                              .Free = SCCommandMuxIterator_Free,
+                              .Len = SCCommandMuxIterator_Len,
+                              .ctx = mux};
 }

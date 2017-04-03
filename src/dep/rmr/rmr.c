@@ -240,8 +240,6 @@ void __uvFanoutRequest(struct __mrRequestCtx *mc) {
   }
   free(mc->cmds);
   free(mc);
-
-  // return REDIS_OK;
 }
 
 void __uvMapRequest(struct __mrRequestCtx *mc) {
@@ -322,7 +320,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
-  rc->cmds[0] = MRCommand_Copy(&cmd);
+  rc->cmds[0] = cmd;
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
 

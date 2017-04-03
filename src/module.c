@@ -248,7 +248,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
   MR_Map(MR_CreateCtx(ctx, NULL), allOKReducer, cg);
-
+  cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
 
@@ -278,8 +278,6 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
-
-  // MRCommand_Print(&cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
@@ -288,7 +286,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination | MRCluster_MastersOnly);
 
   MR_Map(mrctx, searchResultReducer, cg);
-
+  cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
 
@@ -384,8 +382,8 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_AutoMemory(ctx);
-  MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
-  MR_UpdateTopology(topo);
+  // MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
+  // MR_UpdateTopology(topo);
   RedisModule_ReplyWithSimpleString(ctx, "OK");
 
   return REDISMODULE_OK;

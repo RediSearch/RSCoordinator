@@ -39,7 +39,7 @@ void MRClusterNode_Free(MRClusterNode *n);
 //  * notifications */
 typedef struct {
   void *ctx;
-  MRClusterTopology *(*GetTopology)(void *ctx);
+  MRClusterTopology *(*GetTopology)(void *privdata, void *reqCtx);
 } MRTopologyProvider;
 
 /* A function that tells the cluster which shard to send a command to. should return -1 if not

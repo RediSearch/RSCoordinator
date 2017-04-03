@@ -214,9 +214,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
 /* DFT.ADD {index} ... */
 int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
+
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -240,9 +238,7 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
+
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -260,9 +256,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 }
 
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
+
   // MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
@@ -288,7 +282,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
 
-  MRCommand_Print(&cmd);
+  // MRCommand_Print(&cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
@@ -303,9 +297,6 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
@@ -329,7 +320,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
-  MRCommand_Print(&cmd);
+  // MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
@@ -339,10 +330,6 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 }
 
 int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (clusterConfig.type == ClusterType_RedisOSS) {
-    MR_UpdateTopology(ctx);
-  }
 
   RedisModule_AutoMemory(ctx);
 
@@ -429,7 +416,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     case ClusterType_RedisLabs:
       printf("ABORTING - RLEC not supported yet!\n");
       return REDIS_ERR;
-      tp = NewRedisClusterTopologyProvider(NULL);
+      tp = NewRedisClusterTopologyProvider(clusterConfig.myEndpoint);
       // tp = NewRedisEnterpriseTopologyProvider();
       sf = CRC16ShardFunc;  // TODO: Switch to CRC12
       // TODO: Switch to partitioner with RL slot table
@@ -437,7 +424,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       break;
     case ClusterType_RedisOSS:
     default:
-      tp = NewRedisClusterTopologyProvider(NULL);
+      tp = NewRedisClusterTopologyProvider(clusterConfig.myEndpoint);
       sf = CRC16ShardFunc;
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
   }

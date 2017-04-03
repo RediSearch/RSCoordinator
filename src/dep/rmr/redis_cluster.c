@@ -1,10 +1,52 @@
 #include "cluster.h"
+#include "conn.h"
+#include "uv.h"
 #include <redismodule.h>
 
-MRClusterTopology *RedisCluster_GetTopology(void *p) {
-  if (!p) return NULL;
+#define REDIS_CLUSTER_REFRESH_TIMEOUT 1000
 
-  RedisModuleCtx *ctx = p;
+typedef struct {
+  MREndpoint *localEndpoint;
+  MRConn *conn;
+} _redisClusterTP;
+
+void _updateCB(redisAsyncContext *c, void *r, void *privdata) {
+  printf("Update result: %s\n", c->errstr);
+}
+
+/* Timer loop for retrying disconnected connections */
+void _updateTimerCB(uv_timer_t *tm) {
+  _redisClusterTP *tp = tm->data;
+  printf("TODO: Update timer\n");
+  if (tp->conn->state == MRConn_Connected) {
+    redisAsyncCommand(tp->conn->conn, _updateCB, NULL, "dft.clusterrefresh");
+  }
+  uv_timer_start(tm, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
+}
+
+int _redisCluster_init(_redisClusterTP *rc) {
+  if (rc->localEndpoint == NULL) {
+    return REDIS_ERR;
+  }
+  // create a connection to the local endpoint
+  rc->conn = MR_NewConn(rc->localEndpoint);
+  if (MRConn_Connect(rc->conn) == REDIS_ERR) {
+    return REDIS_ERR;
+  }
+
+  // start a refresh timer
+  uv_timer_t *t = malloc(sizeof(uv_timer_t));
+  uv_timer_init(uv_default_loop(), t);
+  t->data = rc;
+  uv_timer_start(t, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
+  return REDIS_OK;
+}
+
+MRClusterTopology *RedisCluster_GetTopology(void *p, void *rc) {
+  RedisModuleCtx *ctx = rc;
+  _redisClusterTP *tp = p;
+  if (!p || !ctx) return NULL;
+
   const char *myId = NULL;
   RedisModuleCallReply *r = RedisModule_Call(ctx, "CLUSTER", "c", "MYID");
   if (r == NULL || RedisModule_CallReplyType(r) != REDISMODULE_REPLY_STRING) {
@@ -13,7 +55,7 @@ MRClusterTopology *RedisCluster_GetTopology(void *p) {
   }
   size_t idlen;
   myId = RedisModule_CallReplyStringPtr(r, &idlen);
-  
+
   r = RedisModule_Call(ctx, "CLUSTER", "c", "SLOTS");
   if (r == NULL || RedisModule_CallReplyType(r) != REDISMODULE_REPLY_ARRAY) {
     RedisModule_Log(ctx, "error", "Error calling CLUSTER SLOTS");
@@ -105,8 +147,12 @@ err:
   return NULL;
 }
 
-MRTopologyProvider NewRedisClusterTopologyProvider(void *ctx) {
+MRTopologyProvider NewRedisClusterTopologyProvider(MREndpoint *currentEndpoint) {
+  _redisClusterTP *tp = malloc(sizeof(*tp));
+  tp->localEndpoint = currentEndpoint;
+  tp->conn = NULL;
+  _redisCluster_init(tp);
   return (MRTopologyProvider){
-      .ctx = ctx, .GetTopology = RedisCluster_GetTopology,
+      .ctx = tp, .GetTopology = RedisCluster_GetTopology,
   };
 }

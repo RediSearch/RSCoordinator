@@ -53,7 +53,7 @@ int _getCommandConfId(MRCommand *cmd) {
 
   for (int i = 0; __commandConfig[i].command != NULL; i++) {
     if (!strcasecmp(cmd->args[0], __commandConfig[i].command)) {
-      printf("conf id for cmd %s: %d\n", cmd->args[0], i);
+      //printf("conf id for cmd %s: %d\n", cmd->args[0], i);
       cmd->id = i;
       return 1;
     }

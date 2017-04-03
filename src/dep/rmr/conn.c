@@ -5,12 +5,11 @@
 #include <signal.h>
 #include <sys/param.h>
 
-MRConn *_MR_NewConn(MREndpoint *ep);
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status);
 void _MRConn_DisconnectCallback(const redisAsyncContext *, int);
 int _MRConn_Connect(MRConn *conn);
 void _MRConn_StartReconnectLoop(MRConn *conn);
-void _MRConn_Stop(MRConn *conn);
+
 void _MRConn_Free(void *ptr);
 
 #define RSCONN_RECONNECT_TIMEOUT 250
@@ -56,14 +55,14 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
 
     // if the address has changed - we stop the connection and we'll re-initiate it later
     if (strcmp(conn->ep.host, ep->host) || conn->ep.port != ep->port) {
-      _MRConn_Stop(conn);
+      MRConn_Stop(conn);
     } else {
       // TODO: What if the connection's detils changed?
       return 0;
     }
   }
 
-  conn = _MR_NewConn(ep);
+  conn = MR_NewConn(ep);
   if (!conn) {
     return 0;
   }
@@ -75,7 +74,18 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
   return rc;
 }
 
-/* Connect all connections in the manager. Return the number of connections we successfully started.
+int MRConn_Connect(MRConn *conn) {
+  if (conn && conn->state == MRConn_Disconnected) {
+    if (_MRConn_Connect(conn) == REDIS_ERR) {
+      _MRConn_StartReconnectLoop(conn);
+    }
+    return REDIS_OK;
+  }
+  return REDIS_ERR;
+}
+
+/* Connect all connections in the manager. Return the number of connections we successfully
+ * started.
  * If we cannot connect, we initialize a retry loop */
 int MRConnManager_ConnectAll(MRConnManager *m) {
 
@@ -86,13 +96,8 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
   void *p;
   while (TrieMapIterator_Next(it, &key, &len, &p)) {
     MRConn *conn = p;
-    if (conn && conn->state == MRConn_Disconnected) {
-      if (_MRConn_Connect(conn) == REDIS_ERR) {
-        _MRConn_StartReconnectLoop(conn);
-        n++;
-      } else {
-        n++;
-      }
+    if (MRConn_Connect(conn) == REDIS_OK) {
+      n++;
     }
   }
   return n;
@@ -108,7 +113,7 @@ int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
 }
 
 /* Stop the connection and make sure it frees itself on disconnect */
-void _MRConn_Stop(MRConn *conn) {
+void MRConn_Stop(MRConn *conn) {
   conn->state = MRConn_Stopping;
   redisAsyncDisconnect(conn->conn);
 }
@@ -117,7 +122,7 @@ void _MRConn_Stop(MRConn *conn) {
 void _MRConn_Free(void *ptr) {
   MRConn *conn = ptr;
   // stop frees the connection on disconnect callback
-  _MRConn_Stop(conn);
+  MRConn_Stop(conn);
 }
 
 /* Timer loop for retrying disconnected connections */
@@ -212,7 +217,7 @@ void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
   }
 }
 
-MRConn *_MR_NewConn(MREndpoint *ep) {
+MRConn *MR_NewConn(MREndpoint *ep) {
   MRConn *conn = malloc(sizeof(MRConn));
   *conn = (MRConn){.ep = *ep, .state = MRConn_Disconnected, .conn = NULL};
   return conn;

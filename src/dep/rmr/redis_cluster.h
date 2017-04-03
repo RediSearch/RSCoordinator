@@ -3,8 +3,8 @@
 
 #include "cluster.h"
 
-MRTopologyProvider NewRedisClusterTopologyProvider(void *ctx);
+MRTopologyProvider NewRedisClusterTopologyProvider(MREndpoint *localEndpoint);
 
-MRClusterTopology *RedisCluster_GetTopology(void *p);
+MRClusterTopology *RedisCluster_GetTopology(void *p, void *rc);
 
 #endif

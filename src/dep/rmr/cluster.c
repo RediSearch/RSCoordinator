@@ -66,7 +66,7 @@ MRCluster *MR_NewCluster(MRTopologyProvider tp, ShardFunc sf, long long minTopol
   cl->tp = tp;
   cl->topologyUpdateMinInterval = minTopologyUpdateInterval;
   cl->lastTopologyUpdate = 0;
-  cl->topo = tp.GetTopology(tp.ctx);
+  cl->topo = tp.GetTopology(tp.ctx, NULL);
   cl->nodeMap = NULL;
   cl->myNode = NULL;  // tODO: discover local ip/port
   MRConnManager_Init(&cl->mgr);
@@ -204,7 +204,7 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return MRConnManager_ConnectAll(&cl->mgr);
 }
 
-MRClusterTopology *STP_GetTopology(void *ctx) {
+MRClusterTopology *STP_GetTopology(void *ctx, void *reqCtx) {
   StaticTopologyProvider *stp = ctx;
 
   MRClusterTopology *topo = malloc(sizeof(*topo));
@@ -299,9 +299,7 @@ void _clusterConnectAllCB(uv_work_t *wrk) {
 }
 
 int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
-  if (ctx) {
-    cl->tp.ctx = ctx;
-  }
+
   // only update the topology every N seconds
   time_t now = time(NULL);
   if (cl->topo != NULL && cl->lastTopologyUpdate + cl->topologyUpdateMinInterval > now) {
@@ -311,7 +309,7 @@ int MRCLuster_UpdateTopology(MRCluster *cl, void *ctx) {
   cl->lastTopologyUpdate = now;
 
   MRClusterTopology *old = cl->topo;
-  cl->topo = cl->tp.GetTopology(cl->tp.ctx);
+  cl->topo = cl->tp.GetTopology(cl->tp.ctx, ctx);
   if (cl->topo) {
     _MRClsuter_UpdateNodes(cl);
 

@@ -226,7 +226,9 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
 
+  /* Rewrite the sharding key based on the partitioning key */
   SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
+  /* Rewrite the partitioning key as well */
   SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
 
   MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);

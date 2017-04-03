@@ -70,7 +70,7 @@ void MRCommand_Free(MRCommand *cmd) {
 }
 
 MRCommand MR_NewCommandArgv(int argc, char **argv) {
-  MRCommand cmd = (MRCommand){.num = argc, .args = calloc(argc, sizeof(char **))};
+  MRCommand cmd = (MRCommand){.num = argc, .args = calloc(argc, sizeof(char *))};
 
   for (int i = 0; i < argc; i++) {
 
@@ -136,7 +136,7 @@ void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
     return;
   }
   char *tmp = cmd->args[index];
-  cmd->args[index] = newArg;
+  cmd->args[index] = (char *)newArg;
   free(tmp);
 
   // if we've replaced the first argument, we need to reconfigure the command

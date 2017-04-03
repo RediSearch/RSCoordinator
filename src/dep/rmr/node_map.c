@@ -78,7 +78,7 @@ MRNodeMap *MR_NewNodeMap() {
 }
 
 void MRNodeMap_Add(MRNodeMap *m, MRClusterNode *n) {
-
+  
   TrieMap_Add(m->hosts, n->endpoint.host, strlen(n->endpoint.host), NULL, NULL);
 
   char addr[strlen(n->endpoint.host) + 10];

@@ -40,6 +40,7 @@ void MR_SetCoordinationStrategy(MRCtx *ctx, MRCoordinationStrategy strategy) {
   ctx->strategy = strategy;
 }
 
+int totalAllocd = 0;
 /* Create a new MapReduce context */
 MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   MRCtx *ret = malloc(sizeof(MRCtx));
@@ -53,11 +54,13 @@ MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   ret->privdata = privdata;
   ret->strategy = MRCluster_FlatCoordination;
   ret->redisCtx = ctx;
+  totalAllocd++;
+
   return ret;
 }
 
 void MRCtx_Free(MRCtx *ctx) {
-  // clean up the replies
+
   for (int i = 0; i < ctx->numReplied; i++) {
     if (ctx->replies[i] != NULL) {
       MRReply_Free(ctx->replies[i]);
@@ -79,21 +82,24 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
   return ctx->redisCtx;
 }
 
+void __mrFreePrivDataCB(void *p) {
+  // printf("FreePrivData called!\n");
+  MRCtx *mc = p;
+  MRCtx_Free(mc);
+}
+
+int __mrTimeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  printf("TIMEOUT!\n");
+  return RedisModule_ReplyWithError(ctx, "Timeout calling command");
+}
+
 /* handler for unblocking redis commands, that calls the actual reducer */
 int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_AutoMemory(ctx);
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
   mc->redisCtx = ctx;
 
-  int rc = mc->reducer(mc, mc->numReplied, mc->replies);
-
-  MRCtx_Free(mc);
-  return rc;
-}
-
-// TODO: make this user configrable
-void __mrFreePrivdata(void *privdata) {
-  free(privdata);
+  return mc->reducer(mc, mc->numReplied, mc->replies);
 }
 
 /* The callback called from each fanout request to aggregate their replies */
@@ -108,7 +114,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
     /* If needed - double the capacity for replies */
     if (ctx->numReplied == ctx->repliesCap) {
       ctx->repliesCap *= 2;
-      ctx->replies = realloc(ctx->replies, ctx->repliesCap * sizeof(redisReply *));
+      ctx->replies = realloc(ctx->replies, ctx->repliesCap * sizeof(MRReply *));
     }
     ctx->replies[ctx->numReplied++] = (MRReply *)rp;
   }
@@ -276,7 +282,8 @@ void __uvMapRequest(struct __mrRequestCtx *mc) {
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
+                                          __mrFreePrivDataCB, 0);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -307,7 +314,8 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
     }
   }
 
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
+                                          __mrFreePrivDataCB, 0);
 
   rc->cb = __uvMapRequest;
   __rq_push(&__rq, rc);
@@ -322,7 +330,8 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
 
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, NULL, NULL, 0);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
+                                          __mrFreePrivDataCB, 0);
 
   rc->cb = __uvMapRequest;
   __rq_push(&__rq, rc);

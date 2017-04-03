@@ -195,6 +195,8 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
       }
     }
   }
+  MRNodeMapIterator_Free(&it);
+
   return ret;
 }
 

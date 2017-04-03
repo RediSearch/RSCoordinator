@@ -42,6 +42,7 @@ typedef struct {
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
 
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
+void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg);
 
 int MRCommand_GetShardingKey(MRCommand *cmd);
 typedef enum {

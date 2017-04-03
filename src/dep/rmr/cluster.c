@@ -26,6 +26,7 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
     while (TrieMapIterator_Next(it, &k, &len, &p)) {
       TrieMap_Add(currentNodes, k, len, NULL, NULL);
     }
+    TrieMapIterator_Free(it);
 
     /* Walk the topology and add all nodes in it to the connection manager */
     for (int sh = 0; sh < cl->topo->numShards; sh++) {
@@ -54,7 +55,7 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
       // printf("Removing node %s from conn manager\n", k);
       MRConnManager_Disconnect(&cl->mgr, k);
     }
-
+    TrieMapIterator_Free(it);
     TrieMap_Free(currentNodes, NULL);
   }
 }

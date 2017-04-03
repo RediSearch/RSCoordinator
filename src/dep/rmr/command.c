@@ -53,7 +53,7 @@ int _getCommandConfId(MRCommand *cmd) {
 
   for (int i = 0; __commandConfig[i].command != NULL; i++) {
     if (!strcasecmp(cmd->args[0], __commandConfig[i].command)) {
-      //printf("conf id for cmd %s: %d\n", cmd->args[0], i);
+      // printf("conf id for cmd %s: %d\n", cmd->args[0], i);
       cmd->id = i;
       return 1;
     }
@@ -131,18 +131,21 @@ void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {
   va_end(ap);
 }
 
-void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg) {
+void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
   if (index < 0 || index >= cmd->num) {
     return;
   }
   char *tmp = cmd->args[index];
-  cmd->args[index] = strdup(newArg);
+  cmd->args[index] = newArg;
   free(tmp);
 
   // if we've replaced the first argument, we need to reconfigure the command
   if (index == 0) {
     _getCommandConfId(cmd);
   }
+}
+void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg) {
+  MRCommand_ReplaceArgNoDup(cmd, index, strdup(newArg));
 }
 
 int MRCommand_GetShardingKey(MRCommand *cmd) {

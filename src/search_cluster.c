@@ -65,7 +65,7 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
 
   size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
   asprintf(&tagged, "%s{%s}", rewriteArg, sc->part.PartitionTag(sc->part.ctx, part));
-  MRCommand_ReplaceArg(cmd, arg, tagged);
+  MRCommand_ReplaceArgNoDup(cmd, arg, tagged);
 
   return 1;
 }
@@ -83,7 +83,7 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
 
     size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
     asprintf(&tagged, "%s{%s}", shardingArg, sc->part.PartitionTag(sc->part.ctx, part));
-    MRCommand_ReplaceArg(cmd, sk, tagged);
+    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
   }
   return 1;
 }
@@ -98,11 +98,10 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0) {
     char *arg = cmd->args[it->keyOffset];
-    char *tagged = malloc(strlen(arg) + 16);
-    sprintf(tagged, "%s{%s}", arg,
-            it->cluster->part.PartitionTag(it->cluster->part.ctx, it->offset++));
-    free(arg);
-    cmd->args[it->keyOffset] = tagged;
+    char *tagged;
+    asprintf(&tagged, "%s{%s}", arg,
+             it->cluster->part.PartitionTag(it->cluster->part.ctx, it->offset++));
+    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
   }
 
   return 1;

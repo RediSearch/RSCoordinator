@@ -228,11 +228,9 @@ void __uvFanoutRequest(struct __mrRequestCtx *mc) {
   mrctx->numExpected = 0;
 
   if (__cluster->topo) {
-    for (int i = 0; i < __cluster->topo->numShards; i++) {
-      MRCommand *cmd = &mc->cmds[0];
-      mrctx->numExpected =
-          MRCluster_FanoutCommand(__cluster, mrctx->strategy, cmd, fanoutCallback, mrctx);
-    }
+    MRCommand *cmd = &mc->cmds[0];
+    mrctx->numExpected =
+        MRCluster_FanoutCommand(__cluster, mrctx->strategy, cmd, fanoutCallback, mrctx);
   }
 
   if (mrctx->numExpected == 0) {

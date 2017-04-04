@@ -20,7 +20,7 @@ SearchCluster __searchCluster;
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-
+  printf("Count: %d\n", count);
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
     MR_ReplyWithMRReply(ctx, replies[i]);
@@ -28,6 +28,17 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
+int singleReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
+
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  if (count == 0) {
+    RedisModule_ReplyWithNull(ctx);
+  }
+
+  MR_ReplyWithMRReply(ctx, replies[0]);
+
+  return REDISMODULE_OK;
+}
 // a reducer that expects "OK" reply for all replies, and stops at the first error and returns it
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
@@ -231,7 +242,7 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Rewrite the partitioning key as well */
   SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
 
-  MR_MapSingle(MR_CreateCtx(ctx, NULL), chainReplyReducer, cmd);
+  MR_MapSingle(MR_CreateCtx(ctx, NULL), singleReplyReducer, cmd);
 
   return REDISMODULE_OK;
 }
@@ -248,9 +259,25 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
   MR_Map(MR_CreateCtx(ctx, NULL), allOKReducer, cg);
   cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
+int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (argc < 2) {
+    return RedisModule_WrongArity(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc - 1, &argv[1]);
+  struct MRCtx *mctx = MR_CreateCtx(ctx, NULL);
+  MR_SetCoordinationStrategy(mctx, MRCluster_FlatCoordination);
+  MR_Fanout(mctx, chainReplyReducer, cmd);
+
   return REDISMODULE_OK;
 }
 
@@ -280,7 +307,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
@@ -473,6 +500,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
   }
   if (RedisModule_CreateCommand(ctx, "dft.drop", FanoutCommandHandler, "readonly", 0, 0, 0) ==
+      REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "dft.broadcast", BroadcastCommand, "readonly", 0, 0, 0) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }

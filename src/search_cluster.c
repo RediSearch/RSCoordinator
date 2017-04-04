@@ -31,7 +31,7 @@ const char *SP_PartitionTag(void *ctx, size_t partition) {
 
   size_t step = sp->tableSize / sp->size;
   // printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
-  return sp->table[((partition+1)*step - 1) % sp->tableSize];
+  return sp->table[((partition + 1) * step - 1) % sp->tableSize];
 }
 
 Partitioner NewSimplePartitioner(size_t numPartitions, const char **table, size_t tableSize) {
@@ -102,8 +102,10 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
     char *tagged;
     asprintf(&tagged, "%s{%s}", arg,
              it->cluster->part.PartitionTag(it->cluster->part.ctx, it->offset++));
+    printf("tagged: %s\n", tagged);
     MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
   }
+  MRCommand_Print(cmd);
 
   return 1;
 }
@@ -122,10 +124,11 @@ void SCCommandMuxIterator_Free(void *ctx) {
 
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
-MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd, int keyOffset) {
+MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd) {
 
   SCCommandMuxIterator *mux = malloc(sizeof(SCCommandMuxIterator));
-  *mux = (SCCommandMuxIterator){.cluster = c, .cmd = cmd, .keyOffset = keyOffset, .offset = 0};
+  *mux = (SCCommandMuxIterator){
+      .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
 
   return (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
                               .Free = SCCommandMuxIterator_Free,

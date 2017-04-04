@@ -28,7 +28,7 @@ typedef struct {
 
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
-MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd, int keyOffset);
+MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd);
 
 /* Rewrite a command by tagging its sharding key, using its partitioning key (which may or may not
  * be the same key) */

@@ -57,7 +57,7 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
   }
 
   // Parse the endpoint
-  char *ep;
+  char *ep = NULL;
   RMUtil_ParseArgsAfter("ENDPOINT", argv, argc, "c", &ep);
   if (ep) {
     MREndpoint endp;

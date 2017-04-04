@@ -441,8 +441,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRClusterTopology *initialTopology = NULL;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
-      printf("ABORTING - RLEC not supported yet!\n");
-      return REDISMODULE_ERR;
+      
       sf = CRC16ShardFunc;  // TODO: Switch to CRC12
       // TODO: Switch to partitioner with RL slot table
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);

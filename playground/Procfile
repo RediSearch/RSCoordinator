@@ -1,6 +1,12 @@
-redis-7000: redis-server ./7000/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7000 --loadmodule ../../RediSearch/src/module.so
-redis-7001: redis-server ./7001/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7001 --loadmodule ../../RediSearch/src/module.so
-redis-7002: redis-server ./7002/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7002 --loadmodule ../../RediSearch/src/module.so
-redis-7003: redis-server ./7003/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7003 --loadmodule ../../RediSearch/src/module.so
-redis-7004: redis-server ./7004/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7004 --loadmodule ../../RediSearch/src/module.so
-redis-7005: redis-server ./7005/redis.conf --hz 200 --loglevel verbose --loadmodule ../src/module.so PARTITIONS 6 TYPE redis_oss ENDPOINT localhost:7005 --loadmodule ../../RediSearch/src/module.so
+redis-7000: redis-server ./common.conf --cluster-config-file 7000.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7000 
+redis-7001: redis-server ./common.conf --cluster-config-file 7001.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7001 
+redis-7002: redis-server ./common.conf --cluster-config-file 7002.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7002 
+redis-7003: redis-server ./common.conf --cluster-config-file 7003.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7003 
+redis-7004: redis-server ./common.conf --cluster-config-file 7004.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7004 
+redis-7005: redis-server ./common.conf --cluster-config-file 7005.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7005 
+redis-7006: redis-server ./common.conf --cluster-config-file 7006.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7006 
+redis-7007: redis-server ./common.conf --cluster-config-file 7007.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7007 
+redis-7008: redis-server ./common.conf --cluster-config-file 7008.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7008 
+redis-7009: redis-server ./common.conf --cluster-config-file 7009.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7009 
+redis-7010: redis-server ./common.conf --cluster-config-file 7010.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7010 
+redis-7011: redis-server ./common.conf --cluster-config-file 7011.conf --loadmodule ../src/module.so PARTITIONS 12 TYPE redis_oss ENDPOINT localhost:7011 

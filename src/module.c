@@ -20,7 +20,7 @@ SearchCluster __searchCluster;
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  printf("Count: %d\n", count);
+  
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
     MR_ReplyWithMRReply(ctx, replies[i]);

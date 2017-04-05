@@ -24,7 +24,8 @@ static MRCluster *__cluster = NULL;
 
 /* MapReduce context for a specific command's execution */
 typedef struct MRCtx {
-  time_t startTime;
+  struct timespec startTime;
+  struct timespec endTime;
   int numReplied;
   int numExpected;
   int numErrored;
@@ -36,6 +37,11 @@ typedef struct MRCtx {
   MRCoordinationStrategy strategy;
 } MRCtx;
 
+/* The request duration in microsecnds, relevant only on the reducer */
+int64_t MR_RequestDuration(MRCtx *ctx) {
+  return ((int64_t)1000000 * ctx->endTime.tv_sec + ctx->endTime.tv_nsec / 1000) -
+         ((int64_t)1000000 * ctx->startTime.tv_sec + ctx->startTime.tv_nsec / 1000);
+}
 void MR_SetCoordinationStrategy(MRCtx *ctx, MRCoordinationStrategy strategy) {
   ctx->strategy = strategy;
 }
@@ -44,7 +50,8 @@ int totalAllocd = 0;
 /* Create a new MapReduce context */
 MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   MRCtx *ret = malloc(sizeof(MRCtx));
-  ret->startTime = time(NULL);
+  clock_gettime(CLOCK_REALTIME, &ret->startTime);
+  ret->endTime = ret->startTime;
   ret->numReplied = 0;
   ret->numErrored = 0;
   ret->numExpected = 0;
@@ -89,14 +96,15 @@ void __mrFreePrivDataCB(void *p) {
 }
 
 int __mrTimeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  printf("TIMEOUT!\n");
   return RedisModule_ReplyWithError(ctx, "Timeout calling command");
 }
 
 /* handler for unblocking redis commands, that calls the actual reducer */
 int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  RedisModule_AutoMemory(ctx);
+  // RedisModule_AutoMemory(ctx);
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
+  clock_gettime(CLOCK_REALTIME, &mc->endTime);
+  // printf("Request duration: %.02fms\n", (double)MR_RequestDuration(mc) / 1000);
   mc->redisCtx = ctx;
 
   return mc->reducer(mc, mc->numReplied, mc->replies);
@@ -105,6 +113,9 @@ int __mrUnblockHanlder(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 /* The callback called from each fanout request to aggregate their replies */
 static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   MRCtx *ctx = privdata;
+  if (ctx->numReplied == 0 && ctx->numErrored == 0) {
+    clock_gettime(CLOCK_REALTIME, &ctx->startTime);
+  }
   if (!r) {
     ctx->numErrored++;
 

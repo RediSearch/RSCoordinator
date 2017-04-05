@@ -102,10 +102,10 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
     char *tagged;
     asprintf(&tagged, "%s{%s}", arg,
              it->cluster->part.PartitionTag(it->cluster->part.ctx, it->offset++));
-    printf("tagged: %s\n", tagged);
+    //printf("tagged: %s\n", tagged);
     MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
   }
-  MRCommand_Print(cmd);
+  //MRCommand_Print(cmd);
 
   return 1;
 }

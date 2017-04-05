@@ -34,6 +34,9 @@ MRClusterTopology *MR_GetCurrentTopology();
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
 
+/* The request duration in microsecnds, relevant only on the reducer */
+int64_t MR_RequestDuration(struct MRCtx *ctx);
+
 struct RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx);
 
 /* Free the MapReduce context */

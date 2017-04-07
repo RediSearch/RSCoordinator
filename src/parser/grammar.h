@@ -1,0 +1,10 @@
+#define MYID                            1
+#define STRING                          2
+#define RANGES                          3
+#define INTEGER                         4
+#define HASREPLICATION                  5
+#define SHARD                           6
+#define SLOTRANGE                       7
+#define ADDR                            8
+#define UNIXADDR                        9
+#define MASTER                         10

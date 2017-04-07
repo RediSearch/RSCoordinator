@@ -20,16 +20,27 @@ typedef struct {
   uint startSlot;
   uint endSlot;
   size_t numNodes;
+  size_t capNodes;
   MRClusterNode *nodes;
 } MRClusterShard;
+
+/* Create a new cluster shard to be added to a topology */
+MRClusterShard MR_NewClusterShard(int startSlot, int endSlots, size_t capNodes);
+void MRClusterShard_AddNode(MRClusterShard *sh, MRClusterNode *n);
+// MR_NewToplogy
+// MRTopology_AddShard MRShard_AddNode
 
 /* A topology is the mapping of slots to shards and nodes */
 typedef struct {
   size_t numSlots;
   size_t numShards;
+  size_t capShards;
   MRClusterShard *shards;
 
 } MRClusterTopology;
+
+MRClusterTopology *MR_NewTopology(size_t numShards, size_t numSlots);
+void MRClusterTopology_AddShard(MRClusterTopology *topo, MRClusterShard *sh);
 
 void MRClusterTopology_Free(MRClusterTopology *t);
 

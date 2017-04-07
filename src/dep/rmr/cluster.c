@@ -176,11 +176,9 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   MRNodeMapIterator it;
   switch (strategy & ~(MRCluster_MastersOnly)) {
     case MRCluster_RemoteCoordination:
-      // printf("Coordination remotely!\n");
       it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap, cl->myNode);
       break;
     case MRCluster_LocalCoordination:
-      // printf("Local coordination!\n");
       it = MRNodeMap_IterateHost(cl->nodeMap, cl->myNode->endpoint.host);
       break;
     default:
@@ -194,7 +192,6 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
       continue;
     }
     MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    // MRCommand_Print(cmd);
     // printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
     if (conn) {
       if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
@@ -309,4 +306,40 @@ size_t MRCluster_NumHosts(MRCluster *cl) {
 
 size_t MRCluster_NumNodes(MRCluster *cl) {
   return cl->nodeMap ? MRNodeMap_NumNodes(cl->nodeMap) : 0;
+}
+
+MRClusterShard MR_NewClusterShard(int startSlot, int endSlot, size_t capNodes) {
+  MRClusterShard ret = (MRClusterShard){
+      .startSlot = startSlot,
+      .endSlot = endSlot,
+      .capNodes = capNodes,
+      .numNodes = 0,
+      .nodes = calloc(capNodes, sizeof(MRClusterNode)),
+  };
+  return ret;
+}
+
+void MRClusterShard_AddNode(MRClusterShard *sh, MRClusterNode *n) {
+  if (sh->capNodes == sh->numNodes) {
+    sh->capNodes += 1;
+    sh->nodes = realloc(sh->nodes, sh->capNodes * sizeof(MRClusterNode));
+  }
+  sh->nodes[sh->numNodes++] = *n;
+}
+
+MRClusterTopology *MR_NewTopology(size_t numShards, size_t numSlots) {
+  MRClusterTopology *topo = calloc(1, sizeof(*topo));
+  topo->capShards = numShards;
+  topo->numShards = 0;
+  topo->numSlots = numSlots;
+  topo->shards = calloc(topo->capShards, sizeof(MRClusterShard));
+  return topo;
+}
+
+void MRClusterTopology_AddShard(MRClusterTopology *topo, MRClusterShard *sh) {
+  if (topo->capShards == topo->numShards) {
+    topo->capShards++;
+    topo->shards = realloc(topo->shards, topo->capShards * sizeof(MRClusterShard));
+  }
+  topo->shards[topo->numShards++] = *sh;
 }

@@ -308,7 +308,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
-  MRCommand_Print(&cmd);
+//  MRCommand_Print(&cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
@@ -344,7 +344,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
-  MRCommand_Print(&cmd);
+  //MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);

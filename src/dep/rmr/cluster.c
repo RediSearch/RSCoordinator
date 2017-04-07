@@ -175,11 +175,11 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   MRNodeMapIterator it;
   switch (strategy) {
     case MRCluster_RemoteCoordination:
-      printf("Coordination remotely!\n");
+      // printf("Coordination remotely!\n");
       it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap, cl->myNode);
       break;
     case MRCluster_LocalCoordination:
-      printf("Local coordination!\n");
+      // printf("Local coordination!\n");
       it = MRNodeMap_IterateHost(cl->nodeMap, cl->myNode->endpoint.host);
       break;
     default:
@@ -190,7 +190,7 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   MRClusterNode *n;
   while (NULL != (n = it.Next(&it))) {
     MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
+    // printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
     if (conn) {
       if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
         ret++;

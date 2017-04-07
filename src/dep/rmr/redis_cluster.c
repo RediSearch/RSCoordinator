@@ -16,7 +16,7 @@ void _updateCB(redisAsyncContext *c, void *r, void *privdata);
 /* Timer loop for retrying disconnected connections */
 void _updateTimerCB(uv_timer_t *tm) {
   _redisClusterTP *tp = tm->data;
-  printf("Timer update called\n");
+  //printf("Timer update called\n");
   if (tp->conn->state == MRConn_Connected) {
     redisAsyncCommand(tp->conn->conn, _updateCB, tm, "dft.clusterrefresh");
   } else {
@@ -81,7 +81,7 @@ MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
     RedisModule_Log(ctx, "warning", "Got no slots in CLUSTER SLOTS");
     return NULL;
   }
-  printf("Creating a topology of %zd slots\n", len);
+  // printf("Creating a topology of %zd slots\n", len);
   MRClusterTopology *topo = calloc(1, sizeof(MRClusterTopology));
 
   topo->numShards = 0;
@@ -104,7 +104,7 @@ MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
     int numNodes = RedisModule_CallReplyLength(e) - 2;
     sh.numNodes = 0;
     sh.nodes = calloc(numNodes, sizeof(MRClusterNode));
-    printf("Parsing slot %zd, %d nodes", i, numNodes);
+    // printf("Parsing slot %zd, %d nodes", i, numNodes);
     // parse the nodes
     for (size_t n = 0; n < numNodes; n++) {
       RedisModuleCallReply *nd = RedisModule_CallReplyArrayElement(e, n + 2);
@@ -133,15 +133,15 @@ MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
 
       // compare the node id to our id
       if (!strncmp(node.id, myId, idlen)) {
-        printf("Found myself %s!\n", myId);
+        // printf("Found myself %s!\n", myId);
         node.flags |= MRNode_Self;
       }
       sh.nodes[sh.numNodes++] = node;
 
-      printf("Added node id %s, %s:%d master? %d\n", sh.nodes[n].id, sh.nodes[n].endpoint.host,
-             sh.nodes[n].endpoint.port, sh.nodes[n].flags & MRNode_Master);
+      // printf("Added node id %s, %s:%d master? %d\n", sh.nodes[n].id, sh.nodes[n].endpoint.host,
+      //        sh.nodes[n].endpoint.port, sh.nodes[n].flags & MRNode_Master);
     }
-    printf("Added shard %d..%d with %d nodes\n", sh.startSlot, sh.endSlot, numNodes);
+    // printf("Added shard %d..%d with %d nodes\n", sh.startSlot, sh.endSlot, numNodes);
     topo->shards[topo->numShards++] = sh;
   }
 

@@ -90,9 +90,11 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
 }
 
 void __mrFreePrivDataCB(void *p) {
-  // printf("FreePrivData called!\n");
-  MRCtx *mc = p;
-  MRCtx_Free(mc);
+  //printf("FreePrivData called!\n");
+  if (p) {
+    MRCtx *mc = p;
+    MRCtx_Free(mc);
+  }
 }
 
 int __mrTimeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -129,6 +131,9 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
     }
     ctx->replies[ctx->numReplied++] = (MRReply *)rp;
   }
+
+  // printf("Unblocking, replied %d, errored %d out of %d\n", ctx->numReplied, ctx->numErrored,
+  //        ctx->numExpected);
 
   // If we've received the last reply - unblock the client
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
@@ -292,7 +297,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct __mrRequestCtx *rc = malloc(sizeof(struct __mrRequestCtx));
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
-                                          __mrFreePrivDataCB, 0);
+                                          __mrFreePrivDataCB, 500);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -324,7 +329,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
   }
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
-                                          __mrFreePrivDataCB, 0);
+                                          __mrFreePrivDataCB, 500);
 
   rc->cb = __uvMapRequest;
   __rq_push(&__rq, rc);
@@ -340,7 +345,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds[0] = cmd;
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, __mrUnblockHanlder, __mrTimeoutHandler,
-                                          __mrFreePrivDataCB, 0);
+                                          __mrFreePrivDataCB, 500);
 
   rc->cb = __uvMapRequest;
   __rq_push(&__rq, rc);

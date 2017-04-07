@@ -24,22 +24,37 @@ MRClusterNode *_nmi_randomNext(MRNodeMapIterator *it) {
   if (!TrieMapIterator_Next(it->iter, &host, &len, &p)) {
     return NULL;
   }
-
-  return TrieMap_RandomValueByPrefix(it->m->nodes, host, len);
+  int retries = 0;
+  MRClusterNode *n = NULL;
+  while (retries < 10) {
+    n = TrieMap_RandomValueByPrefix(it->m->nodes, host, len);
+    if (!n) break;
+    // do not select the same node as excluded
+    if (it->excluded && MRNode_IsSameHost(n, it->excluded) &&
+        it->excluded->endpoint.port == n->endpoint.port) {
+      retries++;
+      continue;
+    }
+    break;
+  }
+  return n;
 }
-
 MRNodeMapIterator MRNodeMap_IterateAll(MRNodeMap *m) {
   return (MRNodeMapIterator){
-      .Next = _nmi_allNext, .m = m, .iter = TrieMap_Iterate(m->nodes, "", 0)};
+      .Next = _nmi_allNext, .m = m, .excluded = NULL, .iter = TrieMap_Iterate(m->nodes, "", 0)};
 }
 
 MRNodeMapIterator MRNodeMap_IterateHost(MRNodeMap *m, const char *host) {
-  return (MRNodeMapIterator){
-      .Next = _nmi_allNext, .m = m, .iter = TrieMap_Iterate(m->nodes, host, strlen(host))};
+  return (MRNodeMapIterator){.Next = _nmi_allNext,
+                             .m = m,
+                             .excluded = NULL,
+                             .iter = TrieMap_Iterate(m->nodes, host, strlen(host))};
 }
-MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m) {
-  return (MRNodeMapIterator){
-      .Next = _nmi_randomNext, .m = m, .iter = TrieMap_Iterate(m->hosts, "", 0)};
+MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m, MRClusterNode *excludeNode) {
+  return (MRNodeMapIterator){.Next = _nmi_randomNext,
+                             .m = m,
+                             .excluded = excludeNode,
+                             .iter = TrieMap_Iterate(m->hosts, "", 0)};
 }
 
 void *_node_replace(void *oldval, void *newval) {

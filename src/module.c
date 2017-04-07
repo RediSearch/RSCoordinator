@@ -20,7 +20,7 @@ SearchCluster __searchCluster;
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  
+
   RedisModule_ReplyWithArray(ctx, count);
   for (int i = 0; i < count; i++) {
     MR_ReplyWithMRReply(ctx, replies[i]);
@@ -308,7 +308,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
-
+  MRCommand_Print(&cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
@@ -329,9 +329,9 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MR_UpdateTopology(ctx);
 
   // If this a one-node cluster, we revert to a simple, flat one level coordination
-  if (MR_NumHosts() < 2) {
-    return LocalSearchCommandHandler(ctx, argv, argc);
-  }
+  // if (MR_NumHosts() < 2) {
+  //   return LocalSearchCommandHandler(ctx, argv, argc);
+  // }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   MRCommand_ReplaceArg(&cmd, 0, "DFT.LSEARCH");
@@ -344,7 +344,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
-  // MRCommand_Print(&cmd);
+  MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
@@ -441,7 +441,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRClusterTopology *initialTopology = NULL;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
-      
+
       sf = CRC16ShardFunc;  // TODO: Switch to CRC12
       // TODO: Switch to partitioner with RL slot table
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);

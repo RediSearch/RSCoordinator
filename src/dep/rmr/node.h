@@ -25,11 +25,12 @@ typedef struct MRNodeMap {
 typedef struct MRNodeMapIterator {
   TrieMapIterator *iter;
   MRNodeMap *m;
+  MRClusterNode *excluded;
   MRClusterNode *(*Next)(struct MRNodeMapIterator *it);
 } MRNodeMapIterator;
 
 MRNodeMapIterator MRNodeMap_IterateAll(MRNodeMap *m);
-MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m);
+MRNodeMapIterator MRNodeMap_IterateRandomNodePerhost(MRNodeMap *m, MRClusterNode *excluded);
 MRNodeMapIterator MRNodeMap_IterateHost(MRNodeMap *m, const char *host);
 void MRNodeMapIterator_Free(MRNodeMapIterator *it);
 

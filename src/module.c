@@ -334,7 +334,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  MRCommand_ReplaceArg(&cmd, 0, "DFT.SEARCH");
+  MRCommand_ReplaceArg(&cmd, 0, "DFT.LSEARCH");
 
   searchRequestCtx *req = parseRequest(argv, argc);
   if (!req) {

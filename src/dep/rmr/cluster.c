@@ -188,7 +188,7 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   MRClusterNode *n;
   while (NULL != (n = it.Next(&it))) {
     MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    //printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
+    // printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
     if (conn) {
       if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
         ret++;

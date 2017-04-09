@@ -90,8 +90,6 @@ def module_path(mod):
 @roles("redis")
 def install_modules():
 
-    #run("echo 'machine github.com login dvirsky password bzpw3e!@' > ~/.netrc && chmod 0600 ~/.netrc")
-
     fetch_git_repo('RedisLabsModules', 'RediSearch')
     fetch_git_repo('RedisLabsModules', 'RSCoordinator')
 

@@ -411,10 +411,12 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_AutoMemory(ctx);
-  // MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
-  // MR_UpdateTopology(topo);
+  RedisModule_Log(ctx, "notice", "Start parsing argc is %d", argc);
+  MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
+  if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
+    RedisModule_ReplyWithError(ctx, "Error updating the topology");
+  }
   RedisModule_ReplyWithSimpleString(ctx, "OK");
-
   return REDISMODULE_OK;
 }
 
@@ -465,7 +467,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "rmr", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "dft", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

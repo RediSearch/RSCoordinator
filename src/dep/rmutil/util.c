@@ -141,13 +141,13 @@ d -- pointer to a Double
 int RMUtil_ParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  int rc = rmutil_vparseArgs(argv, argc, offset, fmt, ap);
+  int rc = RMUtil_VParseArgs(argv, argc, offset, fmt, ap);
   va_end(ap);
   return rc;
 }
 
 // Internal function that parses arguments based on the format described above
-int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap) {
+int RMUtil_VParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap) {
 
   int i = offset;
   char *c = (char *)fmt;
@@ -202,7 +202,7 @@ int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc,
 
   va_list ap;
   va_start(ap, fmt);
-  int rc = rmutil_vparseArgs(argv, argc, pos + 1, fmt, ap);
+  int rc = RMUtil_VParseArgs(argv, argc, pos + 1, fmt, ap);
   va_end(ap);
   return rc;
 }

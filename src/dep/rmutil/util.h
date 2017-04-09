@@ -52,6 +52,8 @@ Example: If I want to parse args[1], args[2] as a long long and double, I do:
 */
 int RMUtil_ParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, ...);
 
+int RMUtil_VParseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap);
+
 /**
 Same as RMUtil_ParseArgs, but only parses the arguments after `token`, if it was found.
 This is useful for optional stuff like [LIMIT [offset] [limit]]
@@ -59,7 +61,7 @@ This is useful for optional stuff like [LIMIT [offset] [limit]]
 int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc, const char *fmt,
                           ...);
 
-int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap);
+//int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap);
 
 // A single key/value entry in a redis info map
 typedef struct {

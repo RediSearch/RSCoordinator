@@ -44,13 +44,14 @@ MRClusterTopology *RedisEnterprise_ParseTopology(RedisModuleCtx *ctx, RedisModul
   const int num_slots = 4096;
   const int mandatory = 0;
   const int optional = 1;
-  const size_t max_field_len = 100;
+  //const size_t max_field_len = 100;
 
   RedisModule_Log(ctx, "notice", "Start parsing argc is %d", argc);
 
-  char *my_id = NULL;
+
   MRClusterTopology *topo = NULL;
 
+  char *my_id = NULL;
   int expected_token_pos = 1;
   //my_id = (char*)calloc(max_field_len, sizeof(char));
   res = ParseToken(ctx, mandatory, "MYID", argv, argc, 0, argc, expected_token_pos, "c", &my_id);

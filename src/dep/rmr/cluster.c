@@ -2,6 +2,7 @@
 #include "hiredis/adapters/libuv.h"
 #include "dep/triemap/triemap.h"
 #include "dep/crc16.h"
+#include "dep/crc12.h"
 #include "dep/rmutil/vector.h"
 
 #include <stdlib.h>
@@ -208,20 +209,35 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return MRConnManager_ConnectAll(&cl->mgr);
 }
 
-uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
-
-  const char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
+void _MRGetShardKey(MRCommand *cmd, const char *k, size_t *len) {
+  k = cmd->args[MRCommand_GetShardingKey(cmd)];
   char *brace = strchr(k, '{');
-  size_t len = strlen(k);
+  *len = strlen(k);
   if (brace) {
     char *braceEnd = strchr(brace, '}');
     if (braceEnd) {
 
-      len = braceEnd - brace - 1;
+      *len = braceEnd - brace - 1;
       k = brace + 1;
     }
   }
+}
+
+uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
+  const char *k;
+  size_t len;
+  
+  _MRGetShardKey(cmd, k, &len);
   uint16_t crc = crc16(k, len);
+  return crc % numSlots;
+}
+
+uint CRC12ShardFunc(MRCommand *cmd, uint numSlots) {
+  const char *k;
+  size_t len;
+  
+  _MRGetShardKey(cmd, k, &len);
+  uint16_t crc = crc12(k, len);
   return crc % numSlots;
 }
 

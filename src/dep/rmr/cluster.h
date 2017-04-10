@@ -107,5 +107,7 @@ MRCluster *MR_NewCluster(MRClusterTopology *topology, ShardFunc sharder,
 int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopology);
 
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
+uint CRC12ShardFunc(MRCommand *cmd, uint numSlots);
+
 
 #endif

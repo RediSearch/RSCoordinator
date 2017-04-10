@@ -248,6 +248,26 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   return REDISMODULE_OK;
 }
 
+int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  printf("DFT CREATE!\n\n\n\n");
+  if (argc < 2) {
+    return RedisModule_WrongArity(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own DFT command with FT. command */
+  MRCommand_ReplaceArg(&cmd, 0, cmd.args[0] + 1);
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
+  MR_Map(mrctx, allOKReducer, cg);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 2) {
@@ -444,7 +464,6 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRClusterTopology *initialTopology = NULL;
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
-
       sf = CRC12ShardFunc;
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc12_slot_table, 4096);
       break;
@@ -496,12 +515,12 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   /*********************************************************
    * Multi shard, fanout commands
    **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "dft.create", FanoutCommandHandler, "readonly", 0, 0, 0) ==
-      REDISMODULE_ERR) {
+  if (RedisModule_CreateCommand(ctx, "dft.create", MastersFanoutCommandHandler, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
-  if (RedisModule_CreateCommand(ctx, "dft.drop", FanoutCommandHandler, "readonly", 0, 0, 0) ==
-      REDISMODULE_ERR) {
+  if (RedisModule_CreateCommand(ctx, "dft.drop", MastersFanoutCommandHandler, "readonly", 0, 0,
+                                0) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

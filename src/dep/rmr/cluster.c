@@ -1,9 +1,9 @@
 #include "cluster.h"
 #include "hiredis/adapters/libuv.h"
-#include "dep/triemap/triemap.h"
-#include "dep/crc16.h"
-#include "dep/crc12.h"
-#include "dep/rmutil/vector.h"
+#include <dep/triemap/triemap.h>
+#include <dep/crc16.h>
+#include <dep/crc12.h>
+#include <dep/rmutil/vector.h>
 
 #include <stdlib.h>
 
@@ -174,13 +174,13 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   }
 
   MRNodeMapIterator it;
-  switch (strategy) {
+  switch (strategy & ~(MRCluster_MastersOnly)) {
     case MRCluster_RemoteCoordination:
-      // printf("Coordination remotely!\n");
+      printf("Coordination remotely!\n");
       it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap, cl->myNode);
       break;
     case MRCluster_LocalCoordination:
-      // printf("Local coordination!\n");
+      printf("Local coordination!\n");
       it = MRNodeMap_IterateHost(cl->nodeMap, cl->myNode->endpoint.host);
       break;
     default:
@@ -190,8 +190,12 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   int ret = 0;
   MRClusterNode *n;
   while (NULL != (n = it.Next(&it))) {
+    if ((strategy & MRCluster_MastersOnly) && !(n->flags & MRNode_Master)) {
+      continue;
+    }
     MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    // printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
+    MRCommand_Print(cmd);
+    printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
     if (conn) {
       if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
         ret++;
@@ -209,8 +213,8 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return MRConnManager_ConnectAll(&cl->mgr);
 }
 
-void _MRGetShardKey(MRCommand *cmd, const char *k, size_t *len) {
-  k = cmd->args[MRCommand_GetShardingKey(cmd)];
+char *_MRGetShardKey(MRCommand *cmd, size_t *len) {
+  char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
   char *brace = strchr(k, '{');
   *len = strlen(k);
   if (brace) {
@@ -221,22 +225,23 @@ void _MRGetShardKey(MRCommand *cmd, const char *k, size_t *len) {
       k = brace + 1;
     }
   }
+
+  return k;
 }
 
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
-  const char *k;
+
   size_t len;
-  
-  _MRGetShardKey(cmd, k, &len);
+
+  char *k = _MRGetShardKey(cmd, &len);
   uint16_t crc = crc16(k, len);
   return crc % numSlots;
 }
 
 uint CRC12ShardFunc(MRCommand *cmd, uint numSlots) {
-  const char *k;
   size_t len;
-  
-  _MRGetShardKey(cmd, k, &len);
+
+  char *k = _MRGetShardKey(cmd, &len);
   uint16_t crc = crc12(k, len);
   return crc % numSlots;
 }

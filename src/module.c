@@ -350,9 +350,9 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MR_UpdateTopology(ctx);
 
   // If this a one-node cluster, we revert to a simple, flat one level coordination
-  // if (MR_NumHosts() < 2) {
-  //   return LocalSearchCommandHandler(ctx, argv, argc);
-  // }
+  if (MR_NumHosts() < 2) {
+    return LocalSearchCommandHandler(ctx, argv, argc);
+  }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   MRCommand_ReplaceArg(&cmd, 0, "DFT.LSEARCH");

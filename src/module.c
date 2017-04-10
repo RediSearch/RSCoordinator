@@ -7,6 +7,7 @@
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
 #include "crc16_tags.h"
+#include "crc12_tags.h"
 #include "dep/rmr/redis_cluster.h"
 #include "dep/rmr/redise.h"
 #include "fnv.h"
@@ -308,7 +309,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
-//  MRCommand_Print(&cmd);
+  //  MRCommand_Print(&cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
@@ -344,7 +345,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
-  //MRCommand_Print(&cmd);
+  // MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
@@ -444,9 +445,8 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
 
-      sf = CRC16ShardFunc;  // TODO: Switch to CRC12
-      // TODO: Switch to partitioner with RL slot table
-      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
+      sf = CRC12ShardFunc;
+      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc12_slot_table, 4096);
       break;
     case ClusterType_RedisOSS:
     default:
@@ -459,7 +459,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
   }
 
-  MRCluster *cl = MR_NewCluster(initialTopology, sf, 10);
+  MRCluster *cl = MR_NewCluster(initialTopology, sf, 2);
   MR_Init(cl);
   __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
 

@@ -13,9 +13,11 @@
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
+#include "periodic.h"
 #include "config.h"
 
 SearchCluster __searchCluster;
+RSPeriodicCommand *__periodicGC = NULL;
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -476,6 +478,13 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       }
       sf = CRC16ShardFunc;
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
+  }
+
+  MRCommand ping = MR_NewCommand(2, "FT.REPAIR", "rd{05S}");
+  MRCommand_Print(&ping);
+  if (clusterConfig.myEndpoint != NULL) {
+    __periodicGC = NewPeriodicCommandRunner(&ping, clusterConfig.myEndpoint, 1000,
+                                            periodicGCHandler, "rd{05S}");
   }
 
   MRCluster *cl = MR_NewCluster(initialTopology, sf, 2);

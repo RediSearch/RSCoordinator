@@ -176,11 +176,11 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
   MRNodeMapIterator it;
   switch (strategy & ~(MRCluster_MastersOnly)) {
     case MRCluster_RemoteCoordination:
-      printf("Coordination remotely!\n");
+      // printf("Coordination remotely!\n");
       it = MRNodeMap_IterateRandomNodePerhost(cl->nodeMap, cl->myNode);
       break;
     case MRCluster_LocalCoordination:
-      printf("Local coordination!\n");
+      // printf("Local coordination!\n");
       it = MRNodeMap_IterateHost(cl->nodeMap, cl->myNode->endpoint.host);
       break;
     default:
@@ -194,8 +194,8 @@ int MRCluster_FanoutCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCo
       continue;
     }
     MRConn *conn = MRConn_Get(&cl->mgr, n->id);
-    MRCommand_Print(cmd);
-    printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
+    // MRCommand_Print(cmd);
+    // printf("Sending fanout command to %s:%d\n", conn->ep.host, conn->ep.port);
     if (conn) {
       if (MRConn_SendCommand(conn, cmd, fn, privdata) != REDIS_ERR) {
         ret++;
@@ -214,6 +214,10 @@ int MRCluster_ConnectAll(MRCluster *cl) {
 }
 
 char *_MRGetShardKey(MRCommand *cmd, size_t *len) {
+  int pos = MRCommand_GetShardingKey(cmd);
+  if (pos < 0) {
+    return NULL;
+  }
   char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
   char *brace = strchr(k, '{');
   *len = strlen(k);
@@ -234,6 +238,7 @@ uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
   size_t len;
 
   char *k = _MRGetShardKey(cmd, &len);
+  if (!k) return 0;
   uint16_t crc = crc16(k, len);
   return crc % numSlots;
 }
@@ -242,6 +247,7 @@ uint CRC12ShardFunc(MRCommand *cmd, uint numSlots) {
   size_t len;
 
   char *k = _MRGetShardKey(cmd, &len);
+  if (!k) return 0;
   uint16_t crc = crc12(k, len);
   return crc % numSlots;
 }

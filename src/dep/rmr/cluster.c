@@ -1,8 +1,8 @@
 #include "cluster.h"
 #include "hiredis/adapters/libuv.h"
 #include <dep/triemap/triemap.h>
-#include <dep/crc16.h>
-#include <dep/crc12.h>
+#include "crc16.h"
+#include "crc12.h"
 #include <dep/rmutil/vector.h>
 
 #include <stdlib.h>

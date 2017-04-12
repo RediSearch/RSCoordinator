@@ -22,8 +22,7 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../../crc12.o ../../crc16.o
-LIBS=  ../hiredis/libhiredis.a ../redise_parser/libparser.a  ../librmr.a ../../triemap/libtriemap.a
+LIBS=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
 
 test_parser:
 	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv

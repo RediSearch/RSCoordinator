@@ -31,7 +31,7 @@ void testParser() {
   mu_check(!strcmp(topo->shards[0].nodes[0].id, "1"));
   mu_check(!strcmp(topo->shards[0].nodes[0].endpoint.host, "10.0.1.7"));
   mu_check(topo->shards[0].nodes[0].endpoint.port == 20293);
-  mu_check(topo->shards[0].nodes[0].flags == MRNode_Coordinator | MRNode_Master | MRNode_Self);
+  mu_check(topo->shards[0].nodes[0].flags == (MRNode_Coordinator | MRNode_Master | MRNode_Self));
   mu_check(!strcmp(topo->shards[0].nodes[1].id, "2"));
   mu_check(topo->shards[0].nodes[1].flags == MRNode_Coordinator);
   mu_check(!strcmp(topo->shards[0].nodes[1].endpoint.host, "10.0.1.50"));
@@ -40,7 +40,7 @@ void testParser() {
   mu_check(!strcmp(topo->shards[1].nodes[0].id, "3"));
   mu_check(!strcmp(topo->shards[1].nodes[0].endpoint.host, "10.0.1.7"));
   mu_check(topo->shards[1].nodes[0].endpoint.port == 27262);
-  mu_check(topo->shards[1].nodes[0].flags == MRNode_Coordinator | MRNode_Master);
+  mu_check(topo->shards[1].nodes[0].flags == (MRNode_Coordinator | MRNode_Master));
 
   mu_check(!strcmp(topo->shards[1].nodes[1].id, "4"));
   mu_check(!strcmp(topo->shards[1].nodes[1].endpoint.host, "10.0.1.50"));

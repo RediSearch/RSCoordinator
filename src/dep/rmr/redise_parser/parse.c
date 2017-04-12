@@ -1,7 +1,7 @@
 #include "parser_ctx.h"
-#include "../dep/rmr/cluster.h"
-#include "../dep/rmr/node.h"
-#include "../dep/rmr/endpoint.h"
+#include "../cluster.h"
+#include "../node.h"
+#include "../endpoint.h"
 
 void MRTopology_AddRLShard(MRClusterTopology *t, RLShard *sh) {
 

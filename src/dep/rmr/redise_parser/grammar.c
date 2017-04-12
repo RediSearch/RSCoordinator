@@ -801,37 +801,38 @@ static void yy_reduce(
 #line 97 "grammar.y"
 {
 	MREndpoint_Parse(yymsp[0].minor.yy1, &yygotominor.yy19);
+    free(yymsp[0].minor.yy1);
 }
-#line 806 "grammar.c"
+#line 807 "grammar.c"
         break;
       case 9: /* endpoint ::= endpoint unix_addr */
-#line 101 "grammar.y"
+#line 102 "grammar.y"
 {
   	yymsp[-1].minor.yy19.unixSock = yymsp[0].minor.yy1; 
 	yygotominor.yy19 = yymsp[-1].minor.yy19;
 }
-#line 814 "grammar.c"
+#line 815 "grammar.c"
         break;
       case 10: /* tcp_addr ::= ADDR STRING */
-#line 107 "grammar.y"
+#line 108 "grammar.y"
 {
     yygotominor.yy1 = yymsp[0].minor.yy0.strval;
 }
-#line 821 "grammar.c"
+#line 822 "grammar.c"
         break;
       case 12: /* master ::= MASTER */
-#line 115 "grammar.y"
+#line 116 "grammar.y"
 {
     yygotominor.yy4 = 1;
 }
-#line 828 "grammar.c"
+#line 829 "grammar.c"
         break;
       case 13: /* master ::= */
-#line 119 "grammar.y"
+#line 120 "grammar.y"
 {
     yygotominor.yy4 = 0;
 }
-#line 835 "grammar.c"
+#line 836 "grammar.c"
         break;
       default:
         break;
@@ -897,7 +898,7 @@ static void yy_syntax_error(
   
     asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
     ctx->ok = 0;
-#line 901 "grammar.c"
+#line 902 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 
@@ -1088,7 +1089,7 @@ void Parse(
   }while( yymajor!=YYNOCODE && yypParser->yyidx>=0 );
   return;
 }
-#line 123 "grammar.y"
+#line 124 "grammar.y"
 
 
   /* Definitions of flex stuff */
@@ -1127,4 +1128,4 @@ MRClusterTopology *ParseQuery(const char *c, size_t len, char **err)  {
     return ctx.topology;
   }
    
-#line 1131 "grammar.c"
+#line 1132 "grammar.c"

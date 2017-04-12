@@ -433,12 +433,20 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_AutoMemory(ctx);
-  RedisModule_Log(ctx, "notice", "Start parsing argc is %d", argc);
   MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
-  if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
-    RedisModule_ReplyWithError(ctx, "Error updating the topology");
+  // this means a parsing error, the parser already sent the explicit error to the client
+  if (!topo) {
+    return REDISMODULE_ERR;
   }
+  // send the topology to the cluster
+  if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
+    // failed update
+    MRClusterTopology_Free(topo);
+    return RedisModule_ReplyWithError(ctx, "Error updating the topology");
+  }
+
   RedisModule_ReplyWithSimpleString(ctx, "OK");
+
   return REDISMODULE_OK;
 }
 

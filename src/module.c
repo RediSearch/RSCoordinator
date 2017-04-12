@@ -331,7 +331,6 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
-  //  MRCommand_Print(&cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
@@ -352,9 +351,9 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MR_UpdateTopology(ctx);
 
   // If this a one-node cluster, we revert to a simple, flat one level coordination
-  if (MR_NumHosts() < 2) {
-    return LocalSearchCommandHandler(ctx, argv, argc);
-  }
+  // if (MR_NumHosts() < 2) {
+  //   return LocalSearchCommandHandler(ctx, argv, argc);
+  // }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   MRCommand_ReplaceArg(&cmd, 0, "DFT.LSEARCH");
@@ -434,12 +433,20 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
 int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_AutoMemory(ctx);
-  RedisModule_Log(ctx, "notice", "Start parsing argc is %d", argc);
   MRClusterTopology *topo = RedisEnterprise_ParseTopology(ctx, argv, argc);
-  if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
-    RedisModule_ReplyWithError(ctx, "Error updating the topology");
+  // this means a parsing error, the parser already sent the explicit error to the client
+  if (!topo) {
+    return REDISMODULE_ERR;
   }
+  // send the topology to the cluster
+  if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
+    // failed update
+    MRClusterTopology_Free(topo);
+    return RedisModule_ReplyWithError(ctx, "Error updating the topology");
+  }
+
   RedisModule_ReplyWithSimpleString(ctx, "OK");
+
   return REDISMODULE_OK;
 }
 
@@ -508,16 +515,16 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   /*********************************************************
   * Single-shard simple commands
   **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.add", SingleShardCommandHandler, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
-  if (RedisModule_CreateCommand(ctx, "dft.del", SingleShardCommandHandler, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.del", SingleShardCommandHandler, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
   if (RedisModule_CreateCommand(ctx, "dft.addhash", SingleShardCommandHandler, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR) {
+                                -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
@@ -533,7 +540,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
   }
 
-  if (RedisModule_CreateCommand(ctx, "dft.broadcast", BroadcastCommand, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.broadcast", BroadcastCommand, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
@@ -542,11 +549,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   * Complex coordination search commands
   **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.lsearch", LocalSearchCommandHandler, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR) {
+                                -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
-  if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
@@ -554,15 +561,15 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   /*********************************************************
   * RS Cluster specific commands
   **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "dft.clusterrefresh", RefreshClusterCommand, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR)
+                                -1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "dft.clusterinfo", ClusterInfoCommand, "readonly", 0, 0, 0) ==
+  if (RedisModule_CreateCommand(ctx, "dft.clusterinfo", ClusterInfoCommand, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

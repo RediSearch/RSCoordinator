@@ -1,6 +1,6 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../src
+	RM_INCLUDE_DIR=../../..
 endif
 
 ifndef RMUTIL_LIBDIR
@@ -22,12 +22,7 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../src/search_cluster.o ../src/dep/crc16.o ../src/dep/crc12.o ../src/fnv.o 
-LIBS= ../src/dep/rmr/hiredis/libhiredis.a ../src/parser/libparser.a  ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a
-
-test_searchcluster:
-	$(CC)  -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
-	$(sh -c ./$@)
+LIBS=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
 
 test_parser:
 	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
@@ -37,7 +32,6 @@ test_cluster:
 	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
 	$(sh -c ./$@)
 
-.PHONY: test_searchcluster
 .PHONY: test_parser
 .PHONY: test_cluster
 

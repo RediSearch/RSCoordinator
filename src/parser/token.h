@@ -7,6 +7,7 @@ typedef struct {
   double dval;
   char *strval;
   char *s;  // token string
+  size_t len; //token string lenght
   int pos;  // position in the query
 } Token;
 

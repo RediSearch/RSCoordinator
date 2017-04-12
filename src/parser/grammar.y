@@ -3,6 +3,7 @@
 %include {
 	#include <stdlib.h>
 	#include <stdio.h>
+	#include <assert.h>
 	#include "token.h"	
 	#include "grammar.h"
     #include "parser_ctx.h"
@@ -14,20 +15,32 @@
 	void yyerror(char *s);
 } // END %include
 
+%syntax_error {  
+    asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
+    ctx->ok = 0;
+}   
+  
+%default_type { char * }
+%default_destructor {  printf("freeing %p\n", $$); free($$); }
 %extra_argument { parseCtx *ctx }
 %type shard { RLShard }
+%destructor shard {
+	MRClusterNode_Free(&$$.node);
+}
 %type endpoint { MREndpoint }
+%destructor endpoint { MREndpoint_Free(&$$); }
 
-%type shardid { char * }
-%type tcp_addr { char * }
-%type unix_addr { char * }
+%type topology { MRClusterTopology *}
+%destructor topology { MRClusterTopology_Free($$); }
+
 %type master {int}
+%destructor master {} 
 %type has_replication {int}
+%destructor has_replication {} 
 
 
-
-root ::= MYID STRING(B) has_replication(C) topology(D). {
-    ctx->my_id = B.strval;
+root ::= MYID shardid(B) has_replication(C) topology(D). {
+    ctx->my_id = B;
     ctx->replication = C;
     ctx->topology = D;
 	// TODO: detect my id and mark the flag here
@@ -101,33 +114,40 @@ master(A) ::= . {
 
 %code {
 
-	/* Definitions of flex stuff */
-	typedef struct yy_buffer_state *YY_BUFFER_STATE;
-	int             yylex( void );
-	YY_BUFFER_STATE yy_scan_string( const char * );
-  	YY_BUFFER_STATE yy_scan_bytes( const char *, size_t );
-  	extern int yylineno;
-  	extern char *yytext;
-	extern int yycolumn;
+  /* Definitions of flex stuff */
+ // extern FILE *yyin;
+  typedef struct yy_buffer_state *YY_BUFFER_STATE;
+  int             yylex( void );
+  YY_BUFFER_STATE yy_scan_string( const char * );
+  YY_BUFFER_STATE yy_scan_bytes( const char *, size_t );
+  void            yy_delete_buffer( YY_BUFFER_STATE );
+  
+  
 
-	QueryExpressionNode *Query_Parse(const char *q, size_t len, char **err) {
-		yycolumn = 1;	// Reset lexer's token tracking position
-		yy_scan_bytes(q, len);
-  		void* pParser = ParseAlloc(malloc);
-  		int t = 0;
 
-		parseCtx ctx = {.root = NULL, .ok = 1, .errorMsg = NULL};
+MRClusterTopology *ParseQuery(const char *c, size_t len, char **err)  {
 
-  		while( (t = yylex()) != 0) {
-			Parse(pParser, t, tok, &ctx);
-		}
-		if (ctx.ok) {
-			Parse(pParser, 0, tok, &ctx);
-  		}
-		ParseFree(pParser, free);
-		if (err) {
-			*err = ctx.errorMsg;
-		}
-		return ctx.root;
-	}
+    //printf("Parsing query %s\n", c);
+    yy_scan_bytes(c, len);
+    void* pParser = ParseAlloc (malloc);        
+    int t = 0;
+
+    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, .errorMsg = NULL };
+    //ParseNode *ret = NULL;
+    //ParserFree(pParser);
+    while (ctx.ok && 0 != (t = yylex())) {
+        Parse(pParser, t, tok, &ctx);                
+    }
+    if (ctx.ok) {
+        Parse (pParser, 0, tok, &ctx);
+    }
+    
+    ParseFree(pParser, free);
+
+    if (err) {
+        *err = ctx.errorMsg;
+    }
+    return ctx.topology;
+  }
+   
 }

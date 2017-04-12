@@ -1,14 +1,16 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../
+	RM_INCLUDE_DIR=../src
 endif
 
 ifndef RMUTIL_LIBDIR
-	RMUTIL_LIBDIR=../rmutil
+	RMUTIL_LIBDIR=../src/dep/rmutil
 endif
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
+
 
 # Compile flags for linux / osx
 ifeq ($(uname_S),Linux)
@@ -18,13 +20,17 @@ else
 	SHOBJ_CFLAGS ?= -dynamic -fno-common -g -ggdb
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
-CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC  -O1 -std=gnu99  
+
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../src/search_cluster.o ../src/command.o ../src/fnv.o ../src/cluster.o ../src/dep/crc16.o
-LIBS= ../src/hiredis/libhiredis.a
+OBJS= ../src/search_cluster.o ../src/dep/crc16.o ../src/dep/crc12.o ../src/fnv.o 
+LIBS= ../src/dep/rmr/hiredis/libhiredis.a ../src/parser/libparser.a  ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a
 
 test_searchcluster:
-	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(CC)  -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(sh -c ./$@)
+
+test_parser:
+	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
 	$(sh -c ./$@)
 
 test_cluster:
@@ -32,7 +38,7 @@ test_cluster:
 	$(sh -c ./$@)
 
 .PHONY: test_searchcluster
-
+.PHONY: test_parser
 .PHONY: test_cluster
 
 

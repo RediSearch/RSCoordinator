@@ -8,6 +8,7 @@
 
 	#include <stdlib.h>
 	#include <stdio.h>
+	#include <assert.h>
 	#include "token.h"	
 	#include "grammar.h"
     #include "parser_ctx.h"
@@ -17,7 +18,7 @@
 
     
 	void yyerror(char *s);
-#line 21 "grammar.c"
+#line 22 "grammar.c"
 /* Next is all token values, in a form suitable for use by makeheaders.
 ** This section will be null unless lemon is run with the -m switch.
 */
@@ -76,6 +77,7 @@ typedef union {
   ParseTOKENTYPE yy0;
   char * yy1;
   int yy4;
+  MRClusterTopology * yy9;
   MREndpoint yy19;
   RLShard yy21;
 } YYMINORTYPE;
@@ -157,28 +159,28 @@ static const YYMINORTYPE yyzerominor = { 0 };
 **  yy_default[]       Default action for each state.
 */
 static const YYACTIONTYPE yy_action[] = {
- /*     0 */    22,    5,   23,   12,   19,    1,   25,   20,   40,   17,
- /*    10 */    16,    2,    3,   21,    8,   11,   18,   10,    9,   24,
- /*    20 */     7,   14,    4,    6,   15,   13,
+ /*     0 */    12,   19,   25,    1,    2,   40,   23,    5,   16,   20,
+ /*    10 */    22,    4,   11,   17,   21,    8,   10,   18,   24,    3,
+ /*    20 */    14,   15,    6,    9,   13,   41,   41,    7,
 };
 static const YYCODETYPE yy_lookahead[] = {
- /*     0 */     2,    2,    4,    9,   10,   13,    0,   15,   19,   16,
- /*    10 */    17,    4,    6,    2,    4,    7,    2,    8,   14,    4,
- /*    20 */     1,    5,   20,   18,   12,    3,
+ /*     0 */     9,   10,    0,   13,    3,   17,    3,    5,   15,   19,
+ /*    10 */     7,   14,    6,   20,    7,    3,    8,    7,    3,    1,
+ /*    20 */     4,   12,   18,   18,    2,   21,   21,   16,
 };
-#define YY_SHIFT_USE_DFLT (-7)
+#define YY_SHIFT_USE_DFLT (-10)
 #define YY_SHIFT_MAX 13
 static const signed char yy_shift_ofst[] = {
- /*     0 */    19,   -6,    9,   -2,    6,   16,   22,   -1,    7,    8,
- /*    10 */    11,   10,   14,   15,
+ /*     0 */    18,   -9,    8,    3,    2,    3,   16,   22,    1,    6,
+ /*    10 */     7,   12,   10,   15,
 };
-#define YY_REDUCE_USE_DFLT (-12)
-#define YY_REDUCE_MAX 6
+#define YY_REDUCE_USE_DFLT (-13)
+#define YY_REDUCE_MAX 7
 static const signed char yy_reduce_ofst[] = {
- /*     0 */   -11,   -7,   -8,    4,   12,    5,    2,
+ /*     0 */   -12,   -7,  -10,    4,    9,    5,   11,   -3,
 };
 static const YYACTIONTYPE yy_default[] = {
- /*     0 */    39,   38,   39,   39,   39,   29,   39,   39,   39,   39,
+ /*     0 */    39,   38,   39,   39,   39,   39,   29,   39,   39,   39,
  /*    10 */    39,   39,   39,   39,   28,   27,   30,   34,   36,   37,
  /*    20 */    33,   35,   31,   32,   26,
 };
@@ -274,12 +276,12 @@ void ParseTrace(FILE *TraceFILE, char *zTracePrompt){
 /* For tracing shifts, the names of all terminals and nonterminals
 ** are required.  The following table supplies these names */
 static const char *const yyTokenName[] = { 
-  "$",             "MYID",          "STRING",        "RANGES",      
-  "INTEGER",       "HASREPLICATION",  "SHARD",         "SLOTRANGE",   
+  "$",             "MYID",          "RANGES",        "INTEGER",     
+  "HASREPLICATION",  "SHARD",         "SLOTRANGE",     "STRING",      
   "ADDR",          "UNIXADDR",      "MASTER",        "error",       
-  "shard",         "endpoint",      "shardid",       "tcp_addr",    
-  "unix_addr",     "master",        "has_replication",  "root",        
-  "topology",    
+  "shard",         "endpoint",      "topology",      "master",      
+  "has_replication",  "root",          "shardid",       "tcp_addr",    
+  "unix_addr",   
 };
 #endif /* NDEBUG */
 
@@ -287,7 +289,7 @@ static const char *const yyTokenName[] = {
 /* For tracing reduce actions, the names of all rules are required.
 */
 static const char *const yyRuleName[] = {
- /*   0 */ "root ::= MYID STRING has_replication topology",
+ /*   0 */ "root ::= MYID shardid has_replication topology",
  /*   1 */ "topology ::= RANGES INTEGER",
  /*   2 */ "topology ::= topology shard",
  /*   3 */ "has_replication ::= HASREPLICATION",
@@ -379,6 +381,49 @@ static void yy_destructor(
     ** which appear on the RHS of the rule, but which are not used
     ** inside the C code.
     */
+      /* Default NON-TERMINAL Destructor */
+    case 11: /* error */
+    case 17: /* root */
+    case 18: /* shardid */
+    case 19: /* tcp_addr */
+    case 20: /* unix_addr */
+{
+#line 24 "grammar.y"
+  printf("freeing %p\n", (yypminor->yy1)); free((yypminor->yy1)); 
+#line 394 "grammar.c"
+}
+      break;
+    case 12: /* shard */
+{
+#line 27 "grammar.y"
+
+	MRClusterNode_Free(&(yypminor->yy21).node);
+
+#line 403 "grammar.c"
+}
+      break;
+    case 13: /* endpoint */
+{
+#line 31 "grammar.y"
+ MREndpoint_Free(&(yypminor->yy19)); 
+#line 410 "grammar.c"
+}
+      break;
+    case 14: /* topology */
+{
+#line 34 "grammar.y"
+ MRClusterTopology_Free((yypminor->yy9)); 
+#line 417 "grammar.c"
+}
+      break;
+    case 15: /* master */
+    case 16: /* has_replication */
+{
+#line 37 "grammar.y"
+
+#line 425 "grammar.c"
+}
+      break;
     default:  break;   /* If no destructor action specified: do nothing */
   }
 }
@@ -605,20 +650,20 @@ static const struct {
   YYCODETYPE lhs;         /* Symbol on the left-hand side of the rule */
   unsigned char nrhs;     /* Number of right-hand side symbols in the rule */
 } yyRuleInfo[] = {
-  { 19, 4 },
-  { 20, 2 },
-  { 20, 2 },
-  { 18, 1 },
-  { 18, 0 },
+  { 17, 4 },
+  { 14, 2 },
+  { 14, 2 },
+  { 16, 1 },
+  { 16, 0 },
   { 12, 7 },
-  { 14, 1 },
-  { 14, 1 },
+  { 18, 1 },
+  { 18, 1 },
   { 13, 1 },
   { 13, 2 },
-  { 15, 2 },
-  { 16, 2 },
-  { 17, 1 },
-  { 17, 0 },
+  { 19, 2 },
+  { 20, 2 },
+  { 15, 1 },
+  { 15, 0 },
 };
 
 static void yy_accept(yyParser*);  /* Forward Declaration */
@@ -673,48 +718,48 @@ static void yy_reduce(
   **  #line <lineno> <thisfile>
   **     break;
   */
-      case 0: /* root ::= MYID STRING has_replication topology */
-#line 29 "grammar.y"
-{
-    ctx->my_id = yymsp[-2].minor.yy0.strval;
-    ctx->replication = yymsp[-1].minor.yy4;
-    ctx->topology = yymsp[0].minor.yy0;
-	// TODO: detect my id and mark the flag here
-}
-#line 685 "grammar.c"
-        break;
-      case 1: /* topology ::= RANGES INTEGER */
-#line 36 "grammar.y"
-{
-    
-    yygotominor.yy0 = MR_NewTopology(yymsp[0].minor.yy0.intval, 4096);
-}
-#line 693 "grammar.c"
-        break;
-      case 2: /* topology ::= topology shard */
+      case 0: /* root ::= MYID shardid has_replication topology */
 #line 42 "grammar.y"
 {
-    MRTopology_AddRLShard(yymsp[-1].minor.yy0, &yymsp[0].minor.yy21);
-    yygotominor.yy0 = yymsp[-1].minor.yy0;
+    ctx->my_id = yymsp[-2].minor.yy1;
+    ctx->replication = yymsp[-1].minor.yy4;
+    ctx->topology = yymsp[0].minor.yy9;
+	// TODO: detect my id and mark the flag here
 }
-#line 701 "grammar.c"
+#line 730 "grammar.c"
+        break;
+      case 1: /* topology ::= RANGES INTEGER */
+#line 49 "grammar.y"
+{
+    
+    yygotominor.yy9 = MR_NewTopology(yymsp[0].minor.yy0.intval, 4096);
+}
+#line 738 "grammar.c"
+        break;
+      case 2: /* topology ::= topology shard */
+#line 55 "grammar.y"
+{
+    MRTopology_AddRLShard(yymsp[-1].minor.yy9, &yymsp[0].minor.yy21);
+    yygotominor.yy9 = yymsp[-1].minor.yy9;
+}
+#line 746 "grammar.c"
         break;
       case 3: /* has_replication ::= HASREPLICATION */
-#line 47 "grammar.y"
+#line 60 "grammar.y"
 {
     yygotominor.yy4 =  1;
 }
-#line 708 "grammar.c"
+#line 753 "grammar.c"
         break;
       case 4: /* has_replication ::= */
-#line 51 "grammar.y"
+#line 64 "grammar.y"
 {
     yygotominor.yy4 =  0;
 }
-#line 715 "grammar.c"
+#line 760 "grammar.c"
         break;
       case 5: /* shard ::= SHARD shardid SLOTRANGE INTEGER INTEGER endpoint master */
-#line 55 "grammar.y"
+#line 68 "grammar.y"
 {
 	
 	yygotominor.yy21 = (RLShard){
@@ -727,58 +772,58 @@ static void yy_reduce(
 		.endSlot = yymsp[-2].minor.yy0.intval,
 	};
 }
-#line 731 "grammar.c"
+#line 776 "grammar.c"
         break;
       case 6: /* shardid ::= STRING */
       case 11: /* unix_addr ::= UNIXADDR STRING */ yytestcase(yyruleno==11);
-#line 69 "grammar.y"
+#line 82 "grammar.y"
 {
 	yygotominor.yy1 = yymsp[0].minor.yy0.strval;
 }
-#line 739 "grammar.c"
+#line 784 "grammar.c"
         break;
       case 7: /* shardid ::= INTEGER */
-#line 72 "grammar.y"
+#line 85 "grammar.y"
 {
 	asprintf(&yygotominor.yy1, "%d", yymsp[0].minor.yy0.intval);
 }
-#line 746 "grammar.c"
+#line 791 "grammar.c"
         break;
       case 8: /* endpoint ::= tcp_addr */
-#line 76 "grammar.y"
+#line 89 "grammar.y"
 {
 	MREndpoint_Parse(yymsp[0].minor.yy1, &yygotominor.yy19);
 }
-#line 753 "grammar.c"
+#line 798 "grammar.c"
         break;
       case 9: /* endpoint ::= endpoint unix_addr */
-#line 80 "grammar.y"
+#line 93 "grammar.y"
 {
   	yymsp[-1].minor.yy19.unixSock = yymsp[0].minor.yy1; 
 	yygotominor.yy19 = yymsp[-1].minor.yy19;
 }
-#line 761 "grammar.c"
+#line 806 "grammar.c"
         break;
       case 10: /* tcp_addr ::= ADDR STRING */
-#line 86 "grammar.y"
+#line 99 "grammar.y"
 {
     yygotominor.yy1 = yymsp[0].minor.yy0.strval;
 }
-#line 768 "grammar.c"
+#line 813 "grammar.c"
         break;
       case 12: /* master ::= MASTER */
-#line 94 "grammar.y"
+#line 107 "grammar.y"
 {
     yygotominor.yy4 = 1;
 }
-#line 775 "grammar.c"
+#line 820 "grammar.c"
         break;
       case 13: /* master ::= */
-#line 98 "grammar.y"
+#line 111 "grammar.y"
 {
     yygotominor.yy4 = 0;
 }
-#line 782 "grammar.c"
+#line 827 "grammar.c"
         break;
       default:
         break;
@@ -840,6 +885,11 @@ static void yy_syntax_error(
 ){
   ParseARG_FETCH;
 #define TOKEN (yyminor.yy0)
+#line 18 "grammar.y"
+  
+    asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
+    ctx->ok = 0;
+#line 893 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 
@@ -1030,36 +1080,43 @@ void Parse(
   }while( yymajor!=YYNOCODE && yypParser->yyidx>=0 );
   return;
 }
-#line 102 "grammar.y"
+#line 115 "grammar.y"
 
 
-	/* Definitions of flex stuff */
-	typedef struct yy_buffer_state *YY_BUFFER_STATE;
-	int             yylex( void );
-	YY_BUFFER_STATE yy_scan_string( const char * );
-  	YY_BUFFER_STATE yy_scan_bytes( const char *, size_t );
-  	extern int yylineno;
-  	extern char *yytext;
-	extern int yycolumn;
+  /* Definitions of flex stuff */
+ // extern FILE *yyin;
+  typedef struct yy_buffer_state *YY_BUFFER_STATE;
+  int             yylex( void );
+  YY_BUFFER_STATE yy_scan_string( const char * );
+  YY_BUFFER_STATE yy_scan_bytes( const char *, size_t );
+  void            yy_delete_buffer( YY_BUFFER_STATE );
+  
+  
 
-	QueryExpressionNode *Query_Parse(const char *q, size_t len, char **err) {
-		yycolumn = 1;	// Reset lexer's token tracking position
-		yy_scan_bytes(q, len);
-  		void* pParser = ParseAlloc(malloc);
-  		int t = 0;
 
-		parseCtx ctx = {.root = NULL, .ok = 1, .errorMsg = NULL};
+MRClusterTopology *ParseQuery(const char *c, size_t len, char **err)  {
 
-  		while( (t = yylex()) != 0) {
-			Parse(pParser, t, tok, &ctx);
-		}
-		if (ctx.ok) {
-			Parse(pParser, 0, tok, &ctx);
-  		}
-		ParseFree(pParser, free);
-		if (err) {
-			*err = ctx.errorMsg;
-		}
-		return ctx.root;
-	}
-#line 1066 "grammar.c"
+    //printf("Parsing query %s\n", c);
+    yy_scan_bytes(c, len);
+    void* pParser = ParseAlloc (malloc);        
+    int t = 0;
+
+    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, .errorMsg = NULL };
+    //ParseNode *ret = NULL;
+    //ParserFree(pParser);
+    while (ctx.ok && 0 != (t = yylex())) {
+        Parse(pParser, t, tok, &ctx);                
+    }
+    if (ctx.ok) {
+        Parse (pParser, 0, tok, &ctx);
+    }
+    
+    ParseFree(pParser, free);
+
+    if (err) {
+        *err = ctx.errorMsg;
+    }
+    return ctx.topology;
+  }
+   
+#line 1123 "grammar.c"

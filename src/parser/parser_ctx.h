@@ -1,20 +1,15 @@
 #ifndef __QUERY_PARSER_PARSE_H__
 #define __QUERY_PARSER_PARSE_H__
 
-#include "topology.h"
+#include "../dep/rmr/cluster.h"
+#include "parse.h"
 
 typedef struct {
   MRClusterTopology *topology;
   char *my_id;
   int replication;
+  int ok;
+  char *errorMsg;
 } parseCtx;
-
-typedef struct {
-  int startSlot;
-  int endSlot;
-  MRClusterNode node;
-} RLShard;
-
-void MRTopology_AddRLShard(MRClusterTopology *t, RLShard *sh);
 
 #endif  // !__QUERY_PARSER_PARSE_H__

@@ -10,14 +10,11 @@ Token tok;
 /* handle locations */
 int yycolumn = 1;
 
-#define YY_USER_ACTION yycolumn += yyleng; \
-    tok.pos = yycolumn; \
-    tok.s = strdup(yytext);
+#define YY_USER_ACTION yycolumn += yyleng; tok.pos = yycolumn;  tok.s = yytext; tok.len = strlen(yytext);
 %}
 
 %%
 
-"CLUSTERSET"            { return CLUSTERSET; }
 "MYID"                  { return MYID; }
 "HASREPLICATION"        { return HASREPLICATION; }
 "RANGES"                { return RANGES; }
@@ -29,10 +26,10 @@ int yycolumn = 1;
 
 [\-\+]?[0-9]+    {   
   tok.intval = atoi(yytext); 
-  return NUMBER;
+  return INTEGER;
 }
 
-[A-Za-z][A-Za-z0-9_\.]* {
+[0-9A-Za-z][A-Za-z0-9_\.\:\@\-\/]* {
   	tok.strval = strdup(yytext);
   	return STRING;
 }
@@ -45,9 +42,6 @@ int yycolumn = 1;
 }
 
 
-"@"     { return AT; }
-":" 	{ return COLON; }
-"," 	{ return COMMA; }
 
 
 [ \t]+ /* ignore whitespace */

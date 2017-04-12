@@ -7,9 +7,9 @@
 	#include "token.h"	
 	#include "grammar.h"
     #include "parser_ctx.h"
-    #include "../dep/rmr/cluster.h"
-    #include "../dep/rmr/node.h"
-    #include "../dep/rmr/endpoint.h"
+    #include "../cluster.h"
+    #include "../node.h"
+    #include "../endpoint.h"
 
     
 	void yyerror(char *s);
@@ -43,7 +43,15 @@ root ::= MYID shardid(B) has_replication(C) topology(D). {
     ctx->my_id = B;
     ctx->replication = C;
     ctx->topology = D;
-	// TODO: detect my id and mark the flag here
+	// detect my id and mark the flag here
+    for (size_t s = 0; s < ctx->topology->numShards; s++) {
+        for (size_t n = 0; n < ctx->topology->shards[s].numNodes; n++) {
+            if (!strcmp(ctx->topology->shards[s].nodes[n].id, ctx->my_id)) {
+                printf("My Node: %s!\n", ctx->my_id);
+                ctx->topology->shards[s].nodes[n].flags |= MRNode_Self;
+            }
+        }
+    }
 }
 
 topology(A) ::= RANGES INTEGER(B) . {
@@ -83,11 +91,12 @@ shardid(A) ::= STRING(B). {
 	A = B.strval;
 }
 shardid(A) ::= INTEGER(B). {
-	asprintf(&A, "%d", B.intval);
+	asprintf(&A, "%lld", B.intval);
 }
 
 endpoint(A) ::= tcp_addr(B). {
 	MREndpoint_Parse(B, &A);
+    free(B);
 }
 
 endpoint(A) ::= endpoint(B) unix_addr(C) . {

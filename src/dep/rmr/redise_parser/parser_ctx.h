@@ -1,7 +1,7 @@
 #ifndef __QUERY_PARSER_PARSE_H__
 #define __QUERY_PARSER_PARSE_H__
 
-#include "../dep/rmr/cluster.h"
+#include "../cluster.h"
 #include "parse.h"
 
 typedef struct {

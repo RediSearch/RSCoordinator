@@ -1,6 +1,6 @@
 #include "minunit.h"
-#include "../src/parser/parse.h"
-#include "../src/dep/rmr/cluster.h"
+#include "../redise_parser/parse.h"
+#include "../cluster.h"
 
 void testParser() {
   const char *q =
@@ -31,18 +31,21 @@ void testParser() {
   mu_check(!strcmp(topo->shards[0].nodes[0].id, "1"));
   mu_check(!strcmp(topo->shards[0].nodes[0].endpoint.host, "10.0.1.7"));
   mu_check(topo->shards[0].nodes[0].endpoint.port == 20293);
-
+  mu_check(topo->shards[0].nodes[0].flags == MRNode_Coordinator | MRNode_Master | MRNode_Self);
   mu_check(!strcmp(topo->shards[0].nodes[1].id, "2"));
+  mu_check(topo->shards[0].nodes[1].flags == MRNode_Coordinator);
   mu_check(!strcmp(topo->shards[0].nodes[1].endpoint.host, "10.0.1.50"));
   mu_check(topo->shards[0].nodes[1].endpoint.port == 20293);
 
   mu_check(!strcmp(topo->shards[1].nodes[0].id, "3"));
   mu_check(!strcmp(topo->shards[1].nodes[0].endpoint.host, "10.0.1.7"));
   mu_check(topo->shards[1].nodes[0].endpoint.port == 27262);
+  mu_check(topo->shards[1].nodes[0].flags == MRNode_Coordinator | MRNode_Master);
 
   mu_check(!strcmp(topo->shards[1].nodes[1].id, "4"));
   mu_check(!strcmp(topo->shards[1].nodes[1].endpoint.host, "10.0.1.50"));
-  mu_check(topo->shards[1].nodes[0].endpoint.port == 27262);
+  mu_check(topo->shards[1].nodes[1].endpoint.port == 27262);
+  mu_check(topo->shards[1].nodes[1].flags == MRNode_Coordinator);
 
   for (int i = 0; i < topo->numShards; i++) {
     MRClusterShard *sh = &topo->shards[i];
@@ -52,10 +55,10 @@ void testParser() {
       mu_check(!strcmp(topo->shards[i].nodes[n].endpoint.auth,
                        "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j"));
 
-      // MRClusterNode *node = &sh->nodes[n];
+      MRClusterNode *node = &sh->nodes[n];
 
-      // printf("\t node %d: id %s, ep %s@%s:%d\n", n, node->id, node->endpoint.auth,
-      //        node->endpoint.host, node->endpoint.port);
+      printf("\t node %d: id %s, flags %x ep %s@%s:%d\n", n, node->id, node->flags,
+             node->endpoint.auth, node->endpoint.host, node->endpoint.port);
     }
   }
 

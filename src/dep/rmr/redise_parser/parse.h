@@ -1,9 +1,9 @@
 #ifndef _RMR_PARSER_H_
 #define _RMR_PARSER_H_
 
-#include "../dep/rmr/cluster.h"
-#include "../dep/rmr/node.h"
-#include "../dep/rmr/endpoint.h"
+#include "../cluster.h"
+#include "../node.h"
+#include "../endpoint.h"
 
 typedef struct {
   int startSlot;

@@ -12,9 +12,9 @@
 	#include "token.h"	
 	#include "grammar.h"
     #include "parser_ctx.h"
-    #include "../dep/rmr/cluster.h"
-    #include "../dep/rmr/node.h"
-    #include "../dep/rmr/endpoint.h"
+    #include "../cluster.h"
+    #include "../node.h"
+    #include "../endpoint.h"
 
     
 	void yyerror(char *s);
@@ -724,42 +724,50 @@ static void yy_reduce(
     ctx->my_id = yymsp[-2].minor.yy1;
     ctx->replication = yymsp[-1].minor.yy4;
     ctx->topology = yymsp[0].minor.yy9;
-	// TODO: detect my id and mark the flag here
+	// detect my id and mark the flag here
+    for (size_t s = 0; s < ctx->topology->numShards; s++) {
+        for (size_t n = 0; n < ctx->topology->shards[s].numNodes; n++) {
+            if (!strcmp(ctx->topology->shards[s].nodes[n].id, ctx->my_id)) {
+                printf("My Node: %s!\n", ctx->my_id);
+                ctx->topology->shards[s].nodes[n].flags |= MRNode_Self;
+            }
+        }
+    }
 }
-#line 730 "grammar.c"
+#line 738 "grammar.c"
         break;
       case 1: /* topology ::= RANGES INTEGER */
-#line 49 "grammar.y"
+#line 57 "grammar.y"
 {
     
     yygotominor.yy9 = MR_NewTopology(yymsp[0].minor.yy0.intval, 4096);
 }
-#line 738 "grammar.c"
+#line 746 "grammar.c"
         break;
       case 2: /* topology ::= topology shard */
-#line 55 "grammar.y"
+#line 63 "grammar.y"
 {
     MRTopology_AddRLShard(yymsp[-1].minor.yy9, &yymsp[0].minor.yy21);
     yygotominor.yy9 = yymsp[-1].minor.yy9;
 }
-#line 746 "grammar.c"
+#line 754 "grammar.c"
         break;
       case 3: /* has_replication ::= HASREPLICATION */
-#line 60 "grammar.y"
+#line 68 "grammar.y"
 {
     yygotominor.yy4 =  1;
 }
-#line 753 "grammar.c"
+#line 761 "grammar.c"
         break;
       case 4: /* has_replication ::= */
-#line 64 "grammar.y"
+#line 72 "grammar.y"
 {
     yygotominor.yy4 =  0;
 }
-#line 760 "grammar.c"
+#line 768 "grammar.c"
         break;
       case 5: /* shard ::= SHARD shardid SLOTRANGE INTEGER INTEGER endpoint master */
-#line 68 "grammar.y"
+#line 76 "grammar.y"
 {
 	
 	yygotominor.yy21 = (RLShard){
@@ -772,58 +780,58 @@ static void yy_reduce(
 		.endSlot = yymsp[-2].minor.yy0.intval,
 	};
 }
-#line 776 "grammar.c"
+#line 784 "grammar.c"
         break;
       case 6: /* shardid ::= STRING */
       case 11: /* unix_addr ::= UNIXADDR STRING */ yytestcase(yyruleno==11);
-#line 82 "grammar.y"
+#line 90 "grammar.y"
 {
 	yygotominor.yy1 = yymsp[0].minor.yy0.strval;
 }
-#line 784 "grammar.c"
+#line 792 "grammar.c"
         break;
       case 7: /* shardid ::= INTEGER */
-#line 85 "grammar.y"
+#line 93 "grammar.y"
 {
-	asprintf(&yygotominor.yy1, "%d", yymsp[0].minor.yy0.intval);
+	asprintf(&yygotominor.yy1, "%lld", yymsp[0].minor.yy0.intval);
 }
-#line 791 "grammar.c"
+#line 799 "grammar.c"
         break;
       case 8: /* endpoint ::= tcp_addr */
-#line 89 "grammar.y"
+#line 97 "grammar.y"
 {
 	MREndpoint_Parse(yymsp[0].minor.yy1, &yygotominor.yy19);
 }
-#line 798 "grammar.c"
+#line 806 "grammar.c"
         break;
       case 9: /* endpoint ::= endpoint unix_addr */
-#line 93 "grammar.y"
+#line 101 "grammar.y"
 {
   	yymsp[-1].minor.yy19.unixSock = yymsp[0].minor.yy1; 
 	yygotominor.yy19 = yymsp[-1].minor.yy19;
 }
-#line 806 "grammar.c"
+#line 814 "grammar.c"
         break;
       case 10: /* tcp_addr ::= ADDR STRING */
-#line 99 "grammar.y"
+#line 107 "grammar.y"
 {
     yygotominor.yy1 = yymsp[0].minor.yy0.strval;
 }
-#line 813 "grammar.c"
+#line 821 "grammar.c"
         break;
       case 12: /* master ::= MASTER */
-#line 107 "grammar.y"
+#line 115 "grammar.y"
 {
     yygotominor.yy4 = 1;
 }
-#line 820 "grammar.c"
+#line 828 "grammar.c"
         break;
       case 13: /* master ::= */
-#line 111 "grammar.y"
+#line 119 "grammar.y"
 {
     yygotominor.yy4 = 0;
 }
-#line 827 "grammar.c"
+#line 835 "grammar.c"
         break;
       default:
         break;
@@ -889,7 +897,7 @@ static void yy_syntax_error(
   
     asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
     ctx->ok = 0;
-#line 893 "grammar.c"
+#line 901 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 
@@ -1080,7 +1088,7 @@ void Parse(
   }while( yymajor!=YYNOCODE && yypParser->yyidx>=0 );
   return;
 }
-#line 115 "grammar.y"
+#line 123 "grammar.y"
 
 
   /* Definitions of flex stuff */
@@ -1119,4 +1127,4 @@ MRClusterTopology *ParseQuery(const char *c, size_t len, char **err)  {
     return ctx.topology;
   }
    
-#line 1123 "grammar.c"
+#line 1131 "grammar.c"

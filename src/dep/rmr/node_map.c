@@ -26,12 +26,11 @@ MRClusterNode *_nmi_randomNext(MRNodeMapIterator *it) {
   }
   int retries = 0;
   MRClusterNode *n = NULL;
-  while (retries < 10) {
+  while (retries < 3) {
     n = TrieMap_RandomValueByPrefix(it->m->nodes, host, len);
     if (!n) break;
     // do not select the same node as excluded
-    if (it->excluded && MRNode_IsSameHost(n, it->excluded) &&
-        it->excluded->endpoint.port == n->endpoint.port) {
+    if (n->flags & MRNode_Self) {
       retries++;
       continue;
     }

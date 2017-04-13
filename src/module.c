@@ -400,6 +400,7 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     n++;
 
   } else {
+
     for (int i = 0; i < topo->numShards; i++) {
       MRClusterShard *sh = &topo->shards[i];
       RedisModule_ReplyWithArray(ctx, 2 + sh->numNodes);
@@ -408,10 +409,14 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
       RedisModule_ReplyWithLongLong(ctx, sh->endSlot);
       for (int j = 0; j < sh->numNodes; j++) {
         MRClusterNode *node = &sh->nodes[j];
-        RedisModule_ReplyWithArray(ctx, 3);
+        RedisModule_ReplyWithArray(ctx, 4);
         RedisModule_ReplyWithSimpleString(ctx, node->id);
         RedisModule_ReplyWithSimpleString(ctx, node->endpoint.host);
         RedisModule_ReplyWithLongLong(ctx, node->endpoint.port);
+        RedisModule_ReplyWithString(
+            ctx, RedisModule_CreateStringPrintf(ctx, "%s%s",
+                                                node->flags & MRNode_Master ? "master " : "slave ",
+                                                node->flags & MRNode_Self ? "self" : ""));
       }
     }
   }

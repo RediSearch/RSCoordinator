@@ -70,7 +70,7 @@ MRCluster *MR_NewCluster(MRClusterTopology *initialTopolgy, ShardFunc sf,
   cl->topo = initialTopolgy;
   cl->nodeMap = NULL;
   cl->myNode = NULL;  // tODO: discover local ip/port
-  MRConnManager_Init(&cl->mgr);
+  MRConnManager_Init(&cl->mgr, 4);
 
   if (cl->topo) {
     _MRClsuter_UpdateNodes(cl);

@@ -334,7 +334,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
-  MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination | MRCluster_MastersOnly);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
 
   MR_Map(mrctx, searchResultReducer, cg);
   cg.Free(cg.ctx);

@@ -334,7 +334,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
-  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination | MRCluster_MastersOnly);
 
   MR_Map(mrctx, searchResultReducer, cg);
   cg.Free(cg.ctx);
@@ -369,7 +369,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination | MRCluster_MastersOnly);
   MR_Fanout(mrctx, searchResultReducer, cmd);
 
   return REDIS_OK;
@@ -507,7 +507,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "dft", 2, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "dft", 3, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

@@ -369,7 +369,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
   MR_Fanout(mrctx, searchResultReducer, cmd);
 
   return REDIS_OK;

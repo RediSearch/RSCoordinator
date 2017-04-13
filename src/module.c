@@ -532,11 +532,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
    * Multi shard, fanout commands
    **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.create", MastersFanoutCommandHandler, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR) {
+                                -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
   if (RedisModule_CreateCommand(ctx, "dft.drop", MastersFanoutCommandHandler, "readonly", 0, 0,
-                                0) == REDISMODULE_ERR) {
+                                -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

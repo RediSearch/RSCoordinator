@@ -39,9 +39,12 @@ typedef struct {
 } MRConn;
 
 /* A pool indexes connections by the node id */
-typedef struct { TrieMap *map; } MRConnManager;
+typedef struct {
+  TrieMap *map;
+  int nodeConns;
+} MRConnManager;
 
-void MRConnManager_Init(MRConnManager *mgr);
+void MRConnManager_Init(MRConnManager *mgr, int nodeConns);
 
 /* Get the connection for a specific node by id, return NULL if this node is not in the pool */
 MRConn *MRConn_Get(MRConnManager *mgr, const char *id);

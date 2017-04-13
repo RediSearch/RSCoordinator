@@ -1,29 +1,31 @@
+import os
+import itertools
 from fabric.api import *
 from fabric.contrib import files
-import os
-from fabric import api
-import itertools
+import json
+env.user = 'redis'
 
-root = os.getenv("REDIS_ROOT", "/home/ubuntu")
-git_root = os.getenv("GIT_ROOT", "https://github.com")
-apt_gets = ["git-core", "ruby", "build-essential", "gdb", 'htop', 'libuv-dev' ]
+root = os.getenv("REDIS_ROOT", "/home/{}".format(env.user))
+git_root = os.getenv("GIT_ROOT", "git@github.com")
+apt_gets = ["git-core", "ruby", "build-essential", "gdb", 'htop', 'libuv-dev', 'python-dev', 'python-setuptools', 'unzip']
 modules_root = root + '/modules'
 cluster_root = root + '/run'
 
-env.user = 'ubuntu'
 env.roledefs = {
-    'redis': [ '52.57.246.105', '52.57.50.243', '52.59.87.185', '52.29.254.134',],
+    'redis': [],#'52.57.246.105', '52.57.50.243', '52.59.87.185', '52.29.254.134'],
+    'rlec': [  '35.187.4.125','23.251.139.76','104.155.31.211','104.199.110.108'],
+    'rlec_master': ['104.199.38.214'],
 }
 
 def git_url(namespace, repo):
     global git_root
-    url = '{}/{}/{}'.format(git_root, namespace, repo)
+    url = '{}:{}/{}'.format(git_root, namespace, repo)
     print url
     return url
 
 @task
 @parallel
-@roles("redis")
+@roles("redis", "rlec", "rlec_master")
 def install_essentials():
     """
     Install essential build requirements for all our projects
@@ -34,7 +36,7 @@ def install_essentials():
     sudo("apt-get update && apt-get -y install {}".format(" ".join(apt_gets)))
 
     # Install foreman
-    sudo("gem install foreman redis")
+    #sudo("gem install foreman redis")
     # Install golang
     # run("wget https://storage.googleapis.com/golang/go1.5.3.linux-amd64.tar.gz")
     # sudo("tar -C /usr/local -xzf go1.5.3.linux-amd64.tar.gz")
@@ -49,7 +51,7 @@ def install_essentials():
     # # Install foreman
     # sudo("gem install foreman")
 
-def fetch_git_repo(namespace, name):
+def fetch_git_repo(namespace, name, keyFile = None):
     """
     Fetch sources from a git repo by cloning or pulling
     """
@@ -57,25 +59,114 @@ def fetch_git_repo(namespace, name):
     puts("Cloning {} from git...".format(git_url(namespace, name)))
 
     with settings(warn_only=True):
-
+        
         if files.exists(name):
             with cd(name):
                 run("git pull -ff origin master")
         else:
             run("git clone --depth 1 {}".format(git_url(namespace, name)))
-
+@task
+@parallel
+@roles("rlec", "rlec_master")
+def install_rlec():
+    package_name = 'RediSearchPackage.tar'
+    if not files.exists(package_name):
+        put(package_name, package_name)
+        run('tar -xf {}'.format(package_name))
+    sudo('./install.sh -y')
 
 @task
 @parallel
-@roles("redis")
+@roles("rlec_master")
+def install_ramp():
+    fetch_git_repo('RedisLabs', 'RAMP')
+    with cd('RAMP'):
+        sudo('python setup.py build install')
+
+@task
+@roles("rlec_master")
+def deploy_ssh_key(generate=False):
+    if generate:
+        local('sshkeygen -P "" -t rsa -f coordinator.key')
+    put('coordinator.key', '~/.ssh/id_rsa', mode=0600)
+    put('coordinator.key.pub', '~/.ssh/id_rsa.pub', mode=0600)
+
+
+
+def deploy_module(module):
+    resp =  json.loads(run('curl -k -u "{}:{}" -F "module=@{}" https://127.0.0.1:9443/v1/modules'.format(rlec_user, rlec_pass, module)))
+    return resp['uid']
+
+def rladmin(cmd):
+    sudo('/opt/redislabs/bin/rladmin ' + cmd)
+
+@task
+@roles("rlec_master")
+def create_database(db_name, num_shards, num_partitions):
+
+    rladmin('tune cluster default_shards_placement sparse')
+    search_uid = deploy_module( 'redisearch.zip')
+    coord_uid = deploy_module( 'rscoord.zip')
+    run("""curl -k -X POST -u "{rlec_user}:{rlec_pass}" -H "Content-Type: application/json" \
+        -d '{{ "name": "{db_name}", "replication":false, "sharding":true, "shards_count":{num_shards}, "version": "4.0", "memory_size": {mem_size}, "type": "redis", \
+        "module_list":["{coord_uid}","{search_uid}"], "module_list_args":["PARTITIONS {num_partitions} TYPE redislabs", "PARTITIONS {num_partitions} TYPE redislabs"] }}' \
+        https://127.0.0.1:9443/v1/bdbs""".format(rlec_user=rlec_user, rlec_pass=rlec_pass, db_name=db_name,
+        num_shards=num_shards, num_partitions=num_partitions, mem_size=4000000000*int(num_shards), search_uid=search_uid, coord_uid=coord_uid))
+    
+
+@task
+@roles("rlec_master")
+def pack_modules():
+
+    fetch_git_repo('RedisLabsModules', 'RediSearch')
+    
+    with cd('RediSearch/src'):
+        run('make release')
+
+        run('module_packer `pwd`/module.so -ar 64 && mv ./module.zip ~/redisearch.zip')
+
+    fetch_git_repo('RedisLabsModules', 'RSCoordinator')
+    with cd('RSCoordinator/src'):
+        run('make all')
+        run('module_packer `pwd`/module.so -ar 64 -c "TYPE redislabs" && mv ./module.zip ~/rscoord.zip')
+
+
+rlec_user = 'search@redislabs.com'
+rlec_pass = 'search1234'
+rlec_license_file = 'license.txt'
+
+@task
+@runs_once
+@roles("rlec_master")
+def bootstrap_rlec_cluster(cluster_name):
+    put(rlec_license_file, rlec_license_file)
+    rladmin("cluster create name {} username \"{}\" password \"{}\" license_file \"{}\"".format(
+        cluster_name, rlec_user, rlec_pass, rlec_license_file
+    ))
+
+@task
+@serial
+@roles("rlec")
+def join_rlec(cluster_host):
+    ip = resolve(cluster_host)
+    rladmin("cluster join nodes \"{}\" username \"{}\" password \"{}\"".format(
+        ip, rlec_user, rlec_pass
+    ))
+
+@task
+@parallel
+@roles("redis", "rlec", "rlec_master")
 def install_redis():
 
-    fetch_git_repo('antirez', 'redis')
+    if not files.exists('/usr/local/bin/redis-server'):
+        run('wget https://github.com/antirez/redis/archive/unstable.zip && unzip -u unstable.zip')
 
-    with cd('redis'):
-        run('make all')
-        sudo('make install')
-    
+        with cd('redis-unstable'):
+            run('make all')
+            sudo('make install')
+    else:
+        print("Redis already installed")
+
 def install_module(module_name, target_name):
     global modules_root
 
@@ -104,6 +195,8 @@ def install_modules():
 def get_local_ip():
     return run('host `hostname` | cut -d " " -f 4')
 
+def resolve(host):
+    return run('host {} | cut -d " " -f 4'.format(host))
 
 def mkconfig(host, num, num_hosts):
     fname = 'Procfile'
@@ -162,3 +255,19 @@ def deploy():
     execute(install_redis)
     execute(install_modules)
     execute(bootstrap_cluster, 10)
+
+
+@task
+def deploy_rlec():
+    execute(install_essentials)
+    execute(install_redis)
+    execute(install_rlec)
+
+@task
+def prepare_rlec_master(cluster_name,db_name,num_shards,num_partitions):
+    execute(deploy_ssh_key)
+    execute(install_ramp)
+    execute(pack_modules)
+    execute(bootstrap_rlec_cluster, cluster_name)
+    execute(create_database, db_name,num_shards,num_partitions)
+    #execute(bootstrap_cluster, 10)

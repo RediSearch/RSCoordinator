@@ -341,6 +341,43 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   return REDISMODULE_OK;
 }
 
+int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  // MR_UpdateTopology(ctx);
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  searchRequestCtx *req = parseRequest(argv, argc);
+  if (!req) {
+    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+  }
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  if (!req->withScores) {
+    MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
+  }
+
+  // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
+  int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
+  if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
+    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
+  }
+
+  /* Replace our own DFT command with FT. command */
+  MRCommand_ReplaceArg(&cmd, 0, "FT.SEARCH");
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
+  // we prefer the next level to be local - we will only approach nodes on our own shard
+  // we also ask only masters to serve the request, to avoid duplications by random
+  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
+
+  MR_Map(mrctx, searchResultReducer, cg);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
 int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 3) {
@@ -507,7 +544,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 }
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "dft", 4, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "dft", 5, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
@@ -554,6 +591,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   * Complex coordination search commands
   **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.lsearch", LocalSearchCommandHandler, "readonly", 0, 0,
+                                -1) == REDISMODULE_ERR) {
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "dft.fsearch", FlatSearchCommandHandler, "readonly", 0, 0,
                                 -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }

@@ -13,8 +13,9 @@ cluster_root = root + '/run'
 
 env.roledefs = {
     'redis': [],#'52.57.246.105', '52.57.50.243', '52.59.87.185', '52.29.254.134'],
-    'rlec': [  '35.187.4.125','23.251.139.76','104.155.31.211','104.199.110.108'],
-    'rlec_master': ['104.199.38.214'],
+    'rlec': ['104.199.38.214', '104.199.96.128','35.187.4.125', '104.155.31.211', '104.199.110.108',
+             '35.187.89.0', '130.211.100.195','35.187.53.172','130.211.67.244'  ],
+    'rlec_master': ['23.251.139.76'],
 }
 
 def git_url(namespace, repo):
@@ -108,10 +109,10 @@ def create_database(db_name, num_shards, num_partitions):
     search_uid = deploy_module( 'redisearch.zip')
     coord_uid = deploy_module( 'rscoord.zip')
     run("""curl -k -X POST -u "{rlec_user}:{rlec_pass}" -H "Content-Type: application/json" \
-        -d '{{ "name": "{db_name}", "replication":false, "sharding":true, "shards_count":{num_shards}, "version": "4.0", "memory_size": {mem_size}, "type": "redis", \
+        -d '{{ "name": "{db_name}", "replication":true, "sharding":true, "shards_count":{num_shards}, "version": "4.0", "memory_size": {mem_size}, "type": "redis", \
         "module_list":["{coord_uid}","{search_uid}"], "module_list_args":["PARTITIONS {num_partitions} TYPE redislabs", "PARTITIONS {num_partitions} TYPE redislabs"] }}' \
         https://127.0.0.1:9443/v1/bdbs""".format(rlec_user=rlec_user, rlec_pass=rlec_pass, db_name=db_name,
-        num_shards=num_shards, num_partitions=num_partitions, mem_size=4000000000*int(num_shards), search_uid=search_uid, coord_uid=coord_uid))
+        num_shards=num_shards, num_partitions=num_partitions, mem_size=5000000000*int(num_shards), search_uid=search_uid, coord_uid=coord_uid))
     
 
 @task
@@ -128,7 +129,7 @@ def pack_modules():
     fetch_git_repo('RedisLabsModules', 'RSCoordinator')
     with cd('RSCoordinator/src'):
         run('make all')
-        run('module_packer `pwd`/module.so -ar 64 -c "TYPE redislabs" && mv ./module.zip ~/rscoord.zip')
+        run('module_packer `pwd`/module.so -ar 64 -c "TYPE redislabs PARTITIONS 1" && mv ./module.zip ~/rscoord.zip')
 
 
 rlec_user = 'search@redislabs.com'
@@ -264,10 +265,10 @@ def deploy_rlec():
     execute(install_rlec)
 
 @task
-def prepare_rlec_master(cluster_name,db_name,num_shards,num_partitions):
+def prepare_rlec_master():#cluster_name,db_name,num_shards,num_partitions):
     execute(deploy_ssh_key)
     execute(install_ramp)
     execute(pack_modules)
     execute(bootstrap_rlec_cluster, cluster_name)
-    execute(create_database, db_name,num_shards,num_partitions)
+    #execute(create_database, db_name,num_shards,num_partitions)
     #execute(bootstrap_cluster, 10)

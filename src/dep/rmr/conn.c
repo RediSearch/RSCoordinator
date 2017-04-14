@@ -14,6 +14,51 @@ void _MRConn_Free(void *ptr);
 
 #define RSCONN_RECONNECT_TIMEOUT 250
 
+typedef struct {
+  size_t num;
+  size_t rr;  // round robin counter
+  MRConn **conns;
+} MRConnPool;
+
+MRConnPool *_MR_NewConnPool(MREndpoint *ep, size_t num) {
+  MRConnPool *pool = malloc(sizeof(*pool));
+  *pool = (MRConnPool){
+      .num = num, .rr = 0, .conns = calloc(num, sizeof(MRConn *)),
+  };
+
+  /* Create the connection */
+  for (size_t i = 0; i < num; i++) {
+    pool->conns[i] = MR_NewConn(ep);
+  }
+  return pool;
+}
+
+void _MRConnPool_Free(void *p) {
+  MRConnPool *pool = p;
+  if (!pool) return;
+  for (size_t i = 0; i < pool->num; i++) {
+    /* We stop the connections and the disconnect callback frees them */
+    MRConn_Stop(pool->conns[i]);
+  }
+  free(pool->conns);
+  free(pool);
+}
+
+/* Get a connection from the connection pool. We select the next available connected connection with
+ * a roundrobin selector */
+MRConn *_MRConnPool_Get(MRConnPool *pool) {
+  for (size_t i = 0; i < pool->num; i++) {
+
+    MRConn *conn = pool->conns[pool->rr];
+    // increase the round-robin counter
+    pool->rr = (pool->rr + 1) % pool->num;
+    if (conn->state == MRConn_Connected) {
+      return conn;
+    }
+  }
+  return NULL;
+}
+
 /* Init the connection manager */
 void MRConnManager_Init(MRConnManager *mgr, int nodeConns) {
   /* Create the connection map */
@@ -23,7 +68,7 @@ void MRConnManager_Init(MRConnManager *mgr, int nodeConns) {
 
 /* Free the entire connection manager */
 void MRConnManager_Free(MRConnManager *mgr) {
-  TrieMap_Free(mgr->map, _MRConn_Free);
+  TrieMap_Free(mgr->map, _MRConnPool_Free);
 }
 
 /* Get the connection for a specific node by id, return NULL if this node is not in the pool */
@@ -31,11 +76,8 @@ MRConn *MRConn_Get(MRConnManager *mgr, const char *id) {
 
   void *ptr = TrieMap_Find(mgr->map, (char *)id, strlen(id));
   if (ptr != TRIEMAP_NOTFOUND) {
-    MRConn **conns = ptr;
-    int c = rand() % mgr->nodeConns;
-    // printf("Selecting conn %d for node %s\n", c, id);
-    return conns[c];
-    // return (MRConn *)ptr;
+    MRConnPool *pool = ptr;
+    return _MRConnPool_Get(pool);
   }
   return NULL;
 }
@@ -51,31 +93,39 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
   return redisAsyncCommandArgv(c->conn, fn, privdata, cmd->num, (const char **)cmd->args, NULL);
 }
 
+// replace an existing coonnection pool with a new one
+void *_replaceConnPool(void *oldval, void *newval) {
+  if (oldval) {
+    _MRConnPool_Free(oldval);
+  }
+  return newval;
+}
 /* Add a node to the connection manager. Return 1 if it's been added or 0 if it hasn't */
 int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int connect) {
 
   /* First try to see if the connection is already in the manager */
   void *ptr = TrieMap_Find(m->map, (char *)id, strlen(id));
   if (ptr != TRIEMAP_NOTFOUND) {
-    return 0;
-  }
-  MRConn **conns = calloc(m->nodeConns, sizeof(MRConn *));
-  for (int i = 0; i < m->nodeConns; i++) {
+    MRConnPool *pool = ptr;
 
-    MRConn *conn = MR_NewConn(ep);
-    if (!conn) {
-      free(conns);
+    MRConn *conn = pool->conns[0];
+    // the node hasn't changed address, we don't need to do anything */
+    if (!strcmp(conn->ep.host, ep->host) && conn->ep.port == ep->port) {
+      printf("No need to switch conn pools!\n");
       return 0;
     }
-    if (connect) {
-      _MRConn_Connect(conn);
-    }
-    conns[i] = conn;
+
+    // if the node has changed, we just replace the pool with a new one automatically
   }
 
-  int rc = TrieMap_Add(m->map, (char *)id, strlen(id), conns, NULL);
+  MRConnPool *pool = _MR_NewConnPool(ep, m->nodeConns);
+  if (connect) {
+    for (size_t i = 0; i < pool->num; i++) {
+      _MRConn_Connect(pool->conns[i]);
+    }
+  }
 
-  return rc;
+  return TrieMap_Add(m->map, (char *)id, strlen(id), pool, _replaceConnPool);
 }
 
 int MRConn_Connect(MRConn *conn) {
@@ -99,9 +149,10 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
   tm_len_t len;
   void *p;
   while (TrieMapIterator_Next(it, &key, &len, &p)) {
-    MRConn **conns = p;
-    for (int i = 0; i < m->nodeConns; i++) {
-      if (MRConn_Connect(conns[i]) == REDIS_OK) {
+    MRConnPool *pool = p;
+    if (!pool) continue;
+    for (size_t i = 0; i < pool->num; i++) {
+      if (MRConn_Connect(pool->conns[i]) == REDIS_OK) {
         n++;
       }
     }
@@ -112,12 +163,10 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
 
 /* Explicitly disconnect a connection and remove it from the connection pool */
 int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
-  return REDIS_OK;
-  // for (int  i =0; )
-  // if (TrieMap_Delete(m->map, (char *)id, strlen(id), _MRConn_Free)) {
-  //   return REDIS_OK;
-  // }
-  // return REDIS_ERR;
+  if (TrieMap_Delete(m->map, (char *)id, strlen(id), _MRConnPool_Free)) {
+    return REDIS_OK;
+  }
+  return REDIS_ERR;
 }
 
 /* Stop the connection and make sure it frees itself on disconnect */

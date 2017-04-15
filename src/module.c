@@ -251,7 +251,6 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 }
 
 int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  printf("DFT CREATE!\n\n\n\n");
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }

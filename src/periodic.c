@@ -1,10 +1,10 @@
 #include "periodic.h"
 
-void _periodicTimerCB(uv_timer_t *tm);
+void _periodicTimerCB( uv_timer_t *tm, int status);
 void _periodicCmdCallbabk(redisAsyncContext *c, void *r, void *privdata);
 
 /* Timer loop for retrying disconnected connections */
-void _periodicTimerCB(uv_timer_t *tm) {
+void _periodicTimerCB( uv_timer_t *tm, int status) {
   RSPeriodicCommand *pc = tm->data;
   if (MRConn_SendCommand(pc->conn, &pc->cmd, _periodicCmdCallbabk, pc) == REDIS_ERR) {
     uv_timer_start(&pc->timer, _periodicTimerCB, pc->interval, 0);
@@ -47,15 +47,15 @@ RSPeriodicCommand *NewPeriodicCommandRunner(MRCommand *cmd, MREndpoint *ep, uint
 
 int periodicGCHandler(void *ctx, redisReply *rep, MRCommand *cmd) {
 
-  char *indexName = ctx;
+  //char *indexName = ctx;
 
   if (rep->type == REDIS_REPLY_ERROR) {
-    printf("Got error: %s\n", rep->str);
-  }
-  if (rep->type == REDIS_REPLY_ARRAY && rep->elements == 2) {
-    char *term = rep->element[0]->str;
-    long long offset = rep->element[1]->integer;
-    printf("Got response: %s %d\n", term, offset);
+    //printf("Got error: %s\n", rep->str);
+  } else if (rep->type == REDIS_REPLY_ARRAY && rep->elements == 3) {
+    char *indexName = rep->element[0]->str;
+    char *term = rep->element[1]->str;
+    long long offset = rep->element[2]->integer;
+    //printf("Got response: %s %s %lld\n", indexName, term, offset);
 
     if (offset != 0) {
       char buf[24];
@@ -64,9 +64,9 @@ int periodicGCHandler(void *ctx, redisReply *rep, MRCommand *cmd) {
       *cmd = MR_NewCommand(4, "FT.REPAIR", indexName, term, buf);
       MRCommand_Print(cmd);
     } else {
-      if (cmd->num != 2) {
+      if (cmd->num != 1) {
         MRCommand_Free(cmd);
-        *cmd = MR_NewCommand(2, "FT.REPAIR", indexName);
+        *cmd = MR_NewCommand(1, "FT.REPAIR");
       }
     }
   }

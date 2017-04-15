@@ -529,22 +529,35 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
   }
 
-  MRCommand ping = MR_NewCommand(2, "FT.REPAIR", "rd{05S}");
-  MRCommand_Print(&ping);
-  if (clusterConfig.myEndpoint != NULL) {
-    __periodicGC = NewPeriodicCommandRunner(&ping, clusterConfig.myEndpoint, 1000,
-                                            periodicGCHandler, "rd{05S}");
-  }
-
   MRCluster *cl = MR_NewCluster(initialTopology, sf, 2);
   MR_Init(cl);
   __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
 
   return REDISMODULE_OK;
 }
+
+/* Start the CG Loop on our twin RediSearch node */
+int StartGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (__periodicGC == NULL) {
+    MRClusterNode *currentNode = MR_GetMyNode();
+    if (!currentNode) {
+      RedisModule_Log(ctx, "warning", "Could not start GC loop - current endpoint unknown");
+      return RedisModule_ReplyWithError(ctx, "Could not start GC loop - current endpoint unknown");
+    }
+    MRCommand cmd = MR_NewCommand(1, "FT.REPAIR");
+
+    __periodicGC =
+        NewPeriodicCommandRunner(&cmd, &currentNode->endpoint, 50, periodicGCHandler, NULL);
+    MRCommand_Free(&cmd);
+  }
+  return RedisModule_ReplyWithSimpleString(ctx, "OK");
+}
+
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "dft", 6, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "dft", 7, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
@@ -609,6 +622,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   * RS Cluster specific commands
   **********************************************************/
   if (RedisModule_CreateCommand(ctx, "dft.clusterset", SetClusterCommand, "readonly", 0, 0, -1) ==
+      REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+
+  if (RedisModule_CreateCommand(ctx, "dft.startgc", StartGcCommand, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

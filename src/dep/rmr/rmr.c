@@ -233,8 +233,13 @@ void MR_Init(MRCluster *cl) {
 }
 
 MRClusterTopology *MR_GetCurrentTopology() {
-  return __cluster->topo;
+  return __cluster ? __cluster->topo : NULL;
 }
+
+MRClusterNode *MR_GetMyNode() {
+    return __cluster ? __cluster->myNode : NULL;
+}
+
 /* The fanout request received in the event loop in a thread safe manner */
 void __uvFanoutRequest(struct __mrRequestCtx *mc) {
 

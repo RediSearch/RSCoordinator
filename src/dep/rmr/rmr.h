@@ -31,6 +31,9 @@ int MR_UpdateTopology(MRClusterTopology *newTopology);
 /* Get the current cluster topology */
 MRClusterTopology *MR_GetCurrentTopology();
 
+/* Return our current node as detected by cluster state calls */
+MRClusterNode *MR_GetMyNode();
+
 /* Get the user stored private data from the context */
 void *MRCtx_GetPrivdata(struct MRCtx *ctx);
 

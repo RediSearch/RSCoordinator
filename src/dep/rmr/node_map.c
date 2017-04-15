@@ -95,9 +95,10 @@ void MRNodeMap_Add(MRNodeMap *m, MRClusterNode *n) {
 
   TrieMap_Add(m->hosts, n->endpoint.host, strlen(n->endpoint.host), NULL, NULL);
 
-  char addr[strlen(n->endpoint.host) + 10];
-  sprintf(addr, "%s:%d", n->endpoint.host, n->endpoint.port);
+  char *addr;
+  asprintf(&addr, "%s:%d", n->endpoint.host, n->endpoint.port);
   TrieMap_Add(m->nodes, addr, strlen(addr), n, _node_replace);
+  free(addr);
 }
 
 MRClusterNode *MRNodeMap_RandomNode(MRNodeMap *m) {

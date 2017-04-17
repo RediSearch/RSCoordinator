@@ -272,3 +272,11 @@ def prepare_rlec_master():#cluster_name,db_name,num_shards,num_partitions):
     execute(bootstrap_rlec_cluster, cluster_name)
     #execute(create_database, db_name,num_shards,num_partitions)
     #execute(bootstrap_cluster, 10)
+
+@task
+def upgrade_bdb_module(bdb_uid, module_list):
+    # overrides bdb's module list with the one provided.
+    # TODO: retrieve BDB's module list and update instead of overriding.
+    run("""curl -k -X PUT -u "{rlec_user}:{rlec_pass}" -H "Content-Type: application/json" \
+        -d '{ "module_list": {module_list} }' \
+        https://127.0.0.1:9443/v1/bdbs/{uid}""".format(rlec_user=rlec_user, rlec_pass=rlec_pass, module_list=json.dumps(module_list), uid=bdb_uid))

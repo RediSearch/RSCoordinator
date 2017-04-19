@@ -97,7 +97,7 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   }
 
   *cmd = MRCommand_Copy(it->cmd);
-  if (it->keyOffset >= 0) {
+  if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
     char *arg = cmd->args[it->keyOffset];
     char *tagged;
     asprintf(&tagged, "%s{%s}", arg,

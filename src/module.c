@@ -298,8 +298,9 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc - 1, &argv[1]);
   struct MRCtx *mctx = MR_CreateCtx(ctx, NULL);
   MR_SetCoordinationStrategy(mctx, MRCluster_FlatCoordination);
-  MR_Fanout(mctx, chainReplyReducer, cmd);
-
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  MR_Map(mctx, chainReplyReducer, cg);
+  cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
 
@@ -552,7 +553,6 @@ int StartGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
   return RedisModule_ReplyWithSimpleString(ctx, "OK");
 }
-
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 

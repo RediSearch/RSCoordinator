@@ -212,7 +212,7 @@ int MRCluster_ConnectAll(MRCluster *cl) {
 
 char *_MRGetShardKey(MRCommand *cmd, size_t *len) {
   int pos = MRCommand_GetShardingKey(cmd);
-  if (pos < 0) {
+  if (pos < 0 || pos >= cmd->num) {
     return NULL;
   }
   char *k = cmd->args[MRCommand_GetShardingKey(cmd)];

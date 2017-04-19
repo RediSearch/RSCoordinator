@@ -22,8 +22,8 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../src/search_cluster.o ../src/dep/crc16.o ../src/dep/crc12.o ../src/fnv.o 
-LIBS= ../src/dep/rmr/hiredis/libhiredis.a ../src/parser/libparser.a  ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a
+OBJS= ../src/search_cluster.o ../src/dep/rmr/crc16.o ../src/dep/rmr/crc12.o ../src/fnv.o $(wildcard ../src/dep/rmr/redise_parser/*.c)
+LIBS= ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a
 
 test_searchcluster:
 	$(CC)  -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv

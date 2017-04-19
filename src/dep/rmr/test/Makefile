@@ -7,9 +7,11 @@ ifndef RMUTIL_LIBDIR
 	RMUTIL_LIBDIR=../src/dep/rmutil
 endif
 
+SRC_DIR = ../
+
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
+CFLAGS = -I"$(RM_INCLUDE_DIR)" -I"$(SRC_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
 
 
 # Compile flags for linux / osx
@@ -23,6 +25,7 @@ endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 LIBS=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
+
 
 test_parser:
 	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv

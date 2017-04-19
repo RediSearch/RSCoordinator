@@ -13,9 +13,8 @@ cluster_root = root + '/run'
 
 env.roledefs = {
     'redis': [],#'52.57.246.105', '52.57.50.243', '52.59.87.185', '52.29.254.134'],
-    'rlec': ['104.199.38.214', '104.199.96.128','35.187.4.125', '104.155.31.211', '104.199.110.108',
-             '35.187.89.0', '130.211.100.195','35.187.53.172','130.211.67.244'  ],
-    'rlec_master': ['23.251.139.76'],
+    'rlec':  [],
+    'rlec_master': [],
 }
 
 def git_url(namespace, repo):
@@ -66,7 +65,7 @@ def fetch_git_repo(namespace, name, keyFile = None):
                 run("git pull -ff origin master")
         else:
             run("git clone --depth 1 {}".format(git_url(namespace, name)))
-@task
+@task   
 @parallel
 @roles("rlec", "rlec_master")
 def install_rlec():
@@ -135,14 +134,15 @@ def pack_modules():
 rlec_user = 'search@redislabs.com'
 rlec_pass = 'search1234'
 rlec_license_file = 'license.txt'
+rlec_path = '/mnt/data'
 
 @task
 @runs_once
 @roles("rlec_master")
 def bootstrap_rlec_cluster(cluster_name):
     put(rlec_license_file, rlec_license_file)
-    rladmin("cluster create name {} username \"{}\" password \"{}\" license_file \"{}\"".format(
-        cluster_name, rlec_user, rlec_pass, rlec_license_file
+    rladmin("cluster create name {} username \"{}\" password \"{}\" persistent_path \"{}\" license_file \"{}\"".format(
+        cluster_name, rlec_user, rlec_pass, rlec_path, rlec_license_file
     ))
 
 @task
@@ -150,8 +150,8 @@ def bootstrap_rlec_cluster(cluster_name):
 @roles("rlec")
 def join_rlec(cluster_host):
     ip = resolve(cluster_host)
-    rladmin("cluster join nodes \"{}\" username \"{}\" password \"{}\"".format(
-        ip, rlec_user, rlec_pass
+    rladmin("cluster join nodes \"{}\" username \"{}\" password \"{}\" persistent_path \"{}\"".format(
+        ip, rlec_user, rlec_pass, rlec_path
     ))
 
 @task

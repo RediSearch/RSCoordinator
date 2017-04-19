@@ -1,6 +1,8 @@
 #include "minunit.h"
 #include "../src/search_cluster.h"
-#include "../src/command.h"
+#include "../src/dep/rmr/command.h"
+#include "../src/crc16_tags.h"
+
 const char *FNVTagFunc(const char *key, size_t len, size_t k);
 // void testTagFunc() {
 
@@ -13,10 +15,10 @@ const char *FNVTagFunc(const char *key, size_t len, size_t k);
 
 void testCommandMux() {
 
-  SearchCluster sc = NewSearchCluster(100, NewSimplePartitioner(100));
+  SearchCluster sc = NewSearchCluster(100, NewSimplePartitioner(100, crc16_slot_table, 16384));
   MRCommand cmd = MR_NewCommand(3, "FT.SEARCH", "idx", "foo");
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd, 1);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd);
 
   MRCommand mxcmd;
   // printf("Expected len: %d\n", cg.Len(cg.ctx));

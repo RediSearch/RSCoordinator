@@ -1,6 +1,6 @@
 #include "minunit.h"
-#include "../redise_parser/parse.h"
-#include "../cluster.h"
+#include <redise_parser/parse.h>
+#include <cluster.h>
 
 void testParser() {
   const char *q =

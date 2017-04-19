@@ -556,7 +556,7 @@ int StartGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "dft", 7, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "dft", 8, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

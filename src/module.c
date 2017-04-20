@@ -298,9 +298,14 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc - 1, &argv[1]);
   struct MRCtx *mctx = MR_CreateCtx(ctx, NULL);
   MR_SetCoordinationStrategy(mctx, MRCluster_FlatCoordination);
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
-  MR_Map(mctx, chainReplyReducer, cg);
-  cg.Free(cg.ctx);
+
+  if (cmd.num > 1 && MRCommand_GetShardingKey(&cmd) >= 0) {
+    MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+    MR_Map(mctx, chainReplyReducer, cg);
+    cg.Free(cg.ctx);
+  } else {
+    MR_Fanout(mctx, chainReplyReducer, cmd);
+  }
   return REDISMODULE_OK;
 }
 

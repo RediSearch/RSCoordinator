@@ -1,92 +1,76 @@
-# LibRMR - RedisMapReduce
+# RSCoordinator - Distributed RediSearch
 
-## What?
+RSCoordinator is an add-on module that enables scalable distributed search over [RediSearch](http://redisearch.io).
 
-This is a **Proof of Concept** of a library, that allows redis modules to communicate with nodes in a cluster in an asynchronous way. 
+## How It Works
 
-It allows the same command to be fanned-out to all the nodes; or sending a list of commands, each to its relevant shard or node. 
+RSCoordinator runs alongside RediSearch, and distributes search commands across the cluster. 
+It translates its own API, which is similar to RediSearch's API, into a set of RediSearch commands, sends those to the appropriate shards,
+and merges the responses to a single one. 
 
-It loosely follows a map/reduce pattern, where each command executed is considered a "map" operation, and a "reducer" callback is responsible for merging the results. 
-A reducer can reply to the client, *or trigger another map/reduce step*. 
+Most of the API that it exposes is identical to RediSearch's with the sole distinction, that instead of the prefix `FT` for all RediSearch commands, its prefix is `DFT` (short for Distributed Full Text).
 
-## NOTE: 
+### Example Usage
 
-> **This is only a POC, and it only supports dummy cluster configuration and sharding. It works, but not really usable - just an example of how the API would work.** 
+```
+# Creating an index
+> DFT.CREATE myIdx SCHEMA foo TEXT 
 
----
+# Adding a document
+> DFT.ADD myIdx doc1 1.0 FIELDS foo "hello world"
 
-## Why?
+# Searching
+> DFT.SEARCH myIdx "hello world"
+```
 
-The idea is to be able to scale module logic across many nodes, where a merged result is sent to the client. 
+The syntax of all these commands is identical to that of the equivalent RediSearch commands.
 
-For example, let's say we have a search engine running on `N` redis instances. We can index `1/N` of our documents in each engine to scale it if more data is added. 
+## Building RSCoordinator
 
-Then, when searching, we need to distribute the query to all nodes, and reduce the top N results from all nodes to a single list. 
-RMR allows us to do it easily and abstracts the details of networking and threading. (it uses libuv and hiredis under the hood).
+RSCoordinator has no dependencies, and only needs gcc/lldb, automake and libc. It includes libuv internally, and uses the provided internal library.
 
-## How?
+Building is simply done by running:
 
-When loading the module, you need to initialize the RMR engine, and inject it with:
+```sh
 
-1. A *NodeProvider* - an interface supplying the engine with a list of the cluster's node (and in the future slots and other state info).
+$ cd /path/to/RSCoordinato/src
 
-2. A *ShardFunc* - a callback that, given a list of nodes and a command's arguments, tells the engine which node/shard the command should be mapped to.
-
-After the engine is initialized, you can trigger MapReduce steps from any of the module's command handlers. Two sorts of operations are supported:
-
-1. *Map* - give the engine a list of commands, and it will execute each on its appropriate shard, and call a reducer with the results.
-
-2. *FanOut* - give the engine a single command, and it will execute it on ALL shards, and call a reducer with the results.
-
-## Example:
-
-This SUM example takes a list of keys from the command arguments, performs GET on each key's appropriate shard, and reduces the result to a single sum (if they are numeric):
-
-1. Triggering the map operation in a command handler: 
-
-```c
-/* RMR.SUM key key ... */
-int SumCmd(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (argc < 2) return RedisModule_WrongArity(ctx);
-  
-  /* Create a list of commands to distribute */
-  MRCommand cmds[argc-1];
-  for (int i = 0; i < argc - 1; i++) {
-    cmds[i] = MR_NewCommand(2, "GET", RedisModule_StringPtrLen(argv[i+1], NULL));
-  }
-
-  /* Create a new MapReduce context wrapping our redis context */
-  MRCtx *mc = MR_CreateCtx(ctx)
-
-  /* Trigger a Map operation for the commands, with a reducer callback */ 
-  MR_Map(mc, sumReducer, cmds, argc-1);
-
-  return REDISMODULE_OK;
-}
+$ make all
 
 ```
 
-2. Summing up the results in the reducer:
+This creates a file called `module.so` in /src, and from here on, you can run it inside redis.
 
-(Note: `MRReply` is an abstraction built on hiredis reply objects, that has some convenience functions)
+## Running RSCoordinator
 
-```c
-/* A reducer that sums up numeric replies from a request */
-int sumReducer(struct MRCtx *mc, int count, MRReply **replies) {
+The module relies on configuration options, passed to it on loading, with the following syntax as a command-line argument or inside redis.conf:
 
-  /* Get the redis context saved in the MapReduce context */
-  RedisModuleCtx *ctx = MRCtx_GetPrivdata(mc);
-  long long sum = 0;
-  for (int i = 0; i < count; i++) {
-    long long n = 0;
-    
-    /* a convenience function to extract an integer value from the reply if possible */
-    if (MRReply_ToInteger(replies[i], &n)) {
-      sum += n;
-    }
-  }
-
-   return RedisModule_ReplyWithLongLong(ctx, sum);
-}
 ```
+loadmodule /path/to/module.so PARTITIONS {num_partitions} TYPE {redis_oss|redislabs} [ENDPOINT {[password@]host:port}]
+```
+
+Usually we run RediSearch and RSCoordinator on **all redis instances in our cluster**, and it's imperative to load them both, i.e.:
+
+```
+# Load RediSearch
+loadmodule /path/to/redisearch/module.so 
+
+# Load RSCoordinator
+loadmodule /path/to/rscoordinator/module.so PARTITIONS 5 TYPE redislabs
+```
+
+### Configuration Options:
+
+- **PARTITIONS {num_partitions}**: The number of *logical* partitions the index will use. As a rule of thumb, this should be equal to the number of shards (master redis instances) in the cluster. It must be greater than 0.
+
+- **TYPE {redis_oss|redislabs}**: The cluster type. Since the cluster architectures differ, the module has adaptive logic for each of them.
+
+  **redis_oss**: Use this when running the cluster on an open source redis cluster. When using this option, you must also specify our ENDPOINT (see below), so we can read the cluster state from it.
+
+  **redislabs**: Use this to run RSCoordinator on Redis Labs Enterprise Cluster. In this case, there is no need to specify the endpoint.
+
+- **[ENDPOINT {[password@]host:port}]**: For redis OSS cluster only. We use this option to poll redis for the cluster topology. Soon to be deprecated!
+
+## Installing RSCoordinator on Redis Enterprise Cluster
+
+TBD.

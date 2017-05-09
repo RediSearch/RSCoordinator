@@ -38,10 +38,19 @@ export REDIS_TEST_CONFIG
 # Fallback to gcc when $CC is not in $PATH.
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 CXX:=$(shell sh -c 'type $(CXX) >/dev/null 2>/dev/null && echo $(CXX) || echo g++')
-OPTIMIZATION?=-O0
+
+OPTIMIZATION?=-O2
+ifeq ($(DEBUG), 1)
+	OPTIMIZATION = -O0
+endif
+CFLAGS=-std=c99 -pedantic -c -fPIC -Wall
+ifneq ($(uname_S),Linux)
+	CFLAGS += -mmacosx-version-min=10.6
+endif
+
 WARNINGS=-Wall -W -Wstrict-prototypes -Wwrite-strings
 DEBUG_FLAGS?= -g -ggdb
-REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(DEBUG_FLAGS) $(ARCH)
+REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(DEBUG_FLAGS) $(ARCH) -I$(LIBUV_INCLUDE_DIR)
 REAL_LDFLAGS=$(LDFLAGS) $(ARCH)
 
 DYLIBSUFFIX=so

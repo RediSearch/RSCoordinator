@@ -3,18 +3,27 @@ import itertools
 from fabric.api import *
 from fabric.contrib import files
 import json
-env.user = 'redis'
 
+env.user = 'redis'
 root = os.getenv("REDIS_ROOT", "/home/{}".format(env.user))
-git_root = os.getenv("GIT_ROOT", "git@github.com")
-apt_gets = ["git-core", "ruby", "build-essential", "gdb", 'htop', 'libuv-dev', 'python-dev', 'python-setuptools', 'python-pip', 'unzip', 's3cmd']
-pips = ['ramp-packer', 'boto']
-modules_root = root + '/modules'
+git_root = "git@github.com"
+rlec_uid = 'redislabs'
+rlec_user = 'search@redislabs.com'
+rlec_pass = 'search1234'
+rlec_license_file = 'license.txt'
+rlec_path = root + '/data'
+#modules_root = root + '/modules'
 cluster_root = root + '/run'
 
+
+
+
+apt_gets = ["git-core", "ruby", "build-essential", "gdb", 'htop', 'libuv-dev', 'python-dev', 'python-setuptools', 'python-pip', 'unzip', 's3cmd']
+pips = ['ramp-packer', 'boto']
+
 env.roledefs = {
-    'rlec':  [],
-    'rlec_master': ['104.155.12.64'],
+    'rlec':  os.getenv('RL_HOSTS', '').split(','),
+    'rlec_master': os.getenv('RL_MASTER', '').split(','),
 }
 
 @task
@@ -24,7 +33,7 @@ def install_essentials():
     """
     Install essential build requirements for all our projects
     """
-    run('mkdir -p {}'.format(modules_root))
+    #run('mkdir -p {}'.format(modules_root))
     run('mkdir -p {}'.format(cluster_root))
     # Install apt-get deps
     sudo("apt-get update && apt-get -y install {}".format(" ".join(apt_gets)))
@@ -52,9 +61,11 @@ def fetch_git_repo(namespace, name, keyFile = None):
 def install_rlec():
     package_name = 'RediSearchPackage.tar'
     if not files.exists(package_name):
-        put('./res/'+package_name, package_name)
+        put(local_resource(package_name), package_name)
         run('tar -xf {}'.format(package_name))
     sudo('./install.sh -y')
+    sudo('mkdir -p {} && chown -R {}.{} {}'.format(rlec_path, rlec_uid, rlec_uid, rlec_path))
+
 
 @task   
 @parallel
@@ -62,10 +73,12 @@ def install_rlec():
 def install_s3_creds():
 
     global root
-    put('./res/s3cfg', '{}/.s3cfg'.format(root))
+    if not files.exists('{}/.s3cfg'.format(root)):
+        put('./res/s3cfg', '{}/.s3cfg'.format(root))
 
 def deploy_module(module):
-    resp = json.loads(run('curl -k -u "{}:{}" -F "module=@{}" https://127.0.0.1:9443/v1/modules'.format(rlec_user, rlec_pass, module)))
+    resp = json.loads(run('curl -k -u "{}:{}" -F "module=@{}" https://127.0.0.1:9443/v1/modules'.format(
+        rlec_user, rlec_pass, module)))
     return resp['uid']
 
 def rladmin(cmd):
@@ -87,8 +100,7 @@ def create_database(db_name, num_shards, num_partitions):
 
 def get_module(modulename):
     
-    with cd(modules_root):
-        run('s3cmd get s3://redismodules/{}/{}.`uname -s`-`uname -m`.latest.zip {}.zip'.format(modulename, modulename, modulename))
+    run('s3cmd get --force s3://redismodules/{}/{}.`uname -s`-`uname -m`.latest.zip {}.zip'.format(modulename, modulename, modulename))
 
 @task
 @roles("rlec_master")
@@ -98,16 +110,15 @@ def get_modules():
     get_module('rscoordinator')
   
 
-rlec_user = 'search@redislabs.com'
-rlec_pass = 'search1234'
-rlec_license_file = 'license.txt'
-rlec_path = '/mnt/data'
+
+def local_resource(fname):
+    return 'res/{}'.format(fname)
 
 @task
 @runs_once
 @roles("rlec_master")
 def bootstrap_rlec_cluster(cluster_name):
-    put(rlec_license_file, rlec_license_file)
+    put(local_resource(rlec_license_file), rlec_license_file)
     rladmin("cluster create name {} username \"{}\" password \"{}\" persistent_path \"{}\" license_file \"{}\"".format(
         cluster_name, rlec_user, rlec_pass, rlec_path, rlec_license_file
     ))
@@ -130,14 +141,14 @@ def install_redis():
         run('wget https://github.com/antirez/redis/archive/unstable.zip && unzip -u unstable.zip')
 
         with cd('redis-unstable'):
-            run('make all')
+            run('make -j4 all')
             sudo('make install')
     else:
         print("Redis already installed")
 
 def module_path(mod):
-    global modules_root
-    return '{}/{}'.format(modules_root, mod)
+    return mod
+    
 
 
 def get_local_ip():
@@ -162,10 +173,8 @@ def deploy_rlec():
     execute(install_rlec)
 
 @task
-def create_rlec_cluster(cluster_name,db_name,num_shards,num_partitions):
+def download_modules():
     execute(install_s3_creds)
     execute(get_modules)
-    execute(bootstrap_rlec_cluster, cluster_name)
-    execute(create_database, db_name,num_shards,num_partitions)
-    #execute(bootstrap_cluster, 10)
+
 

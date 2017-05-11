@@ -86,7 +86,7 @@ def rladmin(cmd):
 
 @task
 @roles("rlec_master")
-def create_database(db_name, num_shards, num_partitions):
+def create_database(db_name, num_shards):
 
     rladmin('tune cluster default_shards_placement sparse')
     search_uid = deploy_module( 'redisearch.zip')
@@ -95,7 +95,7 @@ def create_database(db_name, num_shards, num_partitions):
         -d '{{ "name": "{db_name}", "replication":true, "sharding":true, "shards_count":{num_shards}, "version": "4.0", "memory_size": {mem_size}, "type": "redis", \
         "module_list":["{coord_uid}","{search_uid}"], "module_list_args":["PARTITIONS {num_partitions} TYPE redislabs", "PARTITIONS {num_partitions} TYPE redislabs"] }}' \
         https://127.0.0.1:9443/v1/bdbs""".format(rlec_user=rlec_user, rlec_pass=rlec_pass, db_name=db_name,
-        num_shards=num_shards, num_partitions=num_partitions, mem_size=5000000000*int(num_shards), search_uid=search_uid, coord_uid=coord_uid))
+        num_shards=num_shards, num_partitions=num_shards, mem_size=5000000000*int(num_shards), search_uid=search_uid, coord_uid=coord_uid))
     
 
 def get_module(modulename):
@@ -105,6 +105,9 @@ def get_module(modulename):
 @task
 @roles("rlec_master")
 def get_modules():
+    """
+    Download the latest versions of both needed modules to the destination server
+    """
 
     get_module('redisearch')
     get_module('rscoordinator')

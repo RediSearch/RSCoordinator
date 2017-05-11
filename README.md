@@ -74,3 +74,7 @@ loadmodule /path/to/rscoordinator/module.so PARTITIONS 5 TYPE redislabs
 ## Installing RSCoordinator on Redis Enterprise Cluster
 
 TBD.
+
+# Commands
+
+# 

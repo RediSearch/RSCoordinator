@@ -64,6 +64,12 @@ rmutil:
 clean:
 	rm -rvf *.xo *.so *.o *.a
 
+package: module.so
+	mkdir -p ../build
+	$(eval PACK=$(shell module_packer -c "PARTITIONS 1 TYPE redislabs"  -o "../build/rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
+	s3cmd put $(PACK) s3://redismodules/rscoordinator/
+	
+
 deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.l[oa]" -exec rm {} \; -print

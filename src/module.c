@@ -617,8 +617,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
   }
 
-  if (RedisModule_CreateCommand(ctx, "dft.search", SearchCommandHandler, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR) {
+  if (RedisModule_CreateCommand(ctx, "dft.search", FlatSearchCommandHandler, "readonly", 0, 0,
+                                -1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

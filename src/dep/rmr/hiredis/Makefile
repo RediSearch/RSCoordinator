@@ -9,6 +9,9 @@ TESTS=hiredis-test
 LIBNAME=libhiredis
 PKGCONFNAME=hiredis.pc
 
+# Platform-specific overrides
+uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+
 HIREDIS_MAJOR=$(shell grep HIREDIS_MAJOR hiredis.h | awk '{print $$3}')
 HIREDIS_MINOR=$(shell grep HIREDIS_MINOR hiredis.h | awk '{print $$3}')
 HIREDIS_PATCH=$(shell grep HIREDIS_PATCH hiredis.h | awk '{print $$3}')
@@ -44,7 +47,7 @@ ifeq ($(DEBUG), 1)
 	OPTIMIZATION = -O0
 endif
 CFLAGS=-std=c99 -pedantic -c -fPIC -Wall
-ifneq ($(uname_S),Linux)
+ifeq ($(uname_S),Darwin)
 	CFLAGS += -mmacosx-version-min=10.6
 endif
 
@@ -62,8 +65,7 @@ DYLIB_MAKE_CMD=$(CC) -shared -Wl,-soname,$(DYLIB_MINOR_NAME) -o $(DYLIBNAME) $(L
 STLIBNAME=$(LIBNAME).$(STLIBSUFFIX)
 STLIB_MAKE_CMD=ar rcs $(STLIBNAME)
 
-# Platform-specific overrides
-uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+
 ifeq ($(uname_S),SunOS)
   REAL_LDFLAGS+= -ldl -lnsl -lsocket
   DYLIB_MAKE_CMD=$(CC) -G -o $(DYLIBNAME) -h $(DYLIB_MINOR_NAME) $(LDFLAGS)

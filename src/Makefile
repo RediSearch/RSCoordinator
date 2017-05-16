@@ -67,8 +67,10 @@ clean:
 package: module.so
 	mkdir -p ../build
 	$(eval PACK=$(shell module_packer -c "PARTITIONS 1 TYPE redislabs"  -o "../build/rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
+
+upload: package
 	s3cmd put $(PACK) s3://redismodules/rscoordinator/
-	
+.PHONY: upload	
 
 deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print

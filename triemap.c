@@ -218,23 +218,18 @@ void *TrieMapNode_Find(TrieMapNode *n, char *str, tm_len_t len) {
     if (localOffset == nlen) {
       // we're at the end of both strings!
       if (offset == len) {
-        return __trieMapNode_isDeleted(n) ? NULL : n->value;
+        // If this is a terminal, non deleted node - return its value
+        if (__trieMapNode_isTerminal(n) && !__trieMapNode_isDeleted(n)) {
+          return n->value;
+        } else { // this node is either non terminal or deleted - return not found
+          return TRIEMAP_NOTFOUND;
+        }
       }
       // we've reached the end of the node's string but not the search string
       // let's find a child to continue to
       tm_len_t i = 0;
       TrieMapNode *nextChild = NULL;
-      // if (!(n->flags & TM_NODE_SORTED) && n->numChildren > 10) {
-      //   qsort(__trieMapNode_children(n), n->numChildren, sizeof(TrieMapNode
-      //   *),
-      //         __cmp_nodes);
-      //   // printf("%.*s ... ", n->numChildren, __trieMapNode_childKey(n,
-      //   0));
-      //   qsort(__trieMapNode_childKey(n, 0), n->numChildren, 1,
-      //   __cmp_chars);
-      //   //  printf("%.*s\n", n->numChildren, __trieMapNode_childKey(n, 0));
-      //   n->flags |= TM_NODE_SORTED;
-      // }
+      
       char *childKeys = __trieMapNode_childKey(n, 0);
       char c = str[offset];
       if (n->flags & TM_NODE_SORTED) {

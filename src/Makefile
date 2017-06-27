@@ -18,7 +18,10 @@ LIBUV_INCLUDE_DIR = $(LIBUV_DIR)/include
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS = -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" -Wall -Wno-unused-function $(DEBUGFLAGS) -fPIC -std=gnu99  -D_GNU_SOURCE
+CFLAGS = -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" \
+		-Wall -Wno-unused-function $(DEBUGFLAGS) -fPIC -std=gnu99 \
+		-D_GNU_SOURCE -DREDIS_MODULE_TARGET
+
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 # Compile flags for linux / osx
@@ -58,7 +61,7 @@ libredisearch.a:
 	make -C dep/RediSearch/src libredisearch.a
 
 module.so: rmr rmutil libuv.a libredisearch.a $(CC_OBJECTS)
-	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread 
+	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
 rmr:
 	$(MAKE) -C dep/rmr hiredis all

@@ -4,6 +4,7 @@
 !**/*.c
 !**/*.y
 !**/*.py
+!**/*.tpl
 !**/*.md
 !.gitignore
 !**/Makefile

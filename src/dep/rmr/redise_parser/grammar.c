@@ -896,7 +896,7 @@ static void yy_syntax_error(
 #define TOKEN (yyminor.yy0)
 #line 18 "grammar.y"
   
-    asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
+    asprintf(&ctx->errorMsg, "++++++ Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
     ctx->ok = 0;
 #line 902 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */

@@ -41,6 +41,10 @@ typedef struct {
 
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
 
+/** Set the prefix of the command (i.e {prefix}.{command}) to a given prefix. If the command has a
+ * module style prefx it gets replaced with the new prefix. If it doesn't, we prepend the prefix to
+ * the command. */
+void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix);
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg);
 

@@ -12,35 +12,34 @@ struct mrCommandConf {
 struct mrCommandConf __commandConfig[] = {
 
     // document commands
-    {"FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"FT.DEL", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.ADD", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.ADDHASH", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.DEL", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.ADD", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.ADDHASH", MRCommand_Write | MRCommand_SingleKey, 1},
 
     // index commands
-    {"FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1},
 
     // Suggest commands
-    {"FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"FT.SUGLEN", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.SUGLEN", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1},
 
     // Coordination commands - they are all read commands since they can be triggered from slaves
-    {"DFT.ADD", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.XSEARCH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.INFO", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.DEL", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.DROP", MRCommand_Read | MRCommand_Coordination, -1},
-    {"DFT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
-
+    {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.XSEARCH", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.INFO", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.DROP", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
     // sentinel
     {NULL},
 };
@@ -131,6 +130,22 @@ void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {
   va_end(ap);
 }
 
+/** Set the prefix of the command (i.e {prefix}.{command}) to a given prefix. If the command has a
+ * module style prefx it gets replaced with the new prefix. If it doesn't, we prepend the prefix to
+ * the command. */
+void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix) {
+
+  char *suffix = strchr(cmd->args[0], '.');
+  if (!suffix) {
+    suffix = cmd->args[0];
+  } else {
+    suffix++;
+  }
+
+  char *buf = NULL;
+  asprintf(&buf, "%s.%s", newPrefix, suffix);
+  MRCommand_ReplaceArgNoDup(cmd, 0, buf);
+}
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
   if (index < 0 || index >= cmd->num) {
     return;

@@ -533,7 +533,7 @@ char *yytext;
 #include <string.h>
 #include <math.h>
 
-Token tok;
+Token tok = { };
 
 /* handle locations */
 int yycolumn = 1;

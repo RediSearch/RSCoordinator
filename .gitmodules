@@ -1,0 +1,3 @@
+[submodule "src/dep/RediSearch"]
+	path = src/dep/RediSearch
+	url = git@github.com:RedisLabsModules/RediSearch.git

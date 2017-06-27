@@ -4,7 +4,7 @@ from fabric.api import *
 from fabric.contrib import files
 import json
 
-env.user = 'redis'
+env.user = 'ubuntu'
 root = os.getenv("REDIS_ROOT", "/home/{}".format(env.user))
 git_root = "git@github.com"
 rlec_uid = 'redislabs'
@@ -57,10 +57,10 @@ def fetch_git_repo(namespace, name, keyFile = None):
             run("git clone --depth 1 {}".format(git_url(namespace, name)))
 @task   
 @parallel
-@roles("rlec", "rlec_master")
+@roles("rlec")
 def install_rlec():
     package_name = 'RediSearchPackage.tar'
-    if not files.exists(package_name):
+    if True: #not files.exists(package_name):
         put(local_resource(package_name), package_name)
         run('tar -xf {}'.format(package_name))
     sudo('./install.sh -y')
@@ -130,7 +130,7 @@ def bootstrap_rlec_cluster(cluster_name):
 @serial
 @roles("rlec")
 def join_rlec(cluster_host):
-    ip = resolve(cluster_host)
+    ip = cluster_host
     rladmin("cluster join nodes \"{}\" username \"{}\" password \"{}\" persistent_path \"{}\"".format(
         ip, rlec_user, rlec_pass, rlec_path
     ))

@@ -12,8 +12,8 @@ libparser.a:  $(CC_OBJECTS)
 	ar rcs $@ $(CC_OBJECTS)
 
 generate:
-	lex -i lexer.l
-	lemon -s grammar.y
+	flex  --header-file=lexer.h -o lex.yy.c -i lexer.l 
+	lemon -s -Ttemplate.c.tpl grammar.y
 	
 .PHONY: libparser.a
 all: libparser.a

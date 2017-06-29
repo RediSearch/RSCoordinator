@@ -11,14 +11,16 @@
     #include "../node.h"
     #include "../endpoint.h"
 
-    
+    #include "lexer.h"
 	void yyerror(char *s);
+
+
 } // END %include
 
 %syntax_error {  
     asprintf(&ctx->errorMsg, "Syntax error at offset %d near '%.*s'\n", TOKEN.pos,(int)TOKEN.len, TOKEN.s);
     ctx->ok = 0;
-}   
+}  
   
 %default_type { char * }
 %default_destructor {  printf("freeing %p\n", $$); free($$); }
@@ -123,40 +125,33 @@ master(A) ::= . {
 
 %code {
 
-  /* Definitions of flex stuff */
- // extern FILE *yyin;
-  typedef struct yy_buffer_state *YY_BUFFER_STATE;
-  int             yylex( void );
-  YY_BUFFER_STATE yy_scan_string( const char * );
-  YY_BUFFER_STATE yy_scan_bytes( const char *, size_t );
-  void            yy_delete_buffer( YY_BUFFER_STATE );
-  
-  
 
-
-MRClusterTopology *ParseQuery(const char *c, size_t len, char **err)  {
+MRClusterTopology *MR_ParseTopologyRequest(const char *c, size_t len, char **err)  {
 
     //printf("Parsing query %s\n", c);
     yy_scan_bytes(c, len);
-    void* pParser = ParseAlloc (malloc);        
+    void* pParser =  MRTopologyRequest_ParseAlloc (malloc);        
     int t = 0;
 
     parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, .errorMsg = NULL };
     //ParseNode *ret = NULL;
     //ParserFree(pParser);
     while (ctx.ok && 0 != (t = yylex())) {
-        Parse(pParser, t, tok, &ctx);                
+        MRTopologyRequest_Parse(pParser, t, tok, &ctx);                
     }
     if (ctx.ok) {
-        Parse (pParser, 0, tok, &ctx);
+        MRTopologyRequest_Parse (pParser, 0, tok, &ctx);
     }
     
-    ParseFree(pParser, free);
+    MRTopologyRequest_ParseFree(pParser, free);
 
     if (err) {
         *err = ctx.errorMsg;
     }
     return ctx.topology;
   }
+
+
    
 }
+

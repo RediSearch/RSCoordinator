@@ -12,5 +12,5 @@ typedef struct {
 } RLShard;
 
 void MRTopology_AddRLShard(MRClusterTopology *t, RLShard *sh);
-MRClusterTopology *ParseQuery(const char *c, size_t len, char **err);
+MRClusterTopology *MR_ParseTopologyRequest(const char *c, size_t len, char **err);
 #endif

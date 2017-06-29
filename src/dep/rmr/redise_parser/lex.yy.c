@@ -1,5 +1,6 @@
+#line 2 "lex.yy.c"
 
-#line 3 "lex.yy.c"
+#line 4 "lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -539,7 +540,7 @@ Token tok = { };
 int yycolumn = 1;
 
 #define YY_USER_ACTION yycolumn += yyleng; tok.pos = yycolumn;  tok.s = yytext; tok.len = strlen(yytext);
-#line 543 "lex.yy.c"
+#line 544 "lex.yy.c"
 
 #define INITIAL 0
 
@@ -724,7 +725,7 @@ YY_DECL
 #line 16 "lexer.l"
 
 
-#line 728 "lex.yy.c"
+#line 729 "lex.yy.c"
 
 	if ( !(yy_init) )
 		{
@@ -890,7 +891,7 @@ YY_RULE_SETUP
 #line 50 "lexer.l"
 ECHO;
 	YY_BREAK
-#line 894 "lex.yy.c"
+#line 895 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 

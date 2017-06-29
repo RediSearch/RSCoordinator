@@ -238,7 +238,7 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  /* Replace our own DFT command with FT. command */
+  /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
 
   /* Rewrite the sharding key based on the partitioning key */
@@ -259,7 +259,7 @@ int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, i
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  /* Replace our own DFT command with FT. command */
+  /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
@@ -279,7 +279,7 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  /* Replace our own DFT command with FT. command */
+  /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
@@ -516,6 +516,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %d",
                   clusterConfig.numPartitions, clusterConfig.type);
 
+  /* Configure cluster injections */
   ShardFunc sf;
   Partitioner pt;
   MRClusterTopology *initialTopology = NULL;
@@ -526,7 +527,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       break;
     case ClusterType_RedisOSS:
     default:
-      // init the redis topology pro
+      // init the redis topology updater loop
       if (InitRedisTopologyUpdater(clusterConfig.myEndpoint) == REDIS_ERR) {
         RedisModule_Log(ctx, "error", "Could not init redis cluster topology updater. Aborting");
         return REDISMODULE_ERR;

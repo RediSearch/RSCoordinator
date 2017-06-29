@@ -1,6 +1,6 @@
 #include "cluster.h"
 #include "conn.h"
-#include "uv.h"
+#include <uv.h>
 #include <redismodule.h>
 
 #define REDIS_CLUSTER_REFRESH_TIMEOUT 1000
@@ -16,9 +16,9 @@ void _updateCB(redisAsyncContext *c, void *r, void *privdata);
 /* Timer loop for retrying disconnected connections */
 void _updateTimerCB(uv_timer_t *tm) {
   _redisClusterTP *tp = tm->data;
-  //printf("Timer update called\n");
+  printf("Timer update called\n");
   if (tp->conn->state == MRConn_Connected) {
-    redisAsyncCommand(tp->conn->conn, _updateCB, tm, "dft.clusterrefresh");
+    redisAsyncCommand(tp->conn->conn, _updateCB, tm, "ft.clusterrefresh");
   } else {
     uv_timer_start(tm, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
   }
@@ -47,6 +47,7 @@ int _redisCluster_init(_redisClusterTP *rc) {
   uv_timer_init(uv_default_loop(), t);
   t->data = rc;
   uv_timer_start(t, _updateTimerCB, REDIS_CLUSTER_REFRESH_TIMEOUT, 0);
+  printf("Started timer...\n");
   return REDIS_OK;
 }
 

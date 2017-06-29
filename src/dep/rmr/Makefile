@@ -3,11 +3,12 @@ ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=../../
 endif
 
+LIBUV_INCLUDE_DIR=../libuv/include
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
 DEBUGFLAGS ?= -O0 -g -ggdb
-CFLAGS ?= -I$(RM_INCLUDE_DIR) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  
+CFLAGS ?= -I$(RM_INCLUDE_DIR) -I$(LIBUV_INCLUDE_DIR) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 

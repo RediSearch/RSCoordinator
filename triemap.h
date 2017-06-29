@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef u_int16_t tm_len_t;
+typedef uint16_t tm_len_t;
 
 #define TM_NODE_DELETED 0x01
 #define TM_NODE_TERMINAL 0x02

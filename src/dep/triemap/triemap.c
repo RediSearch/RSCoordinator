@@ -209,23 +209,18 @@ void *TrieMapNode_Find(TrieMapNode *n, char *str, tm_len_t len) {
     if (localOffset == nlen) {
       // we're at the end of both strings!
       if (offset == len) {
-        return __trieMapNode_isDeleted(n) ? NULL : n->value;
+        // If this is a terminal, non deleted node - return its value
+        if (__trieMapNode_isTerminal(n) && !__trieMapNode_isDeleted(n)) {
+          return n->value;
+        } else { // this node is either non terminal or deleted - return not found
+          return TRIEMAP_NOTFOUND;
+        }
       }
       // we've reached the end of the node's string but not the search string
       // let's find a child to continue to
       tm_len_t i = 0;
       TrieMapNode *nextChild = NULL;
-      // if (!(n->flags & TM_NODE_SORTED) && n->numChildren > 10) {
-      //   qsort(__trieMapNode_children(n), n->numChildren, sizeof(TrieMapNode
-      //   *),
-      //         __cmp_nodes);
-      //   // printf("%.*s ... ", n->numChildren, __trieMapNode_childKey(n,
-      //   0));
-      //   qsort(__trieMapNode_childKey(n, 0), n->numChildren, 1,
-      //   __cmp_chars);
-      //   //  printf("%.*s\n", n->numChildren, __trieMapNode_childKey(n, 0));
-      //   n->flags |= TM_NODE_SORTED;
-      // }
+      
       char *childKeys = __trieMapNode_childKey(n, 0);
       char c = str[offset];
       if (n->flags & TM_NODE_SORTED) {
@@ -504,7 +499,7 @@ void TrieMapNode_Free(TrieMapNode *n, void (*freeCB)(void *)) {
 /* Push a new trie node on the iterator's stack */
 inline void __tmi_Push(TrieMapIterator *it, TrieMapNode *node) {
   if (it->stackOffset == it->stackCap) {
-    it->stackCap = MIN(it->stackCap * 2, 1024);
+    it->stackCap += MIN(it->stackCap, 1024);
     it->stack = realloc(it->stack, it->stackCap * sizeof(__tmi_stackNode));
   }
   it->stack[it->stackOffset++] = (__tmi_stackNode){
@@ -595,11 +590,14 @@ int TrieMapIterator_Next(TrieMapIterator *it, char **ptr, tm_len_t *len, void **
         if (it->inSuffix ||
             *__trieMapNode_childKey(n, current->childOffset) == it->prefix[it->bufOffset]) {
           TrieMapNode *ch = __trieMapNode_children(n)[current->childOffset++];
-          __tmi_Push(it, ch);
 
           // unless in suffix mode, no need to go back here after popping the
           // child, so we just set the child offset at the end
           if (!it->inSuffix) current->childOffset = nch;
+          
+          // Add the matching child to the stack
+          __tmi_Push(it, ch);
+
           goto next;
         }
         // if the child doesn't match- just advance one

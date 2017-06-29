@@ -12,6 +12,10 @@ CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 
 all: libtriemap.a
 
+test: libtriemap.a
+	$(MAKE) -C ./test test
+.PHONY: test
+
 
 libtriemap.a: $(CC_OBJECTS)
 	ar rcs $@ $^

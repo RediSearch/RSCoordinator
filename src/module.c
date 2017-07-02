@@ -13,12 +13,10 @@
 #include "fnv.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
-#include "periodic.h"
 #include "config.h"
 #include "dep/RediSearch/src/module.h"
 
 SearchCluster __searchCluster;
-RSPeriodicCommand *__periodicGC = NULL;
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -543,24 +541,6 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
-/* Start the CG Loop on our twin RediSearch node */
-int StartGcCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (__periodicGC == NULL) {
-    MRClusterNode *currentNode = MR_GetMyNode();
-    if (!currentNode) {
-      RedisModule_Log(ctx, "warning", "Could not start GC loop - current endpoint unknown");
-      return RedisModule_ReplyWithError(ctx, "Could not start GC loop - current endpoint unknown");
-    }
-    MRCommand cmd = MR_NewCommand(1, "FT.REPAIR");
-
-    __periodicGC =
-        NewPeriodicCommandRunner(&cmd, &currentNode->endpoint, 50, periodicGCHandler, NULL);
-    MRCommand_Free(&cmd);
-  }
-  return RedisModule_ReplyWithSimpleString(ctx, "OK");
-}
-
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (RedisModule_Init(ctx, "ft", 9, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
@@ -634,10 +614,6 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   * RS Cluster specific commands
   **********************************************************/
   if (RedisModule_CreateCommand(ctx, "FT.CLUSTERSET", SetClusterCommand, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR)
-    return REDISMODULE_ERR;
-
-  if (RedisModule_CreateCommand(ctx, "FT.STARTGC", StartGcCommand, "readonly", 0, 0, -1) ==
       REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

@@ -16,7 +16,7 @@ void _updateCB(redisAsyncContext *c, void *r, void *privdata);
 /* Timer loop for retrying disconnected connections */
 void _updateTimerCB(uv_timer_t *tm) {
   _redisClusterTP *tp = tm->data;
-  printf("Timer update called\n");
+  
   if (tp->conn->state == MRConn_Connected) {
     redisAsyncCommand(tp->conn->conn, _updateCB, tm, "ft.clusterrefresh");
   } else {

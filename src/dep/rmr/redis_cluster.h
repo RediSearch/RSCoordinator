@@ -7,6 +7,6 @@
 struct RedisModuleCtx;
 MRClusterTopology *RedisCluster_GetTopology(struct RedisModuleCtx *);
 
-int InitRedisTopologyUpdater(MREndpoint *currentEndpoint);
+int InitRedisTopologyUpdater();
 
 #endif

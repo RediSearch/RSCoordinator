@@ -40,6 +40,9 @@ struct mrCommandConf __commandConfig[] = {
     {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1},
     {"FT.DROP", MRCommand_Read | MRCommand_Coordination, -1},
     {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
+
+    {"KEYS", MRCommand_Read | MRCommand_NoKey, -1},
+
     // sentinel
     {NULL},
 };

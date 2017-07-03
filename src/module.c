@@ -111,7 +111,7 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
 
   double s1 = r1->score, s2 = r2->score;
 
-  return s1 < s2 ? 1 : (s1 > s2 ? -1 : 0);
+  return s1 < s2 ? 1 : (s1 > s2 ? -1 : strcmp(r2->id, r1->id));
 }
 
 searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset) {

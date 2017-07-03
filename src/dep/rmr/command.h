@@ -55,6 +55,7 @@ typedef enum {
   MRCommand_Read,
   MRCommand_Write,
   MRCommand_Coordination,
+  MRCommand_NoKey,
 } MRCommandFlags;
 
 MRCommandFlags MRCommand_GetFlags(MRCommand *cmd);

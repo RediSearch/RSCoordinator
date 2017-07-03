@@ -40,10 +40,10 @@ export LIBUV_INCLUDE_DIR
 SOURCEDIR=$(shell pwd -P)
 CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
-LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/rmutil/librmutil.a \
-		dep/triemap/libtriemap.a libuv.a dep/RediSearch/src/libredisearch.a \
-		dep/RediSearch/src/trie/libtrie.a  dep/RediSearch/src/dep/libnu/libnu.a \
- 		dep/RediSearch/src/dep/snowball/libstemmer.o
+LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/triemap/libtriemap.a \
+		libuv.a dep/RediSearch/src/libredisearch.a dep/RediSearch/src/trie/libtrie.a \
+		dep/RediSearch/src/dep/libnu/libnu.a \
+		dep/RediSearch/src/dep/snowball/libstemmer.o dep/rmutil/librmutil.a
 
 
 

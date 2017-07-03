@@ -27,6 +27,7 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   for (int i = 0; i < count; i++) {
     MR_ReplyWithMRReply(ctx, replies[i]);
   }
+  // RedisModule_ReplySetArrayLength(ctx, x);
   return REDISMODULE_OK;
 }
 
@@ -34,7 +35,7 @@ int singleReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   if (count == 0) {
-    RedisModule_ReplyWithNull(ctx);
+    return RedisModule_ReplyWithNull(ctx);
   }
 
   MR_ReplyWithMRReply(ctx, replies[0]);
@@ -138,15 +139,20 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   // got no replies - this means timeout
   if (count == 0 || req->limit < 0) {
-    RedisModule_ReplyWithError(ctx, "Could not send query to cluter");
+    return RedisModule_ReplyWithError(ctx, "Could not send query to cluter");
   }
 
   long long total = 0;
   double minScore = 0;
+  MRReply *lastError = NULL;
   heap_t *pq = malloc(heap_sizeof(req->offset + req->limit));
   heap_init(pq, cmp_results, NULL, req->offset + req->limit);
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
+    if (MRReply_Type(arr) == MR_REPLY_ERROR) {
+      lastError = arr;
+      continue;
+    }
     if (MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 0) {
       // first element is always the total count
       total += MRReply_Integer(MRReply_ArrayElement(arr, 0));
@@ -186,8 +192,16 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
   }
 
+  if (total == 0 && lastError != NULL) {
+    MR_ReplyWithMRReply(ctx, lastError);
+    searchRequestCtx_Free(req);
+
+    return REDISMODULE_OK;
+  }
+
   // Reverse the top N results
   size_t qlen = heap_count(pq);
+
   size_t pos = qlen;
   searchResult *results[qlen];
   while (pos) {
@@ -217,7 +231,6 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
   }
   RedisModule_ReplySetArrayLength(ctx, len);
-
   for (pos = 0; pos < qlen; pos++) {
     free(results[pos]);
   }
@@ -241,9 +254,12 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   /* Rewrite the sharding key based on the partitioning key */
   SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
-  /* Rewrite the partitioning key as well */
-  SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
 
+  /* Rewrite the partitioning key as well */
+
+  if (MRCommand_GetFlags(&cmd) & MRCommand_MultiKey) {
+    SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
+  }
   MR_MapSingle(MR_CreateCtx(ctx, NULL), singleReplyReducer, cmd);
 
   return REDISMODULE_OK;
@@ -601,6 +617,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    0, -1));
 
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(SingleShardCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));
 
   /*********************************************************

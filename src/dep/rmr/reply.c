@@ -148,7 +148,8 @@ int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
       return RedisModule_ReplyWithError(ctx, MRReply_String(rep, NULL));
 
     case MR_REPLY_NIL:
+    default:
       return RedisModule_ReplyWithNull(ctx);
   }
-  return REDISMODULE_OK;
+  return REDISMODULE_ERR;
 }

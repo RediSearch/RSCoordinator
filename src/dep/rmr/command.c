@@ -13,15 +13,16 @@ struct mrCommandConf __commandConfig[] = {
 
     // document commands
     {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"_FT.DEL", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.ADD", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.ADDHASH", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey, 1},
+    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey, 1},
+    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey, 1},
 
     // index commands
     {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1},
     {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1},
     {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1},
     {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1},
 
     // Suggest commands
     {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1},
@@ -32,6 +33,8 @@ struct mrCommandConf __commandConfig[] = {
     // Coordination commands - they are all read commands since they can be triggered from slaves
     {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1},
     {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.EXPLAIN", MRCommand_Read | MRCommand_Coordination, -1},
+
     {"FT.XSEARCH", MRCommand_Read | MRCommand_Coordination, -1},
     {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
     {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1},
@@ -164,6 +167,11 @@ void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
 }
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg) {
   MRCommand_ReplaceArgNoDup(cmd, index, strdup(newArg));
+}
+
+MRCommandFlags MRCommand_GetFlags(MRCommand *cmd) {
+  if (cmd->id < 0) return 0;
+  return __commandConfig[cmd->id].flags;
 }
 
 int MRCommand_GetShardingKey(MRCommand *cmd) {

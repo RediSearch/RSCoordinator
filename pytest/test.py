@@ -11,22 +11,22 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
     def broadcast(cls, r, cmd, *args):
         return r.execute_command('ft.broadcast', cmd, *args)
 
-    # def testAdd(self):
-    #     with self.redis() as r:
-    #         self.broadcast(r, 'flushdb')
+    def testAdd(self):
+        with self.redis() as r:
+            self.broadcast(r, 'flushdb')
 
-    #         self.assertOk(r.execute_command(
-    #             'ft.create', 'idx', 'schema', 'title', 'text', 'body', 'text'))
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'title', 'text', 'body', 'text'))
             
-    #         self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', 1.0, 'fields',
-    #                                         'title', 'hello world',
-    #                                         'body', 'lorem ist ipsum'))
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', 1.0, 'fields',
+                                            'title', 'hello world',
+                                            'body', 'lorem ist ipsum'))
 
-    #     for _ in r.retry_with_rdb_reload():
+        for _ in r.retry_with_rdb_reload():
 
-    #         ret = itertools.chain(*self.broadcast(r, 'keys', '*'))
-    #         for s in ret:
-    #             self.assertTrue(s.startswith('idx:idx{') or s.startswith('doc1{'))
+            ret = itertools.chain(*self.broadcast(r, 'keys', '*'))
+            for s in ret:
+                self.assertTrue(s.startswith('idx:idx{') or s.startswith('doc1{') or s.startswith('ft:idx{'))
 
     def testUnion(self):
 
@@ -224,12 +224,12 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
                                                 'f', 'hello world'))
                 
-            # keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
-            # self.assertEqual(203, len(keys))
+            keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
+            self.assertEqual(209, len(keys))
 
-            # self.assertOk(r.execute_command('ft.drop', 'idx'))
-            # keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
-            # self.assertEqual(0, len(keys))
+            self.assertOk(r.execute_command('ft.drop', 'idx'))
+            keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
+            self.assertEqual(0, len(keys))
 
     def testCustomStopwords(self):
         with self.redis() as r:
@@ -281,7 +281,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             res  = r.execute_command('ft.search', 'idx', 'hello ~world ~werld', 'nocontent', 'scorer', 'DISMAX')
             self.assertEqual([3L, 'doc3', 'doc2', 'doc1'], res)
     
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def testExplain(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -529,13 +529,13 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertEqual('hotel21', res[3])
                 self.assertEqual('hotel79', res[1])
 
-                res = gsearch('hilton', "-0.1757", "51.5156", '10', 'km', 'nocontent')
+                res = gsearch('hilton', "-0.1757", "51.5156", '10', 'km', 'nocontent', 'limit', 0, 20)
                 self.assertEqual(14, res[0])
                 self.assertEqual('hotel93', res[1])
                 self.assertEqual('hotel92', res[2])
                 self.assertEqual('hotel79', res[3])
 
-                res2 = gsearch('hilton', "-0.1757", "51.5156", '10000', 'm', 'nocontent')
+                res2 = gsearch('hilton', "-0.1757", "51.5156", '10000', 'm', 'nocontent', 'limit', 0, 20)
                 self.assertEqual(set(res), set(res2))
 
                 res = gsearch('heathrow', -0.44155, 51.45865, '10', 'm')
@@ -638,7 +638,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertEqual("doc2", res[1])
             self.assertEqual("doc1", res[2])
 
-    @unittest.expectedFailure
     def testScorerSelection(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -848,7 +847,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             rc = r.execute_command("ft.SUGGET", "ac", "hello")
             self.assertEqual(['hello werld'], rc)
 
-    
     def testPayload(self):
 
         with self.redis() as r:

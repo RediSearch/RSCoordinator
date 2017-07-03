@@ -59,10 +59,11 @@ MRClusterType DetectClusterType() {
   if (r && RedisModule_CallReplyType(r) == REDISMODULE_REPLY_STRING) {
     size_t len;
     // INFO SERVER should contain the term rlec_version in it if we are inside an RLEC shard
+
     const char *str = RedisModule_CallReplyStringPtr(r, &len);
     if (str) {
 
-      if (strnstr(str, "rlec_version", len) != NULL) {
+      if (memmem(str, len, "rlec_version", strlen("rlec_version")) != NULL) {
         ret = ClusterType_RedisLabs;
       }
     }

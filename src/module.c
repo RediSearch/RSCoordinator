@@ -617,7 +617,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   * Complex coordination search commands
   **********************************************************/
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler),
-                                   "readonly", 0, 0, -1) == REDISMODULE_ERR);
+                                   "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",
                                    0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",

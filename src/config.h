@@ -3,7 +3,7 @@
 
 #include "redismodule.h"
 #include "dep/rmr/endpoint.h"
-
+#include <string.h>
 typedef enum { ClusterType_RedisOSS = 0, ClusterType_RedisLabs = 1 } MRClusterType;
 
 typedef struct {
@@ -19,11 +19,16 @@ extern SearchClusterConfig clusterConfig;
 
 #define DEFAULT_CLUSTER_CONFIG                                           \
   (SearchClusterConfig) {                                                \
-    .numPartitions = 1, .type = ClusterType_RedisOSS, .myEndpoint = NULL \
+    .numPartitions = 1, .type = DetectClusterType(), .myEndpoint = NULL \
   }
 
+/* Detect the cluster type, by trying to see if we are running inside RLEC.
+ * If we cannot determine, we return OSS type anyway
+ */
+MRClusterType DetectClusterType();
+
 /* Load the configuration from the module arguments.
- * Argument format: PARTITIONS {num_partitions} TYPE {cluster type} ENDPOINT {[password@]host:port}
+ * Argument format: PARTITIONS {num_partitions} ENDPOINT {[password@]host:port}
  */
 int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 

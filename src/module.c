@@ -526,8 +526,8 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     case ClusterType_RedisOSS:
     default:
       // init the redis topology updater loop
-      if (InitRedisTopologyUpdater(clusterConfig.myEndpoint) == REDIS_ERR) {
-        RedisModule_Log(ctx, "error", "Could not init redis cluster topology updater. Aborting");
+      if (InitRedisTopologyUpdater() == REDIS_ERR) {
+        RedisModule_Log(ctx, "warning", "Could not init redis cluster topology updater. Aborting");
         return REDISMODULE_ERR;
       }
       sf = CRC16ShardFunc;
@@ -541,6 +541,39 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
+/** A dummy command handler, for commands that are disabled when running the module in OSS clusters
+ * when it is not an internal OSS build. */
+int DisabledCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  return RedisModule_ReplyWithError(ctx, "Module Disabled in Open Source Redis");
+}
+
+/** A wrapper function that safely checks whether we are running in OSS cluster when registering
+ * commands.
+ * If we are, and the module was not compiled for oss clusters, this wrapper will return a pointer
+ * to a dummy function disabling the actual handler.
+ *
+ * If we are running in RLEC or in a special OSS build - we simply return the original command.
+ *
+ * All coordinator handlers must be wrapped in this decorator.
+ */
+static RedisModuleCmdFunc SafeCmd(RedisModuleCmdFunc f) {
+
+#ifndef REDISEARCH_OSS_BUILD
+  /* If we are running inside OSS cluster and not built for oss, we return the dummy handler */
+  if (clusterConfig.type == ClusterType_RedisOSS) {
+    return DisabledCommandHandler;
+  }
+#endif
+  /* Valid - we return the original function */
+  return f;
+}
+
+#define RM_TRY(expr)                                                  \
+  if (expr == REDISMODULE_ERR) {                                      \
+    RedisModule_Log(ctx, "warning", "Could not run " __STRING(expr)); \
+    return REDISMODULE_ERR;                                           \
+  }
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (RedisModule_Init(ctx, "ft", 9, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
@@ -549,81 +582,56 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
   // Init RediSearch internal search
   if (RediSearch_InitModuleInternal(ctx, argv, argc) == REDISMODULE_ERR) {
-    RedisModule_Log(ctx, "error", "Could not init search library...");
+    RedisModule_Log(ctx, "warning", "Could not init search library...");
     return REDISMODULE_ERR;
   }
 
   // Init the configuration and global cluster structs
   if (initSearchCluster(ctx, argv, argc) == REDISMODULE_ERR) {
-    RedisModule_Log(ctx, "error", "Could not init MR search cluster");
+    RedisModule_Log(ctx, "warning", "Could not init MR search cluster");
     return REDISMODULE_ERR;
   }
 
   /*********************************************************
   * Single-shard simple commands
   **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "FT.ADD", SingleShardCommandHandler, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-  if (RedisModule_CreateCommand(ctx, "FT.DEL", SingleShardCommandHandler, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-  if (RedisModule_CreateCommand(ctx, "FT.ADDHASH", SingleShardCommandHandler, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADD", SafeCmd(SingleShardCommandHandler), "readonly", 0,
+                                   0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DEL", SafeCmd(SingleShardCommandHandler), "readonly", 0,
+                                   0, -1));
+
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(SingleShardCommandHandler),
+                                   "readonly", 0, 0, -1));
 
   /*********************************************************
    * Multi shard, fanout commands
    **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "FT.CREATE", MastersFanoutCommandHandler, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-  if (RedisModule_CreateCommand(ctx, "FT.DROP", MastersFanoutCommandHandler, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-
-  if (RedisModule_CreateCommand(ctx, "FT.BROADCAST", BroadcastCommand, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersFanoutCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.BROADCAST", SafeCmd(BroadcastCommand), "readonly", 0, 0,
+                                   -1));
 
   /*********************************************************
   * Complex coordination search commands
   **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "FT.LSEARCH", LocalSearchCommandHandler, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-
-  if (RedisModule_CreateCommand(ctx, "FT.FSEARCH", FlatSearchCommandHandler, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
-
-  if (RedisModule_CreateCommand(ctx, "FT.SEARCH", FlatSearchCommandHandler, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR) {
-    return REDISMODULE_ERR;
-  }
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler),
+                                   "readonly", 0, 0, -1) == REDISMODULE_ERR);
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",
+                                   0, 0, -1));
 
   /*********************************************************
   * RS Cluster specific commands
   **********************************************************/
-  if (RedisModule_CreateCommand(ctx, "FT.CLUSTERSET", SetClusterCommand, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR)
-    return REDISMODULE_ERR;
-
-  if (RedisModule_CreateCommand(ctx, "FT.CLUSTERREFRESH", RefreshClusterCommand, "readonly", 0, 0,
-                                -1) == REDISMODULE_ERR)
-    return REDISMODULE_ERR;
-
-  if (RedisModule_CreateCommand(ctx, "FT.CLUSTERINFO", ClusterInfoCommand, "readonly", 0, 0, -1) ==
-      REDISMODULE_ERR)
-    return REDISMODULE_ERR;
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERSET", SafeCmd(SetClusterCommand), "readonly", 0,
+                                   0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERREFRESH", SafeCmd(RefreshClusterCommand),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERINFO", SafeCmd(ClusterInfoCommand), "readonly",
+                                   0, 0, -1));
 
   return REDISMODULE_OK;
 }

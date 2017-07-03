@@ -1,5 +1,5 @@
-#ifndef __RMR_REDIS_CLUSTER_H__
-#define __RMR_REDIS_CLUSTER_H__
+#ifndef RMR_REDIS_CLUSTER_H__
+#define RMR_REDIS_CLUSTER_H__
 
 #include "cluster.h"
 

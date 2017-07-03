@@ -19,11 +19,6 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
     return REDISMODULE_ERR;
   }
 
-  for (int i = 0; i < argc; i++) {
-    printf("%s ", RedisModule_StringPtrLen(argv[i], NULL));
-  }
-  printf("\n");
-
   /* Parse the partition number */
   long long numPartitions = 0;
   RMUtil_ParseArgsAfter("PARTITIONS", argv, argc, "l", &numPartitions);
@@ -32,29 +27,7 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
     return REDISMODULE_ERR;
   }
   conf->numPartitions = numPartitions;
-
-  const char *clusterType = NULL;
-  RMUtil_ParseArgsAfter("TYPE", argv, argc, "c", &clusterType);
-
-  int found = 0;
-  if (clusterType) {
-    /* Parse the cluster type and make sure it's valid */
-    const char *clusterTypes[] = {[ClusterType_RedisOSS] = CLUSTER_TYPE_OSS,
-                                  [ClusterType_RedisLabs] = CLUSTER_TYPE_RLABS};
-
-    for (int i = 0; !found && i < sizeof(clusterTypes) / sizeof(const char *); i++) {
-      if (!strcmp(clusterType, clusterTypes[i])) {
-        conf->type = i;
-        found = 1;
-        break;
-      }
-    }
-  }
-  // the cluster type was not found
-  if (!found) {
-    RedisModule_Log(ctx, "error", "Invalid cluster type %s\n", clusterType);
-    return REDISMODULE_ERR;
-  }
+  conf->type = DetectClusterType();
 
   // Parse the endpoint
   char *ep = NULL;
@@ -72,4 +45,30 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
   }
 
   return REDISMODULE_OK;
+}
+
+/* Detect the cluster type, by trying to see if we are running inside RLEC.
+ * If we cannot determine, we return OSS type anyway
+ */
+MRClusterType DetectClusterType() {
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
+
+  RedisModuleCallReply *r = RedisModule_Call(ctx, "INFO", "c", "SERVER");
+  MRClusterType ret = ClusterType_RedisOSS;
+
+  if (r && RedisModule_CallReplyType(r) == REDISMODULE_REPLY_STRING) {
+    size_t len;
+    // INFO SERVER should contain the term rlec_version in it if we are inside an RLEC shard
+    const char *str = RedisModule_CallReplyStringPtr(r, &len);
+    if (str) {
+
+      if (strnstr(str, "rlec_version", len) != NULL) {
+        ret = ClusterType_RedisLabs;
+      }
+    }
+    RedisModule_FreeCallReply(r);
+  }
+  // RedisModule_ThreadSafeContextUnlock(ctx);
+  RedisModule_FreeThreadSafeContext(ctx);
+  return ret;
 }

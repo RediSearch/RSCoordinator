@@ -60,8 +60,17 @@ libuv.a:
 libredisearch.a:
 	make -C dep/RediSearch/src libredisearch.a
 
+# Remove the module base file so we always recompile it with the correct build flags
+module.so: $(shell rm -f module.o)
 module.so: rmr rmutil libuv.a libredisearch.a $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
+
+
+# OSS is a special build for internal testing on OSS clusters. 
+# Unless the module is built with "make oss" it cannot run inside OSS cluster
+oss: CFLAGS+=-DREDISEARCH_OSS_BUILD
+oss: module.so
+
 
 rmr:
 	$(MAKE) -C dep/rmr hiredis all
@@ -77,9 +86,10 @@ clean:
 package: module.so
 	mkdir -p ../build
 	$(eval PACK=$(shell module_packer -c "PARTITIONS 1 TYPE redislabs"  -o "../build/rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
+#.PHONY: package
 
 upload: package
-	s3cmd put $(PACK) s3://redismodules/rscoordinator/
+	s3cmd put  $(PACK) --acl-public s3://redismodules/rscoordinator/
 .PHONY: upload	
 
 deepclean:

@@ -360,7 +360,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
                 self.assertEqual([0], res)
 
-    #@unittest.expectedFailure
+    @unittest.expectedFailure
     def testSortBy(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -415,7 +415,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertEqual(r.execute_command('ft.search', 'idx', 'constant -(term0|term1|term2|term3|term4|nothing)', 'nocontent'), [0])
             #self.assertEqual(r.execute_command('ft.search', 'idx', 'constant -(term1 term2)', 'nocontent')[0], N)
 
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def testInKeys(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')

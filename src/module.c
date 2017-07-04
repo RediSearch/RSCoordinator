@@ -74,6 +74,7 @@ typedef struct {
   int withScores;
   int withPayload;
   int noContent;
+
 } searchRequestCtx;
 
 void searchRequestCtx_Free(searchRequestCtx *r) {
@@ -403,6 +404,23 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     snprintf(buf, sizeof(buf), "%lld", req->limit + req->offset);
     MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf);
   }
+
+  // Tag the InKeys arguments
+  int inKeysPos = RMUtil_ArgIndex("INKEYS", argv, argc);
+
+  if (inKeysPos > 2) {
+    long long numFilteredIds = 0;
+    // Get the number of INKEYS args
+    RMUtil_ParseArgsAfter("INKEYS", &argv[inKeysPos], argc - inKeysPos, "l", &numFilteredIds);
+    // If we won't overflow - tag each key
+    if (numFilteredIds > 0 && numFilteredIds + inKeysPos + 1 < argc) {
+      inKeysPos += 2;  // the start of the actual keys
+      for (int x = inKeysPos; x < inKeysPos + numFilteredIds && x < argc; x++) {
+        SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, x, x);
+      }
+    }
+  }
+  MRCommand_Print(&cmd);
 
   /* Replace our own FT command with _FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH");

@@ -49,13 +49,14 @@ void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg);
 
 int MRCommand_GetShardingKey(MRCommand *cmd);
+int MRCommand_GetPartitioningKey(MRCommand *cmd);
 typedef enum {
-  MRCommand_SingleKey,
-  MRCommand_MultiKey,
-  MRCommand_Read,
-  MRCommand_Write,
-  MRCommand_Coordination,
-  MRCommand_NoKey,
+  MRCommand_SingleKey = 0x01,
+  MRCommand_MultiKey = 0x02,
+  MRCommand_Read = 0x04,
+  MRCommand_Write = 0x08,
+  MRCommand_Coordination = 0x10,
+  MRCommand_NoKey = 0x20,
 } MRCommandFlags;
 
 MRCommandFlags MRCommand_GetFlags(MRCommand *cmd);

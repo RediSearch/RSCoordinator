@@ -281,7 +281,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             res  = r.execute_command('ft.search', 'idx', 'hello ~world ~werld', 'nocontent', 'scorer', 'DISMAX')
             self.assertEqual([3L, 'doc3', 'doc2', 'doc1'], res)
     
-    #@unittest.expectedFailure
     def testExplain(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -307,7 +306,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
   }
 }
 """)
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def testPaging(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -315,7 +314,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 'ft.create', 'idx', 'schema', 'foo', 'text', 'bar', 'numeric', 'sortable'))
             N = 100
             for i in range(N):
-                self.assertOk(r.execute_command('ft.add', 'idx', '%d' % i, 1, 'fields',
+                self.assertOk(r.execute_command('ft.add', 'idx', '%d' % i, float(i+1)/float(N), 'fields',
                                                 'foo', 'hello', 'bar', i))
             
 
@@ -361,7 +360,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
                 self.assertEqual([0], res)
 
-    @unittest.expectedFailure
+    #@unittest.expectedFailure
     def testSortBy(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -792,7 +791,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[-inf +inf]', "nocontent")
                 self.assertEqual(100, res[0])
 
-    @unittest.expectedFailure
     def testSuggestions(self):
 
         with self.redis() as r:

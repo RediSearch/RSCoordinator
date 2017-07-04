@@ -143,10 +143,10 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   }
 
   long long total = 0;
-  double minScore = 0;
   MRReply *lastError = NULL;
-  heap_t *pq = malloc(heap_sizeof(req->offset + req->limit));
-  heap_init(pq, cmp_results, NULL, req->offset + req->limit);
+  size_t num = req->offset + req->limit;
+  heap_t *pq = malloc(heap_sizeof(num));
+  heap_init(pq, cmp_results, NULL, num);
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
     if (MRReply_Type(arr) == MR_REPLY_ERROR) {
@@ -174,24 +174,30 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
       for (int j = 1; j < len; j += step) {
         searchResult *res = newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset);
 
-        // printf("Reply score: %f, minScore: %f\n", res->score, minScore);
+        // fprintf(stderr, "Response %d result %d Reply docId %s score: %f\n", i, j, res->id,
+        //         res->score);
 
         if (heap_count(pq) < heap_size(pq)) {
           // printf("Offering result score %f\n", res->score);
           heap_offerx(pq, res);
 
-        } else if (res->score > minScore) {
-          searchResult *smallest = heap_poll(pq);
-          heap_offerx(pq, res);
-          minScore = smallest->score;
-          free(smallest);
         } else {
-          free(res);
+          searchResult *smallest = heap_peek(pq);
+          if (cmp_results(res, smallest, NULL) < 0) {
+            smallest = heap_poll(pq);
+            heap_offerx(pq, res);
+            free(smallest);
+          } else {
+            free(res);
+          }
         }
       }
     }
   }
 
+  // If we didn't get any results and we got an error - return it.
+  // If some shards returned results and some errors - we prefer to show the results we got an not
+  // return an error. This might change in the future
   if (total == 0 && lastError != NULL) {
     MR_ReplyWithMRReply(ctx, lastError);
     searchRequestCtx_Free(req);
@@ -201,6 +207,11 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   // Reverse the top N results
   size_t qlen = heap_count(pq);
+
+  // // If we didn't get enough results - we return nothing
+  // if (qlen <= req->offset) {
+  //   qlen = 0;
+  // }
 
   size_t pos = qlen;
   searchResult *results[qlen];
@@ -212,7 +223,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   int len = 1;
   RedisModule_ReplyWithLongLong(ctx, total);
-  for (pos = req->offset; pos < qlen && pos < req->offset + req->limit; pos++) {
+  for (pos = req->offset; pos < qlen && pos < num; pos++) {
     searchResult *res = results[pos];
     RedisModule_ReplyWithStringBuffer(ctx, res->id, strlen(res->id));
     len++;
@@ -251,14 +262,19 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
+  int partPos = MRCommand_GetPartitioningKey(&cmd);
 
   /* Rewrite the sharding key based on the partitioning key */
-  SearchCluster_RewriteCommand(&__searchCluster, &cmd, 2);
+  if (partPos > 0) {
+    SearchCluster_RewriteCommand(&__searchCluster, &cmd, partPos);
+  }
 
   /* Rewrite the partitioning key as well */
 
   if (MRCommand_GetFlags(&cmd) & MRCommand_MultiKey) {
-    SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, 2, 2);
+    if (partPos > 0) {
+      SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, partPos, partPos);
+    }
   }
   MR_MapSingle(MR_CreateCtx(ctx, NULL), singleReplyReducer, cmd);
 
@@ -383,6 +399,9 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
   if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
     MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%lld", req->limit + req->offset);
+    MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf);
   }
 
   /* Replace our own FT command with _FT. command */
@@ -557,7 +576,8 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
-/** A dummy command handler, for commands that are disabled when running the module in OSS clusters
+/** A dummy command handler, for commands that are disabled when running the module in OSS
+ * clusters
  * when it is not an internal OSS build. */
 int DisabledCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return RedisModule_ReplyWithError(ctx, "Module Disabled in Open Source Redis");
@@ -620,6 +640,15 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));
+
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SUGADD", SafeCmd(SingleShardCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SUGGET", SafeCmd(SingleShardCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SUGDEL", SafeCmd(SingleShardCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SUGLEN", SafeCmd(SingleShardCommandHandler), "readonly",
+                                   0, 0, -1));
 
   /*********************************************************
    * Multi shard, fanout commands

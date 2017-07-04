@@ -7,44 +7,52 @@ struct mrCommandConf {
   const char *command;
   MRCommandFlags flags;
   int keyPos;
+  int partitionKeyPos;
 };
 
 struct mrCommandConf __commandConfig[] = {
 
     // document commands
-    {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey, 1},
-    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey, 1},
-    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey, 1},
+    {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey, 1, 2},
+    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey, 1, 2},
+    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey, 1, 2},
 
     // index commands
-    {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1},
+    {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+    {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1, 1},
 
     // Suggest commands
-    {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1},
-    {"_FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"_FT.SUGLEN", MRCommand_Read | MRCommand_SingleKey, 1},
-    {"_FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1},
+    {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+    {"_FT.SUGLEN", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+    {"_FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1, 1},
 
     // Coordination commands - they are all read commands since they can be triggered from slaves
-    {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.EXPLAIN", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1, 2},
+    {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.EXPLAIN", MRCommand_Read | MRCommand_Coordination, -1, 1},
 
-    {"FT.XSEARCH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.INFO", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.DROP", MRCommand_Read | MRCommand_Coordination, -1},
-    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1},
+    {"FT.FSEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1, -1},
+    {"FT.INFO", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1, 2},
+    {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1, 2},
+    {"FT.DROP", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1, 1},
 
-    {"KEYS", MRCommand_Read | MRCommand_NoKey, -1},
+    // Auto complete coordination commands
+    {"FT.SUGADD", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.SUGGET", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.SUGDEL", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.SUGLEN", MRCommand_Read | MRCommand_Coordination, -1, 1},
+
+    {"KEYS", MRCommand_Read | MRCommand_NoKey, -1, -1},
+    {"INFO", MRCommand_Read | MRCommand_NoKey, -1, -1},
 
     // sentinel
     {NULL},
@@ -151,6 +159,7 @@ void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix) {
   char *buf = NULL;
   asprintf(&buf, "%s.%s", newPrefix, suffix);
   MRCommand_ReplaceArgNoDup(cmd, 0, buf);
+   _getCommandConfId(cmd);
 }
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
   if (index < 0 || index >= cmd->num) {
@@ -180,6 +189,14 @@ int MRCommand_GetShardingKey(MRCommand *cmd) {
   }
 
   return __commandConfig[cmd->id].keyPos;
+}
+
+int MRCommand_GetPartitioningKey(MRCommand *cmd) {
+  if (cmd->id < 0) {
+    return 1;  // default
+  }
+
+  return __commandConfig[cmd->id].partitionKeyPos;
 }
 
 /* Return 1 if the command should not be sharded (i.e a coordination command or system command) */

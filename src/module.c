@@ -6,6 +6,7 @@
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
+#include "dep/rmutil/strings.h"
 #include "crc16_tags.h"
 #include "crc12_tags.h"
 #include "dep/rmr/redis_cluster.h"
@@ -15,6 +16,7 @@
 #include "search_cluster.h"
 #include "config.h"
 #include "dep/RediSearch/src/module.h"
+#include <math.h>
 
 SearchCluster __searchCluster;
 
@@ -65,6 +67,8 @@ typedef struct {
   double score;
   MRReply *fields;
   MRReply *payload;
+  const char *sortKey;
+  double sortKeyNum;
 } searchResult;
 
 typedef struct {
@@ -73,6 +77,9 @@ typedef struct {
   long long limit;
   int withScores;
   int withPayload;
+  int withSortby;
+  int sortAscending;
+  int withSortingKeys;
   int noContent;
 
 } searchRequestCtx;
@@ -95,6 +102,21 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
   // marks the user set WITHSCORES. internally it's always set
   req->withScores = RMUtil_ArgExists("WITHSCORES", argv, argc, 3) != 0;
 
+  // Parse SORTBY ... ASC
+  int sortByIndex = RMUtil_ArgIndex("SORTBY", argv, argc);
+  req->withSortby = sortByIndex > 2;
+  req->sortAscending = 1;
+  if (req->withSortby && sortByIndex + 2 < argc) {
+    if (RMUtil_StringEqualsCaseC(argv[sortByIndex + 2], "DESC")) {
+      fprintf(stderr, "DESC!!!\n");
+      req->sortAscending = 0;
+    }
+  }
+
+  req->withSortingKeys = RMUtil_ArgExists("WITHSORTKEYS", argv, argc, 3) != 0;
+  fprintf(stderr, "Sortby: %d, asc: %d withsort: %d\n", req->withSortby, req->sortAscending,
+          req->withSortingKeys);
+
   // Detect "NOCONTENT"
   req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, 3) != 0;
   req->withPayload = RMUtil_ArgExists("WITHPAYLOADS", argv, argc, 3) != 0;
@@ -111,14 +133,28 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
 
   const searchResult *r1 = p1, *r2 = p2;
 
+  const searchRequestCtx *req = udata;
+  if (r1->sortKey && r2->sortKey && req->withSortby) {
+    if (r1->sortKeyNum != HUGE_VAL && r2->sortKeyNum != HUGE_VAL) {
+      // fprintf(stderr, "Comparing NUMBAS! %f<>%f\n", r2->sortKeyNum, r1->sortKeyNum);
+      double cmp = r2->sortKeyNum - r1->sortKeyNum;
+      return (req->sortAscending ? -cmp : cmp);
+    }
+
+    // fprintf(stderr, "Comparing %s<>%s\n", r2->sortKey, r1->sortKey);
+    return (req->sortAscending ? -1 : 1) * strcmp(r2->sortKey, r1->sortKey);
+  }
+
   double s1 = r1->score, s2 = r2->score;
 
   return s1 < s2 ? 1 : (s1 > s2 ? -1 : strcmp(r2->id, r1->id));
 }
 
-searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset) {
+searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset,
+                        int sortKeyOffset) {
   searchResult *res = malloc(sizeof(searchResult));
-
+  res->sortKey = NULL;
+  res->sortKeyNum = HUGE_VAL;
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
   // if the id contains curly braces, get rid of them now
   char *brace = strchr(res->id, '{');
@@ -131,6 +167,17 @@ searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset,
   res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
   // get payloads
   res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, j + payloadOffset) : NULL;
+
+  res->sortKey =
+      sortKeyOffset > 0 ? MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), NULL) : NULL;
+  if (res->sortKey) {
+    char *eptr;
+    double d = strtod(res->sortKey, &eptr);
+    if (eptr != res->sortKey && *eptr == 0) {
+      // fprintf(stderr, "Parsed %s as %f\n", res->sortKey, d);
+      res->sortKeyNum = d;
+    }
+  }
   return res;
 }
 
@@ -147,7 +194,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   MRReply *lastError = NULL;
   size_t num = req->offset + req->limit;
   heap_t *pq = malloc(heap_sizeof(num));
-  heap_init(pq, cmp_results, NULL, num);
+  heap_init(pq, cmp_results, req, num);
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
     if (MRReply_Type(arr) == MR_REPLY_ERROR) {
@@ -160,20 +207,26 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
       size_t len = MRReply_Length(arr);
 
       int step = 3;  // 1 for key, 1 for score, 1 for fields
-      int scoreOffset = 1, fieldsOffset = 2, payloadOffset = -1;
+      int scoreOffset = 1, fieldsOffset = 2, payloadOffset = -1, sortKeyOffset = -1;
       if (req->withPayload) {  // save an extra step for payloads
         step++;
         payloadOffset = 2;
         fieldsOffset = 3;
+      }
+      if (req->withSortby) {
+        step++;
+        sortKeyOffset = fieldsOffset++;
       }
       // nocontent - one less field, and the offset is -1 to avoid parsing it
       if (req->noContent) {
         step--;
         fieldsOffset = -1;
       }
-
+      fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
+              scoreOffset, fieldsOffset, sortKeyOffset);
       for (int j = 1; j < len; j += step) {
-        searchResult *res = newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset);
+        searchResult *res =
+            newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
 
         // fprintf(stderr, "Response %d result %d Reply docId %s score: %f\n", i, j, res->id,
         //         res->score);
@@ -184,7 +237,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
         } else {
           searchResult *smallest = heap_peek(pq);
-          if (cmp_results(res, smallest, NULL) < 0) {
+          if (cmp_results(res, smallest, req) < 0) {
             smallest = heap_poll(pq);
             heap_offerx(pq, res);
             free(smallest);
@@ -236,6 +289,14 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
       MR_ReplyWithMRReply(ctx, res->payload);
       len++;
+    }
+    if (req->withSortingKeys && req->withSortby) {
+      len++;
+      if (res->sortKey) {
+        RedisModule_ReplyWithStringBuffer(ctx, res->sortKey, strlen(res->sortKey));
+      } else {
+        RedisModule_ReplyWithNull(ctx);
+      }
     }
     if (!req->noContent) {
       MR_ReplyWithMRReply(ctx, res->fields);
@@ -358,6 +419,9 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
   }
+  if (!req->withSortingKeys && req->withSortby) {
+    MRCommand_AppendArgs(&cmd, 1, "WITHSORTKEYS");
+  }
 
   // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
@@ -394,6 +458,11 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   if (!req->withScores) {
     MRCommand_AppendArgs(&cmd, 1, "WITHSCORES");
+  }
+
+  if (!req->withSortingKeys && req->withSortby) {
+    MRCommand_AppendArgs(&cmd, 1, "WITHSORTKEYS");
+    // req->withSortingKeys = 1;
   }
 
   // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge

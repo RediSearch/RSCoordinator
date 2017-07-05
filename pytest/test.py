@@ -360,7 +360,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
                 self.assertEqual([0], res)
 
-    @unittest.expectedFailure
+    
     def testSortBy(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -373,15 +373,15 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for _ in r.retry_with_rdb_reload():
           
                 res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo')
-                self.assertEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
+                self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
                 res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo', 'desc')
-                self.assertEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
+                self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
                 res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc')
-                self.assertEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
+                self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
                 res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'asc')
-                self.assertEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc', 'withscores', 'limit', '2', '5')
-                self.assertEqual([100L, 'doc2', '5', 'doc3', '4', 'doc4', '3', 'doc5', '2', 'doc6', '1'], res)
+                self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
+                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc', 'withsortkeys', 'limit', '2', '5')
+                self.assertListEqual([100L, 'doc2', '98', 'doc3', '97', 'doc4', '96', 'doc5', '95', 'doc6', '94'], res)
 
 
 
@@ -415,7 +415,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertEqual(r.execute_command('ft.search', 'idx', 'constant -(term0|term1|term2|term3|term4|nothing)', 'nocontent'), [0])
             #self.assertEqual(r.execute_command('ft.search', 'idx', 'constant -(term1 term2)', 'nocontent')[0], N)
 
-    #@unittest.expectedFailure
     def testInKeys(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')

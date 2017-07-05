@@ -108,14 +108,13 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
   req->sortAscending = 1;
   if (req->withSortby && sortByIndex + 2 < argc) {
     if (RMUtil_StringEqualsCaseC(argv[sortByIndex + 2], "DESC")) {
-      fprintf(stderr, "DESC!!!\n");
       req->sortAscending = 0;
     }
   }
 
   req->withSortingKeys = RMUtil_ArgExists("WITHSORTKEYS", argv, argc, 3) != 0;
-  fprintf(stderr, "Sortby: %d, asc: %d withsort: %d\n", req->withSortby, req->sortAscending,
-          req->withSortingKeys);
+  // fprintf(stderr, "Sortby: %d, asc: %d withsort: %d\n", req->withSortby, req->sortAscending,
+  //         req->withSortingKeys);
 
   // Detect "NOCONTENT"
   req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, 3) != 0;
@@ -222,8 +221,8 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         step--;
         fieldsOffset = -1;
       }
-      fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
-              scoreOffset, fieldsOffset, sortKeyOffset);
+      // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
+      //         scoreOffset, fieldsOffset, sortKeyOffset);
       for (int j = 1; j < len; j += step) {
         searchResult *res =
             newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
@@ -489,7 +488,7 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
       }
     }
   }
-  MRCommand_Print(&cmd);
+  // MRCommand_Print(&cmd);
 
   /* Replace our own FT command with _FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH");

@@ -35,7 +35,7 @@ class SearchTestCase(ModuleTestCase('../redisearch.so')):
 
     def createIndex(self, r):
 
-        r.flushdb()
+        r.execute_command('ft.broadcast', 'flushdb')
         self.assertOk(r.execute_command(
             'ft.create', 'idx', 'schema', 'txt', 'text'))
 

@@ -22,8 +22,6 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                                             'title', 'hello world',
                                             'body', 'lorem ist ipsum'))
 
-        for _ in r.retry_with_rdb_reload():
-
             ret = itertools.chain(*self.broadcast(r, 'keys', '*'))
             for s in ret:
                 self.assertTrue(s.startswith('idx:idx{') or s.startswith('doc1{') or s.startswith('ft:idx{'))
@@ -40,46 +38,45 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
                                                 'f', 'hello world' if i % 2 == 0 else 'hallo werld'))
 
-            for _ in r.retry_with_rdb_reload():
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello|hallo', 'nocontent', 'limit', '0', '100')
-                self.assertEqual(N + 1, len(res))
-                self.assertEqual(N, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello|hallo', 'nocontent', 'limit', '0', '100')
+            self.assertEqual(N + 1, len(res))
+            self.assertEqual(N, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello|world', 'nocontent', 'limit', '0', '100')
-                self.assertEqual(51, len(res))
-                self.assertEqual(50, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello|world', 'nocontent', 'limit', '0', '100')
+            self.assertEqual(51, len(res))
+            self.assertEqual(50, res[0])
 
-                res = r.execute_command('ft.search', 'idx', '(hello|hello)(world|world)',
-                                        'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(51, len(res))
-                self.assertEqual(50, res[0])
+            res = r.execute_command('ft.search', 'idx', '(hello|hello)(world|world)',
+                                    'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(51, len(res))
+            self.assertEqual(50, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', '(hello|hallo)(werld|world)', 'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(101, len(res))
-                self.assertEqual(100, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', '(hello|hallo)(werld|world)', 'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(101, len(res))
+            self.assertEqual(100, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', '(hallo|hello)(world|werld)', 'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(101, len(res))
-                self.assertEqual(100, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', '(hallo|hello)(world|werld)', 'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(101, len(res))
+            self.assertEqual(100, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', '(hello|werld)(hallo|world)', 'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(101, len(res))
-                self.assertEqual(100, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', '(hello|werld)(hallo|world)', 'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(101, len(res))
+            self.assertEqual(100, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', '(hello|hallo) world', 'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(51, len(res))
-                self.assertEqual(50, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', '(hello|hallo) world', 'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(51, len(res))
+            self.assertEqual(50, res[0])
 
-                res = r.execute_command(
-                    'ft.search', 'idx', '(hello|world)(hallo|werld)', 'nocontent', 'verbatim', 'limit', '0', '100')
-                self.assertEqual(1, len(res))
-                self.assertEqual(0, res[0])
+            res = r.execute_command(
+                'ft.search', 'idx', '(hello|world)(hallo|werld)', 'nocontent', 'verbatim', 'limit', '0', '100')
+            self.assertEqual(1, len(res))
+            self.assertEqual(0, res[0])
 
     def testSearch(self):
         with self.redis() as r:
@@ -92,46 +89,45 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertOk(r.execute_command('ft.add', 'idx', 'doc2', 1.0, 'fields',
                                             'title', 'hello another world',
                                             'body', 'lorem ist ipsum lorem lorem'))
-            for _ in r.retry_with_rdb_reload():
 
-                res = r.execute_command('ft.search', 'idx', 'hello')
-                
-                self.assertTrue(len(res) == 5)
-                self.assertEqual(res[0], 2L)
-                self.assertEqual(res[1], "doc2")
-                self.assertTrue(isinstance(res[2], list))
-                self.assertTrue('title' in res[2])
-                self.assertTrue('hello another world' in res[2])
-                self.assertEqual(res[3], "doc1")
-                self.assertTrue('hello world' in res[4])
+            res = r.execute_command('ft.search', 'idx', 'hello')
+            
+            self.assertTrue(len(res) == 5)
+            self.assertEqual(res[0], 2L)
+            self.assertEqual(res[1], "doc2")
+            self.assertTrue(isinstance(res[2], list))
+            self.assertTrue('title' in res[2])
+            self.assertTrue('hello another world' in res[2])
+            self.assertEqual(res[3], "doc1")
+            self.assertTrue('hello world' in res[4])
 
-                # Test searching with no content
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello', 'nocontent')
-                self.assertTrue(len(res) == 3)
-                self.assertEqual(res[0], 2L)
-                self.assertEqual(res[1], "doc2")
-                self.assertEqual(res[2], "doc1")
+            # Test searching with no content
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello', 'nocontent')
+            self.assertTrue(len(res) == 3)
+            self.assertEqual(res[0], 2L)
+            self.assertEqual(res[1], "doc2")
+            self.assertEqual(res[2], "doc1")
 
-                # Test searching WITHSCORES
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello', 'WITHSCORES')
-                self.assertEqual(len(res), 7)
-                self.assertEqual(res[0], 2L)
-                self.assertEqual(res[1], "doc2")
-                self.assertTrue(float(res[2]) > 0)
-                self.assertEqual(res[4], "doc1")
-                self.assertTrue(float(res[5]) > 0)
+            # Test searching WITHSCORES
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello', 'WITHSCORES')
+            self.assertEqual(len(res), 7)
+            self.assertEqual(res[0], 2L)
+            self.assertEqual(res[1], "doc2")
+            self.assertTrue(float(res[2]) > 0)
+            self.assertEqual(res[4], "doc1")
+            self.assertTrue(float(res[5]) > 0)
 
-                # Test searching WITHSCORES NOCONTENT
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello', 'WITHSCORES', 'NOCONTENT')
-                self.assertEqual(len(res), 5)
-                self.assertEqual(res[0], 2L)
-                self.assertEqual(res[1], "doc2")
-                self.assertTrue(float(res[2]) > 0)
-                self.assertEqual(res[3], "doc1")
-                self.assertTrue(float(res[4]) > 0)
+            # Test searching WITHSCORES NOCONTENT
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello', 'WITHSCORES', 'NOCONTENT')
+            self.assertEqual(len(res), 5)
+            self.assertEqual(res[0], 2L)
+            self.assertEqual(res[1], "doc2")
+            self.assertTrue(float(res[2]) > 0)
+            self.assertEqual(res[3], "doc1")
+            self.assertTrue(float(res[4]) > 0)
 
     def testDelete(self):
         with self.redis() as r:
@@ -164,16 +160,15 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertIn('doc%d' % i, res)
                 self.assertEqual(1, r.execute_command(
                     'ft.del', 'idx', 'doc%d' % i))
-            for _ in r.retry_with_rdb_reload():
-                did = 'rrrr'
-                self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
-                                                'f', 'hello world'))
-                self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
-                self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
-                self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
-                                                'f', 'hello world'))
-                self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
-                self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
+            did = 'rrrr'
+            self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
+                                            'f', 'hello world'))
+            self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
+            self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
+            self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
+                                            'f', 'hello world'))
+            self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
+            self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
 
     def testReplace(self):
 
@@ -200,19 +195,18 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', 1.0, 'replace', 'fields',
                                             'f', 'goodbye universe'))
 
-            for _ in r.retry_with_rdb_reload():
-                # make sure the query for hello world does not return the replaced
-                # document
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello world', 'nocontent')
-                self.assertEqual(1, res[0])
-                self.assertEqual('doc2', res[1])
+            # make sure the query for hello world does not return the replaced
+            # document
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello world', 'nocontent')
+            self.assertEqual(1, res[0])
+            self.assertEqual('doc2', res[1])
 
-                # search for the doc's new content
-                res = r.execute_command(
-                    'ft.search', 'idx', 'goodbye universe', 'nocontent')
-                self.assertEqual(1, res[0])
-                self.assertEqual('doc1', res[1])
+            # search for the doc's new content
+            res = r.execute_command(
+                'ft.search', 'idx', 'goodbye universe', 'nocontent')
+            self.assertEqual(1, res[0])
+            self.assertEqual('doc1', res[1])
 
     def testDrop(self):
         with self.redis() as r:
@@ -225,7 +219,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                                                 'f', 'hello world'))
                 
             keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
-            self.assertEqual(209, len(keys))
+            self.assertGreaterEqual(len(keys), 200)
 
             self.assertOk(r.execute_command('ft.drop', 'idx'))
             keys = list(itertools.chain(*self.broadcast(r, 'keys', '*')))
@@ -249,18 +243,17 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertOk(r.execute_command('ft.add', idx, 'doc1', 1.0, 'fields', 'foo', 'hello world'))
                 self.assertOk(r.execute_command('ft.add', idx, 'doc2', 1.0, 'fields', 'foo', 'to be or not to be'))
             
-            for _ in r.retry_with_rdb_reload():
-                # Normal index should return results just for 'hello world'
-                self.assertEqual([1, 'doc1'],  r.execute_command('ft.search', 'idx', 'hello world', 'nocontent'))
-                self.assertEqual([0],  r.execute_command('ft.search', 'idx', 'to be or not', 'nocontent'))
+            # Normal index should return results just for 'hello world'
+            self.assertEqual([1, 'doc1'],  r.execute_command('ft.search', 'idx', 'hello world', 'nocontent'))
+            self.assertEqual([0],  r.execute_command('ft.search', 'idx', 'to be or not', 'nocontent'))
 
-                # Custom SW index should return results just for 'to be or not'
-                self.assertEqual([0],  r.execute_command('ft.search', 'idx2', 'hello world', 'nocontent'))
-                self.assertEqual([1, 'doc2'],  r.execute_command('ft.search', 'idx2', 'to be or not', 'nocontent'))
+            # Custom SW index should return results just for 'to be or not'
+            self.assertEqual([0],  r.execute_command('ft.search', 'idx2', 'hello world', 'nocontent'))
+            self.assertEqual([1, 'doc2'],  r.execute_command('ft.search', 'idx2', 'to be or not', 'nocontent'))
 
-                # No SW index should return results for both
-                self.assertEqual([1, 'doc1'],  r.execute_command('ft.search', 'idx3', 'hello world', 'nocontent'))
-                self.assertEqual([1, 'doc2'],  r.execute_command('ft.search', 'idx3', 'to be or not', 'nocontent'))
+            # No SW index should return results for both
+            self.assertEqual([1, 'doc1'],  r.execute_command('ft.search', 'idx3', 'hello world', 'nocontent'))
+            self.assertEqual([1, 'doc2'],  r.execute_command('ft.search', 'idx3', 'to be or not', 'nocontent'))
 
 
     def testOptional(self):
@@ -346,19 +339,18 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for i in range(N):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
                                                 'foo', 'constant term%d' % (random.randrange(0, 5))))
-            for _ in r.retry_with_rdb_reload():
-                res = r.execute_command('ft.search', 'idx', 'constant term', 'nocontent')
-                self.assertEqual([0], res)
-                res = r.execute_command('ft.search', 'idx', 'constant term*', 'nocontent')
-                self.assertEqual(N, res[0])
-                res = r.execute_command('ft.search', 'idx', 'const* term*', 'nocontent')
-                self.assertEqual(N, res[0])
-                res = r.execute_command('ft.search', 'idx', 'constant term1*', 'nocontent')
-                self.assertGreater(res[0], 2)
-                res = r.execute_command('ft.search', 'idx', 'const* -term*', 'nocontent')
-                self.assertEqual([0], res)
-                res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
-                self.assertEqual([0], res)
+            res = r.execute_command('ft.search', 'idx', 'constant term', 'nocontent')
+            self.assertEqual([0], res)
+            res = r.execute_command('ft.search', 'idx', 'constant term*', 'nocontent')
+            self.assertEqual(N, res[0])
+            res = r.execute_command('ft.search', 'idx', 'const* term*', 'nocontent')
+            self.assertEqual(N, res[0])
+            res = r.execute_command('ft.search', 'idx', 'constant term1*', 'nocontent')
+            self.assertGreater(res[0], 2)
+            res = r.execute_command('ft.search', 'idx', 'const* -term*', 'nocontent')
+            self.assertEqual([0], res)
+            res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
+            self.assertEqual([0], res)
 
     
     def testSortBy(self):
@@ -370,18 +362,17 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for i in range(N):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
                                                 'foo', 'hello%03d world' % i, 'bar', 100-i))
-            for _ in r.retry_with_rdb_reload():
-          
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo')
-                self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo', 'desc')
-                self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc')
-                self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'asc')
-                self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
-                res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc', 'withsortkeys', 'limit', '2', '5')
-                self.assertListEqual([100L, 'doc2', '98', 'doc3', '97', 'doc4', '96', 'doc5', '95', 'doc6', '94'], res)
+        
+            res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo')
+            self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
+            res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'foo', 'desc')
+            self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
+            res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc')
+            self.assertListEqual([100L, 'doc0', 'doc1', 'doc2', 'doc3', 'doc4', 'doc5', 'doc6', 'doc7', 'doc8', 'doc9'], res)
+            res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'asc')
+            self.assertListEqual([100L, 'doc99', 'doc98', 'doc97', 'doc96', 'doc95', 'doc94', 'doc93', 'doc92', 'doc91', 'doc90'], res)
+            res = r.execute_command('ft.search', 'idx', 'world', 'nocontent', 'sortby', 'bar', 'desc', 'withsortkeys', 'limit', '2', '5')
+            self.assertListEqual([100L, 'doc2', '98', 'doc3', '97', 'doc4', '96', 'doc5', '95', 'doc6', '94'], res)
 
 
 
@@ -516,37 +507,35 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for i, hotel in enumerate(hotels):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'hotel{}'.format(i), 1.0, 'fields', 'name',
                                                 hotel[0], 'location', '{},{}'.format(hotel[2], hotel[1])))
+            res = r.execute_command('ft.search', 'idx', 'hilton')
+            self.assertEqual(len(hotels), res[0])
 
-            for _ in r.retry_with_rdb_reload():
-                res = r.execute_command('ft.search', 'idx', 'hilton')
-                self.assertEqual(len(hotels), res[0])
+            res = gsearch('hilton', "-0.1757", "51.5156", '1')
+            self.assertEqual(3, res[0])
+            self.assertEqual('hotel2', res[5])
+            self.assertEqual('hotel21', res[3])
+            self.assertEqual('hotel79', res[1])
 
-                res = gsearch('hilton', "-0.1757", "51.5156", '1')
-                self.assertEqual(3, res[0])
-                self.assertEqual('hotel2', res[5])
-                self.assertEqual('hotel21', res[3])
-                self.assertEqual('hotel79', res[1])
+            res = gsearch('hilton', "-0.1757", "51.5156", '10', 'km', 'nocontent', 'limit', 0, 20)
+            self.assertEqual(14, res[0])
+            self.assertEqual('hotel93', res[1])
+            self.assertEqual('hotel92', res[2])
+            self.assertEqual('hotel79', res[3])
 
-                res = gsearch('hilton', "-0.1757", "51.5156", '10', 'km', 'nocontent', 'limit', 0, 20)
-                self.assertEqual(14, res[0])
-                self.assertEqual('hotel93', res[1])
-                self.assertEqual('hotel92', res[2])
-                self.assertEqual('hotel79', res[3])
+            res2 = gsearch('hilton', "-0.1757", "51.5156", '10000', 'm', 'nocontent', 'limit', 0, 20)
+            self.assertEqual(set(res), set(res2))
 
-                res2 = gsearch('hilton', "-0.1757", "51.5156", '10000', 'm', 'nocontent', 'limit', 0, 20)
-                self.assertEqual(set(res), set(res2))
+            res = gsearch('heathrow', -0.44155, 51.45865, '10', 'm')
+            self.assertEqual(1, res[0])
+            self.assertEqual('hotel94', res[1])
 
-                res = gsearch('heathrow', -0.44155, 51.45865, '10', 'm')
-                self.assertEqual(1, res[0])
-                self.assertEqual('hotel94', res[1])
+            res = gsearch('heathrow', -0.44155, 51.45865, '10', 'km')
+            self.assertEqual(5, res[0])
+            self.assertIn('hotel94', res)
 
-                res = gsearch('heathrow', -0.44155, 51.45865, '10', 'km')
-                self.assertEqual(5, res[0])
-                self.assertIn('hotel94', res)
-
-                res = gsearch('heathrow', -0.44155, 51.45865, '5', 'km')
-                self.assertEqual(3, res[0])
-                self.assertIn('hotel94', res)
+            res = gsearch('heathrow', -0.44155, 51.45865, '5', 'km')
+            self.assertEqual(3, res[0])
+            self.assertIn('hotel94', res)
             
     @unittest.expectedFailure
     def testAddHash(self):
@@ -729,66 +718,65 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1, 'fields',
                                                 'title', 'hello kitty', 'score', i, 'price', 100 + 10 * i))
 
-            for _ in r.retry_with_rdb_reload():
-                res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
-                                        "filter", "score", 0, 100)
+            res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
+                                    "filter", "score", 0, 100)
 
-                self.assertEqual(11, len(res))
-                self.assertEqual(100, res[0])
+            self.assertEqual(11, len(res))
+            self.assertEqual(100, res[0])
 
-                res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
-                                        "filter", "score", 0, 50)
-                self.assertEqual(51, res[0])
-                res = r.execute_command('ft.search', 'idx', 'hello kitty', 'verbatim', "nocontent", "limit", 0, 100,
-                                        "filter", "score", "(0", "(50")
+            res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
+                                    "filter", "score", 0, 50)
+            self.assertEqual(51, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty', 'verbatim', "nocontent", "limit", 0, 100,
+                                    "filter", "score", "(0", "(50")
 
-                self.assertEqual(49, res[0])
-                res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
-                                        "filter", "score", "-inf", "+inf")
-                self.assertEqual(100, res[0])
+            self.assertEqual(49, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty', "nocontent",
+                                    "filter", "score", "-inf", "+inf")
+            self.assertEqual(100, res[0])
 
-                # test multi filters
-                scrange = (19, 90)
-                prrange = (290, 385)
-                res = r.execute_command('ft.search', 'idx', 'hello kitty',
-                                        "filter", "score", scrange[
-                                            0], scrange[1],
-                                        "filter", "price", prrange[0], prrange[1])
+            # test multi filters
+            scrange = (19, 90)
+            prrange = (290, 385)
+            res = r.execute_command('ft.search', 'idx', 'hello kitty',
+                                    "filter", "score", scrange[
+                                        0], scrange[1],
+                                    "filter", "price", prrange[0], prrange[1])
 
-                # print res
-                for doc in res[2::2]:
+            # print res
+            for doc in res[2::2]:
 
-                    sc = int(doc[doc.index('score') + 1])
-                    pr = int(doc[doc.index('price') + 1])
+                sc = int(doc[doc.index('score') + 1])
+                pr = int(doc[doc.index('price') + 1])
 
-                    self.assertTrue(sc >= scrange[0] and sc <= scrange[1])
-                    self.assertGreaterEqual(pr, prrange[0])
-                    self.assertLessEqual(pr, prrange[1])
+                self.assertTrue(sc >= scrange[0] and sc <= scrange[1])
+                self.assertGreaterEqual(pr, prrange[0])
+                self.assertLessEqual(pr, prrange[1])
 
-                self.assertEqual(10, res[0])
+            self.assertEqual(10, res[0])
 
-                res = r.execute_command('ft.search', 'idx', 'hello kitty',
-                                        "filter", "score", "19", "90",
-                                        "filter", "price", "90", "185")
-                
-                self.assertEqual(0, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty',
+                                    "filter", "score", "19", "90",
+                                    "filter", "price", "90", "185")
+            
+            self.assertEqual(0, res[0])
 
-                # Test numeric ranges as part of query syntax
-                res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[0 100]', "nocontent")
+            # Test numeric ranges as part of query syntax
+            res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[0 100]', "nocontent")
 
-                self.assertEqual(11, len(res))
-                self.assertEqual(100, res[0])
+            self.assertEqual(11, len(res))
+            self.assertEqual(100, res[0])
 
-                res = r.execute_command('ft.search', 'idx', 'hello kitty  @score:[0 50]', "nocontent")
-                self.assertEqual(51, res[0])
-                res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[(0 (50]', 'verbatim', "nocontent")
-                self.assertEqual(49, res[0])
-                res = r.execute_command('ft.search', 'idx', '@score:[(0 (50]', 'verbatim', "nocontent")
-                self.assertEqual(49, res[0])
-                res = r.execute_command('ft.search', 'idx', 'hello kitty -@score:[(0 (50]', 'verbatim', "nocontent")
-                self.assertEqual(51, res[0])
-                res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[-inf +inf]', "nocontent")
-                self.assertEqual(100, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty  @score:[0 50]', "nocontent")
+            self.assertEqual(51, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[(0 (50]', 'verbatim', "nocontent")
+            self.assertEqual(49, res[0])
+            res = r.execute_command('ft.search', 'idx', '@score:[(0 (50]', 'verbatim', "nocontent")
+            self.assertEqual(49, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty -@score:[(0 (50]', 'verbatim', "nocontent")
+            self.assertEqual(51, res[0])
+            res = r.execute_command('ft.search', 'idx', 'hello kitty @score:[-inf +inf]', "nocontent")
+            self.assertEqual(100, res[0])
 
     def testSuggestions(self):
 
@@ -811,30 +799,29 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                     'ft.SUGADD', 'ac', term, sz - 1))
                 sz += 1
 
-            for _ in r.retry_with_rdb_reload():
 
-                self.assertEqual(7, r.execute_command('ft.SUGLEN', 'ac'))
+            self.assertEqual(7, r.execute_command('ft.SUGLEN', 'ac'))
 
-                # search not fuzzy
-                self.assertEqual(["hello world", "hello werld"],
-                                 r.execute_command("ft.SUGGET", "ac", "hello"))
+            # search not fuzzy
+            self.assertEqual(["hello world", "hello werld"],
+                                r.execute_command("ft.SUGGET", "ac", "hello"))
 
-                # print  r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY", "MAX", "1", "WITHSCORES")
-                # search fuzzy - shuold yield more results
-                self.assertEqual(['hello world', 'hello werld', 'yellow world', 'hallo world'],
-                                 r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY"))
+            # print  r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY", "MAX", "1", "WITHSCORES")
+            # search fuzzy - shuold yield more results
+            self.assertEqual(['hello world', 'hello werld', 'yellow world', 'hallo world'],
+                                r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY"))
 
-                # search fuzzy with limit of 1
-                self.assertEqual(['hello world'],
-                                 r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY", "MAX", "1"))
+            # search fuzzy with limit of 1
+            self.assertEqual(['hello world'],
+                                r.execute_command("ft.SUGGET", "ac", "hello", "FUZZY", "MAX", "1"))
 
-                # scores should return on WITHSCORES
-                rc = r.execute_command(
-                    "ft.SUGGET", "ac", "hello", "WITHSCORES")
-                self.assertEqual(4, len(rc))
-                self.assertTrue(float(rc[1]) > 0)
-                self.assertTrue(float(rc[3]) > 0)
-                
+            # scores should return on WITHSCORES
+            rc = r.execute_command(
+                "ft.SUGGET", "ac", "hello", "WITHSCORES")
+            self.assertEqual(4, len(rc))
+            self.assertTrue(float(rc[1]) > 0)
+            self.assertTrue(float(rc[3]) > 0)
+            
 
             rc = r.execute_command("ft.SUGDEL", "ac", "hello world")
             self.assertEqual(1L, rc)
@@ -855,20 +842,17 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                 self.assertOk(r.execute_command('ft.add', 'idx', '%d' % i, 1.0,
                                                 'payload', 'payload %d' % i,
                                                 'fields', 'f', 'hello world'))
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello world')
+            self.assertEqual(21, len(res))
 
-            for x in r.retry_with_rdb_reload():
+            res = r.execute_command(
+                'ft.search', 'idx', 'hello world', 'withpayloads')
 
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello world')
-                self.assertEqual(21, len(res))
-
-                res = r.execute_command(
-                    'ft.search', 'idx', 'hello world', 'withpayloads')
-
-                self.assertEqual(31, len(res))
-                self.assertEqual(10, res[0])
-                for i in range(1, 30, 3):
-                    self.assertEqual(res[i + 1], 'payload %s' % res[i])
+            self.assertEqual(31, len(res))
+            self.assertEqual(10, res[0])
+            for i in range(1, 30, 3):
+                self.assertEqual(res[i + 1], 'payload %s' % res[i])
 
 
 if __name__ == '__main__':

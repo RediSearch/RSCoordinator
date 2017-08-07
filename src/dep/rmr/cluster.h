@@ -30,9 +30,12 @@ void MRClusterShard_AddNode(MRClusterShard *sh, MRClusterNode *n);
 // MR_NewToplogy
 // MRTopology_AddShard MRShard_AddNode
 
+typedef enum { MRHashFunc_CRC12, MRHashFunc_CRC16 } MRHashFunc;
+
 /* A topology is the mapping of slots to shards and nodes */
 typedef struct {
   size_t numSlots;
+  MRHashFunc hashFunc;
   size_t numShards;
   size_t capShards;
   MRClusterShard *shards;
@@ -119,6 +122,5 @@ int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopology);
 
 uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
 uint CRC12ShardFunc(MRCommand *cmd, uint numSlots);
-
 
 #endif

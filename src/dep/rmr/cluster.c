@@ -277,6 +277,14 @@ void _clusterConnectAllCB(uv_work_t *wrk) {
   MRCluster_ConnectAll(c);
 }
 
+static ShardFunc selectHashFunc(MRHashFunc f) {
+  switch (f) {
+    case MRHashFunc_CRC12:
+      return CRC12ShardFunc;
+    case MRHashFunc_CRC16:
+      return CRC16ShardFunc;
+  }
+}
 int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
 
   // only update the topology every N seconds
@@ -286,6 +294,10 @@ int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
     return REDIS_OK;
   }
   cl->lastTopologyUpdate = now;
+
+  if (cl->sf == NULL) {
+    cl->sf = selectHashFunc(newTopo->hashFunc);
+  }
 
   MRClusterTopology *old = cl->topo;
   cl->topo = newTopo;

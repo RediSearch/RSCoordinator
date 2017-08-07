@@ -61,6 +61,24 @@ int RMUtil_ParseArgsAfter(const char *token, RedisModuleString **argv, int argc,
 
 int rmutil_vparseArgs(RedisModuleString **argv, int argc, int offset, const char *fmt, va_list ap);
 
+#define RMUTIL_VARARGS_BADARG ((size_t)-1)
+/**
+ * Parse arguments in the form of KEYWORD {len} {arg} .. {arg}_len.
+ * If keyword is present, returns the position within `argv` containing the arguments.
+ * Returns NULL if the keyword is not found.
+ * If a parse error has occurred, `nargs` is set to RMUTIL_VARARGS_BADARG, but
+ * the return value is not NULL.
+ */
+RedisModuleString **RMUtil_ParseVarArgs(RedisModuleString **argv, int argc, int offset,
+                                        const char *keyword, size_t *nargs);
+
+/**
+ * Default implementation of an AoF rewrite function that simply calls DUMP/RESTORE
+ * internally. To use this function, pass it as the .aof_rewrite value in
+ * RedisModuleTypeMethods
+ */
+void RMUtil_DefaultAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value);
+
 // A single key/value entry in a redis info map
 typedef struct {
   const char *key;

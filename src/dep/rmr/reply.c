@@ -68,7 +68,7 @@ int _parseFloat(char *str, size_t len, double *d) {
   return 1;
 }
 
-MRReply *mrReply_Duplicate(redisReply *rep) {
+MRReply *MRReply_Duplicate(redisReply *rep) {
   MRReply *ret = malloc(sizeof(MRReply));
   *ret = *rep;
 
@@ -78,7 +78,7 @@ MRReply *mrReply_Duplicate(redisReply *rep) {
   if (rep->element && rep->elements) {
     ret->element = calloc(rep->elements, sizeof(redisReply *));
     for (int i = 0; i < rep->elements; i++) {
-      ret->element[i] = mrReply_Duplicate(rep->element[i]);
+      ret->element[i] = MRReply_Duplicate(rep->element[i]);
     }
   }
   // memset(rep, 0, sizeof(*rep));

@@ -401,6 +401,256 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
+// Type of field returned in INFO
+typedef enum {
+  InfoField_WholeSum,
+  InfoField_DoubleSum,
+  InfoField_DoubleAverage,
+  InfoField_Max
+} InfoFieldType;
+
+typedef struct {
+  const char *name;
+  InfoFieldType type;
+} InfoFieldSpec;
+
+static InfoFieldSpec allSpecs[] = {
+    {.name = "num_docs", .type = InfoField_WholeSum},
+    {.name = "max_doc_id", .type = InfoField_Max},
+    {.name = "num_terms", .type = InfoField_WholeSum},
+    {.name = "num_records", .type = InfoField_WholeSum},
+    {.name = "inverted_sz_mb", .type = InfoField_DoubleSum},
+    {.name = "offset_vectors_sz_mb", .type = InfoField_DoubleSum},
+    {.name = "doc_table_size_mb", .type = InfoField_DoubleSum},
+    {.name = "key_table_size_mb", .type = InfoField_DoubleSum},
+    {.name = "records_per_doc_avg", .type = InfoField_DoubleAverage},
+    {.name = "bytes_per_record_avg", .type = InfoField_DoubleAverage},
+    {.name = "offsets_per_term_avg", .type = InfoField_DoubleAverage},
+    {.name = "offset_bits_per_record_avg", .type = InfoField_DoubleAverage}};
+
+static const size_t numFieldSpecs_g = sizeof(allSpecs) / sizeof(InfoFieldSpec);
+
+// Variant value type
+typedef struct {
+  int isSet;
+  union {
+    size_t total_l;
+    double total_d;
+    struct {
+      double avg;
+      double count;
+    } avg;
+  } u;
+} InfoValue;
+
+// State object for parsing and replying INFO
+typedef struct {
+  const char *indexName;
+  size_t indexNameLen;
+  MRReply *indexSchema;
+  MRReply *indexOptions;
+  size_t *errorIndexes;
+  InfoValue values[numFieldSpecs_g];
+} InfoFields;
+
+// Handle fields which aren't InfoValue types
+static void handleSpecialField(InfoFields *fields, const char *name, MRReply *value) {
+  if (!strcmp(name, "index_name")) {
+    if (fields->indexName) {
+      return;
+    }
+    fields->indexName = MRReply_String(value, &fields->indexNameLen);
+    const char *curlyIdx = index(fields->indexName, '{');
+    if (curlyIdx != NULL) {
+      fields->indexNameLen = curlyIdx - fields->indexName;
+    }
+  } else if (!strcmp(name, "fields")) {
+    if (!fields->indexSchema) {
+      fields->indexSchema = value;
+    }
+  } else if (!strcmp(name, "index_options")) {
+    if (!fields->indexOptions) {
+      fields->indexOptions = value;
+    }
+  }
+}
+
+// Handle a single field in a single response
+// - value is the value as returned in the reply
+// - numReplies is the total number of replies (i.e. 'count' in the reduce function)
+// - curReplyIndex is the index of the current reply (i.e. replies[i]).
+//
+// numReplies and curReplyIndex are used to estimate averages.
+static void handleField(InfoFields *fields, const char *s, MRReply *value, size_t numReplies,
+                        size_t curReplyIndex) {
+  InfoValue *target = NULL;
+  size_t ii = 0;
+  for (; ii < numFieldSpecs_g; ++ii) {
+    if (!strcmp(s, allSpecs[ii].name)) {
+      target = &fields->values[ii];
+      break;
+    }
+  }
+
+  if (!target) {
+    handleSpecialField(fields, s, value);
+    return;
+  }
+
+  int type = allSpecs[ii].type;
+
+  if (type == InfoField_WholeSum) {
+    long long tmp;
+    MRReply_ToInteger(value, &tmp);
+    target->u.total_l += tmp;
+  } else if (type == InfoField_DoubleSum) {
+    double d;
+    MRReply_ToDouble(value, &d);
+    target->u.total_d += d;
+  } else if (type == InfoField_DoubleAverage) {
+    target->u.avg.count++;
+    double d;
+    MRReply_ToDouble(value, &d);
+    target->u.avg.avg += d;
+  } else if (type == InfoField_Max) {
+    long long newVal;
+    MRReply_ToInteger(value, &newVal);
+    if (target->u.total_l < newVal) {
+      target->u.total_l = newVal;
+    }
+  }
+  target->isSet = 1;
+}
+
+static void generateFieldsReply(RedisModuleCtx *ctx, InfoFields *fields, size_t numReplies) {
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+  size_t n = 0;
+
+  // Respond with the name, schema, and options
+  if (fields->indexName) {
+    RedisModule_ReplyWithSimpleString(ctx, "index_name");
+    RedisModule_ReplyWithStringBuffer(ctx, fields->indexName, fields->indexNameLen);
+    n += 2;
+  }
+  if (fields->indexSchema) {
+    RedisModule_ReplyWithSimpleString(ctx, "fields");
+    MR_ReplyWithMRReply(ctx, fields->indexSchema);
+    n += 2;
+  }
+
+  if (fields->indexOptions) {
+    RedisModule_ReplyWithSimpleString(ctx, "index_options");
+    MR_ReplyWithMRReply(ctx, fields->indexOptions);
+    n += 2;
+  }
+
+  for (size_t ii = 0; ii < numFieldSpecs_g; ++ii) {
+    InfoValue *source = &fields->values[ii];
+    if (!source->isSet) {
+      continue;
+    }
+
+    n += 2;
+    RedisModule_ReplyWithSimpleString(ctx, allSpecs[ii].name);
+    int type = allSpecs[ii].type;
+
+    if (type == InfoField_WholeSum || type == InfoField_Max) {
+      RedisModule_ReplyWithLongLong(ctx, source->u.total_l);
+    } else if (type == InfoField_DoubleSum) {
+      RedisModule_ReplyWithDouble(ctx, source->u.total_l);
+    } else if (type == InfoField_DoubleAverage) {
+      if (source->u.avg.count) {
+        RedisModule_ReplyWithDouble(ctx, source->u.avg.avg / source->u.avg.count);
+      } else {
+        RedisModule_ReplyWithDouble(ctx, 0);
+      }
+    } else {
+      RedisModule_ReplyWithNull(ctx);
+    }
+  }
+
+  RedisModule_ReplySetArrayLength(ctx, n);
+}
+
+static void handleSingleInfoReply(MRReply *reply, InfoFields *fields, size_t numReplies,
+                                  size_t curReplyIdx) {
+  size_t numElems = MRReply_Length(reply);
+  if (numElems % 2 != 0) {
+    printf("Uneven INFO Reply!!!?\n");
+    return;
+  }
+
+  for (size_t ii = 0; ii < numElems; ii += 2) {
+    MRReply *cur = MRReply_ArrayElement(reply, ii);
+    MRReply *value = MRReply_ArrayElement(reply, ii + 1);
+    const char *s = MRReply_String(cur, NULL);
+    handleField(fields, s, value, numReplies, curReplyIdx);
+  }
+}
+
+static void cleanInfoReply(InfoFields *fields) {
+  free(fields->errorIndexes);
+}
+
+static int infoReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  // Summarize all aggregate replies
+  InfoFields fields = {0};
+  size_t numErrored = 0;
+  MRReply *firstError = NULL;
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+
+  if (count == 0) {
+    return RedisModule_ReplyWithError(ctx, "ERR no responses received");
+  }
+
+  for (size_t ii = 0; ii < count; ++ii) {
+    if (MRReply_Type(replies[ii]) == MR_REPLY_ERROR) {
+      if (!fields.errorIndexes) {
+        fields.errorIndexes = calloc(count, sizeof(*fields.errorIndexes));
+      }
+      fields.errorIndexes[ii] = 1;
+      numErrored++;
+      if (!firstError) {
+        firstError = replies[ii];
+      }
+      continue;
+    }
+    if (MRReply_Type(replies[ii]) != MR_REPLY_ARRAY) {
+      continue;  // Ooops!
+    }
+    handleSingleInfoReply(replies[ii], &fields, count, ii);
+  }
+
+  // Now we've received all the replies.
+  if (numErrored == count) {
+    // Reply with error
+    MR_ReplyWithMRReply(ctx, firstError);
+  } else {
+    generateFieldsReply(ctx, &fields, count);
+  }
+
+  cleanInfoReply(&fields);
+  return REDISMODULE_OK;
+}
+
+int InfoCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc != 2) {
+    // FT.INFO {index}
+    return RedisModule_WrongArity(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  MRCommand_SetPrefix(&cmd, "_FT");
+
+  struct MRCtx *mctx = MR_CreateCtx(ctx, NULL);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  MR_SetCoordinationStrategy(mctx, MRCluster_FlatCoordination);
+  MR_Map(mctx, infoReplyReducer, cg);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   // MR_UpdateTopology(ctx);
@@ -745,6 +995,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.BROADCAST", SafeCmd(BroadcastCommand), "readonly", 0, 0,
                                    -1));
+  RM_TRY(
+      RedisModule_CreateCommand(ctx, "FT.INFO", SafeCmd(InfoCommandHandler), "readonly", 0, 0, -1));
 
   /*********************************************************
   * Complex coordination search commands

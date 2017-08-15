@@ -854,6 +854,86 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for i in range(1, 30, 3):
                 self.assertEqual(res[i + 1], 'payload %s' % res[i])
 
+    def testInfoCommand(self):
+        from itertools import combinations
+
+        self.broadcast(self.client, 'flushdb')
+        self.assertCmdOk('ft.create', 'idx', 'NOFIELDS', 'schema', 'title', 'text')
+        for i in xrange(50):
+            self.assertCmdOk('ft.add', 'idx', 'doc%d' % i, 1, 'fields', 'title', 'hello term%d' % i)
+
+        bcast_info = self.broadcast(self.client, '_ft.info', 'idx')
+        combined = {}
+        SUM_FIELDS = ('num_docs', 'num_terms', 'num_records',
+                      'inverted_size_mb', 'doc_table_size_mb', 'offset_vectors_sz_mb',
+                      'key_table_size_mb')
+        AVG_FIELDS = ('records_per_doc_avg', 'bytes_per_doc_avg', 'offsets_per_term_avg',
+                      'bytes_per_record_avg', 'offset_bits_per_record_avg')
+        MAX_FIELDS = ('max_doc_id',)
+
+        for info in bcast_info:
+            dd = dict(zip(*[iter(info)] * 2))
+            # Sums
+            for k, v in dd.items():
+                if k in ('index_name', 'index_options', 'fields'):
+                    continue
+                if k in SUM_FIELDS:
+                    combined.setdefault(k, 0.0)
+                    combined[k] += float(v)
+                elif k in AVG_FIELDS:
+                    combined.setdefault(k, [])
+                    combined[k].append(float(v))
+                elif k in MAX_FIELDS:
+                    if k in combined:
+                        combined[k] = max(combined[k], float(v))
+                    else:
+                        combined[k] = float(v)
+
+        for name in AVG_FIELDS:
+            if name not in combined:
+                continue
+            combined[name] = sum(combined[name]) / len(combined[name])
+
+        res = self.cmd('ft.info', 'idx')
+        d = {res[i]: res[i + 1] for i in range(0, len(res), 2)}
+
+        self.assertEqual(d['index_name'], 'idx')
+        self.assertEqual(d['index_options'], ['NOFIELDS'])
+        self.assertListEqual(d['fields'], [['title', 'type', 'TEXT', 'weight', '1']])
+
+        self.assertEquals(int(d['num_docs']), combined['num_docs'])
+        self.assertEquals(int(d['num_terms']), combined['num_terms'])
+        self.assertEquals(int(d['max_doc_id']), combined['max_doc_id'])
+        self.assertEquals(int(d['records_per_doc_avg']), 2)
+        self.assertEquals(int(d['num_records']), combined['num_records'])
+
+        self.assertGreater(float(d['offset_vectors_sz_mb']), 0)
+        self.assertGreater(float(d['key_table_size_mb']), 0)
+        self.assertGreater(float(d['inverted_sz_mb']), 0)
+        self.assertGreater(float(d['bytes_per_record_avg']), 0)
+        self.assertGreater(float(d['doc_table_size_mb']), 0)
+
+        for x in range(1, 5):
+            for combo in combinations(('NOOFFSETS', 'NOFREQS', 'NOFIELDS', ''), x):
+                combo = list(filter(None, combo))
+                options = combo + ['schema', 'f1', 'text']
+                try:
+                    self.cmd('ft.drop', 'idx')
+                except:
+                    pass
+                self.assertCmdOk('ft.create', 'idx', *options)
+                info = self.cmd('ft.info', 'idx')
+                ix = info.index('index_options')
+                self.assertFalse(ix == -1)
+
+                opts = info[ix + 1]
+                # make sure that an empty opts string returns no options in info
+                if not combo:
+                    self.assertListEqual([], opts)
+
+                for option in filter(None, combo):
+                    self.assertTrue(option in opts)
+
 
 if __name__ == '__main__':
 

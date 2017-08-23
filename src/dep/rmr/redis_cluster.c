@@ -121,6 +121,7 @@ static void updateTopoCB(RedisModuleCtx *ctx, void *p) {
 }
 
 int InitRedisTopologyUpdater() {
-  updateTopoTimer = RMUtil_NewPeriodicTimer(updateTopoCB, NULL, (struct timespec){.tv_sec = 1});
+  updateTopoTimer =
+      RMUtil_NewPeriodicTimer(updateTopoCB, NULL, NULL, (struct timespec){.tv_sec = 1});
   return REDIS_OK;
 }

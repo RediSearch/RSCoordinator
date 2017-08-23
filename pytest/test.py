@@ -868,11 +868,20 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                       'inverted_size_mb', 'doc_table_size_mb', 'offset_vectors_sz_mb',
                       'key_table_size_mb')
         AVG_FIELDS = ('records_per_doc_avg', 'bytes_per_doc_avg', 'offsets_per_term_avg',
-                      'bytes_per_record_avg', 'offset_bits_per_record_avg')
+                      'bytes_per_record_avg', 'offset_bits_per_record_avg',)
         MAX_FIELDS = ('max_doc_id',)
 
+        GC_FIELDS = {
+            'current_hz': 'avg',
+            'bytes_collected': 'total',
+            'effectiv_cycles_rate': 'avg'
+        }
+
+        def mkdict(arr_reply):
+            return dict(zip(*[iter(arr_reply)] * 2))
+
         for info in bcast_info:
-            dd = dict(zip(*[iter(info)] * 2))
+            dd = mkdict(info)
             # Sums
             for k, v in dd.items():
                 if k in ('index_name', 'index_options', 'fields'):
@@ -889,13 +898,25 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
                     else:
                         combined[k] = float(v)
 
-        for name in AVG_FIELDS:
-            if name not in combined:
-                continue
-            combined[name] = sum(combined[name]) / len(combined[name])
+            gc = combined.setdefault('gc_stats', {})
+            ddgc = mkdict(dd['gc_stats'])
+            for fld, typ in GC_FIELDS.items():
+                if typ == 'avg':
+                    gc.setdefault(fld, []).append(float(ddgc[fld]))
+                else:
+                    gc.setdefault(fld, 0.0)
+                    gc[fld] += float(ddgc[fld])
+
+        def mkavgs(dst, fldnames):
+            for fldname in fldnames:
+                if fldname in dst:
+                    dst[fldname] = sum(dst[fldname]) / len(dst[fldname])
+
+        mkavgs(combined, AVG_FIELDS)
+        mkavgs(combined['gc_stats'], [k for k, v in GC_FIELDS.items() if v == 'avg'])
 
         res = self.cmd('ft.info', 'idx')
-        d = {res[i]: res[i + 1] for i in range(0, len(res), 2)}
+        d = mkdict(res)
 
         self.assertEqual(d['index_name'], 'idx')
         self.assertEqual(d['index_options'], ['NOFIELDS'])
@@ -912,6 +933,12 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
         self.assertGreater(float(d['inverted_sz_mb']), 0)
         self.assertGreater(float(d['bytes_per_record_avg']), 0)
         self.assertGreater(float(d['doc_table_size_mb']), 0)
+
+        d['gc_stats'] = mkdict(d['gc_stats'])
+        for k in d['gc_stats']:
+            d['gc_stats'][k] = float(d['gc_stats'][k])
+
+        self.assertEqual(d['gc_stats'], combined['gc_stats'])
 
         for x in range(1, 5):
             for combo in combinations(('NOOFFSETS', 'NOFREQS', 'NOFIELDS', ''), x):

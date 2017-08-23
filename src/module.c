@@ -426,7 +426,10 @@ static InfoFieldSpec allSpecs[] = {
     {.name = "records_per_doc_avg", .type = InfoField_DoubleAverage},
     {.name = "bytes_per_record_avg", .type = InfoField_DoubleAverage},
     {.name = "offsets_per_term_avg", .type = InfoField_DoubleAverage},
-    {.name = "offset_bits_per_record_avg", .type = InfoField_DoubleAverage}};
+    {.name = "offset_bits_per_record_avg", .type = InfoField_DoubleAverage},
+    {.name = "current_hz", .type = InfoField_DoubleAverage},
+    {.name = "bytes_collected", .type = InfoField_WholeSum},
+    {.name = "effective_cycles_rate", .type = InfoField_DoubleAverage}};
 
 static const size_t numFieldSpecs_g = sizeof(allSpecs) / sizeof(InfoFieldSpec);
 

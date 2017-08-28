@@ -17,6 +17,7 @@
 #include "config.h"
 #include "dep/RediSearch/src/module.h"
 #include <math.h>
+#include "info_command.h"
 
 SearchCluster __searchCluster;
 
@@ -401,6 +402,24 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
+int InfoCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc != 2) {
+    // FT.INFO {index}
+    return RedisModule_WrongArity(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  MRCommand_SetPrefix(&cmd, "_FT");
+
+  struct MRCtx *mctx = MR_CreateCtx(ctx, NULL);
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  MR_SetCoordinationStrategy(mctx, MRCluster_FlatCoordination);
+  MR_Map(mctx, InfoReplyReducer, cg);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
 int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   // MR_UpdateTopology(ctx);
@@ -745,6 +764,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.BROADCAST", SafeCmd(BroadcastCommand), "readonly", 0, 0,
                                    -1));
+  RM_TRY(
+      RedisModule_CreateCommand(ctx, "FT.INFO", SafeCmd(InfoCommandHandler), "readonly", 0, 0, -1));
 
   /*********************************************************
   * Complex coordination search commands

@@ -18,9 +18,7 @@
   if (RedisModule_CreateCommand(ctx, cmd, f, mode, 1, 1, 1) == REDISMODULE_ERR) \
     return REDISMODULE_ERR;
 
-#define RMUtil_RegisterReadCmd(ctx, cmd, f)      \
-  __rmutil_register_cmd(ctx, cmd, f, "readonly") \
-  }
+#define RMUtil_RegisterReadCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "readonly")
 
 #define RMUtil_RegisterWriteCmd(ctx, cmd, f) __rmutil_register_cmd(ctx, cmd, f, "write")
 
@@ -81,8 +79,8 @@ void RMUtil_DefaultAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *
 
 // A single key/value entry in a redis info map
 typedef struct {
-  const char *key;
-  const char *val;
+  char *key;
+  char *val;
 } RMUtilInfoEntry;
 
 // Representation of INFO command response, as a list of k/v pairs

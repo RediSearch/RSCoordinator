@@ -3,6 +3,10 @@ ifndef RM_INCLUDE_DIR
 	RM_INCLUDE_DIR=$(shell pwd)
 endif
 
+ifndef S3_CONFIG
+	S3_CONFIG=~/.s3cfg
+endif
+
 # Setting the DEBUG env variable to 1 will cause us to build with -O0
 ifndef DEBUG
 	DEBUG = 0
@@ -62,7 +66,7 @@ libredisearch.a:
 
 # Remove the module base file so we always recompile it with the correct build flags
 module.so: $(shell rm -f module.o)
-module.so: rmr rmutil libuv.a libredisearch.a $(CC_OBJECTS)
+module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
 
@@ -84,12 +88,11 @@ clean:
 	rm -rvf *.xo *.so *.o *.a
 
 package: module.so
-	mkdir -p ../build
-	$(eval PACK=$(shell module_packer -c "PARTITIONS 1"  -o "../build/rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
+	$(eval PACK=$(shell module_packer -c "PARTITIONS 1"  -o "rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
 #.PHONY: package
 
 upload: package
-	s3cmd put  $(PACK) --acl-public s3://redismodules/rscoordinator/
+	s3cmd -c $(S3_CONFIG) put $(PACK) --acl-public s3://redismodules/rscoordinator/
 .PHONY: upload	
 
 deepclean:

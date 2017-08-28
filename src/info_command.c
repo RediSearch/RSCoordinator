@@ -33,8 +33,8 @@ static InfoFieldSpec gcSpecs[] = {
     {.name = "bytes_collected", .type = InfoField_WholeSum},
     {.name = "effectiv_cycles_rate", .type = InfoField_DoubleAverage}};
 
-static const size_t numFieldSpecs_g = sizeof(toplevelSpecs_g) / sizeof(InfoFieldSpec);
-static const size_t numGCFieldSpecs_g = sizeof(gcSpecs) / sizeof(InfoFieldSpec);
+#define NUM_FIELDS_SPEC (sizeof(toplevelSpecs_g) / sizeof(InfoFieldSpec))
+#define NUM_GC_FIELDS_SPEC (sizeof(gcSpecs) / sizeof(InfoFieldSpec))
 
 // Variant value type
 typedef struct {
@@ -56,8 +56,8 @@ typedef struct {
   MRReply *indexSchema;
   MRReply *indexOptions;
   size_t *errorIndexes;
-  InfoValue toplevelValues[numFieldSpecs_g];
-  InfoValue gcValues[numGCFieldSpecs_g];
+  InfoValue toplevelValues[NUM_FIELDS_SPEC];
+  InfoValue gcValues[NUM_GC_FIELDS_SPEC];
 } InfoFields;
 
 /**
@@ -123,7 +123,7 @@ static void handleSpecialField(InfoFields *fields, const char *name, MRReply *va
     }
   } else if (!strcmp(name, "gc_stats")) {
     // Iterate each field inside GC
-    processKvArray(fields, value, fields->gcValues, gcSpecs, numGCFieldSpecs_g, 1);
+    processKvArray(fields, value, fields->gcValues, gcSpecs, NUM_GC_FIELDS_SPEC, 1);
   }
 }
 
@@ -215,11 +215,11 @@ static void generateFieldsReply(InfoFields *fields, RedisModuleCtx *ctx) {
 
   RedisModule_ReplyWithSimpleString(ctx, "gc_stats");
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-  size_t nGcStats = replyKvArray(fields, ctx, fields->gcValues, gcSpecs, numGCFieldSpecs_g);
+  size_t nGcStats = replyKvArray(fields, ctx, fields->gcValues, gcSpecs, NUM_GC_FIELDS_SPEC);
   RedisModule_ReplySetArrayLength(ctx, nGcStats);
   n += 2;
 
-  n += replyKvArray(fields, ctx, fields->toplevelValues, toplevelSpecs_g, numFieldSpecs_g);
+  n += replyKvArray(fields, ctx, fields->toplevelValues, toplevelSpecs_g, NUM_FIELDS_SPEC);
   RedisModule_ReplySetArrayLength(ctx, n);
 }
 
@@ -254,7 +254,7 @@ int InfoReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
     if (numElems % 2 != 0) {
       printf("Uneven INFO Reply!!!?\n");
     }
-    processKvArray(&fields, replies[ii], fields.toplevelValues, toplevelSpecs_g, numFieldSpecs_g,
+    processKvArray(&fields, replies[ii], fields.toplevelValues, toplevelSpecs_g, NUM_FIELDS_SPEC,
                    0);
   }
 

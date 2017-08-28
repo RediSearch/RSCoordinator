@@ -13,4 +13,4 @@ clean:
 
 docker_package:
 	docker build . -t rscoordinator
-	docker run -it --rm -v ~/.s3cfg:/root/.s3cfg -v ./src:/src rscoordinator
+	docker run -it --rm -v ~/.s3cfg:/root/.s3cfg -v `pwd`/src:/src rscoordinator

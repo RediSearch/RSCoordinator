@@ -111,13 +111,15 @@ err:
 static struct RMUtilTimer *updateTopoTimer;
 
 static void updateTopoCB(RedisModuleCtx *ctx, void *p) {
-
+  RedisModule_ThreadSafeContextLock(ctx);
   RedisModule_AutoMemory(ctx);
+
   RedisModuleCallReply *r = RedisModule_Call(ctx, "FT.CLUSTERREFRESH", "");
   if (RedisModule_CallReplyType(r) == REDIS_REPLY_ERROR) {
     fprintf(stderr, "Error running CLUSTERREFRESH: %s\n", RedisModule_CallReplyStringPtr(r, NULL));
   }
   if (r) RedisModule_FreeCallReply(r);
+  RedisModule_ThreadSafeContextUnlock(ctx);
 }
 
 int InitRedisTopologyUpdater() {

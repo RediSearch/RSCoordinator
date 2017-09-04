@@ -18,6 +18,7 @@
 #include "dep/RediSearch/src/module.h"
 #include <math.h>
 #include "info_command.h"
+#include "version.h"
 
 SearchCluster __searchCluster;
 
@@ -717,7 +718,7 @@ static RedisModuleCmdFunc SafeCmd(RedisModuleCmdFunc f) {
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
-  if (RedisModule_Init(ctx, "ft", 11, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, "ft", RSCOODINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

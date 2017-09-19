@@ -14,7 +14,12 @@
     #include "lexer.h"
 	void yyerror(char *s);
 
-
+    static void parseCtx_Free(parseCtx *ctx) {
+        if (ctx->my_id) {
+            printf("freeing %s\n", ctx->my_id);
+            free(ctx->my_id);
+        }
+    }
 } // END %include
 
 %syntax_error {  
@@ -23,7 +28,7 @@
 }  
   
 %default_type { char * }
-%default_destructor {  printf("freeing %p\n", $$); free($$); }
+%default_destructor {  free($$); }
 %extra_argument { parseCtx *ctx }
 %type shard { RLShard }
 %destructor shard {
@@ -39,26 +44,79 @@
 %destructor master {} 
 %type has_replication {int}
 %destructor has_replication {} 
+%destructor cluster { }
 
-
-root ::= MYID shardid(B) has_replication(C) topology(D). {
-    ctx->my_id = B;
-    ctx->replication = C;
+root ::=  cluster topology(D). {
+    if (ctx->numSlots) {
+        if (ctx->numSlots > 0 && ctx->numSlots <= 16384) {
+            D->numSlots = ctx->numSlots;
+        } else {
+            // ERROR!
+            asprintf(&ctx->errorMsg, "Invalid slot number %d", ctx->numSlots);
+            ctx->ok = 0;
+            goto err;
+        }
+    }
+    // translate optional shard func from arguments to proper enum.
+    // We will only get it from newer versions of the cluster, so if we don't get it we assume 
+    // CRC12 / 4096
+    D->hashFunc = MRHashFunc_CRC12;
+    if (ctx->shardFunc) {
+        if (!strncmp(ctx->shardFunc, MRHASHFUNC_CRC12_STR, strlen(MRHASHFUNC_CRC12_STR))) {
+            D->hashFunc = MRHashFunc_CRC12;
+        } else if (!strncmp(ctx->shardFunc, MRHASHFUNC_CRC16_STR, strlen(MRHASHFUNC_CRC16_STR))) {
+            D->hashFunc = MRHashFunc_CRC16;
+        } else {
+            // ERROR!
+            asprintf(&ctx->errorMsg, "Invalid hash func %s\n", ctx->shardFunc);
+            ctx->ok = 0;
+            goto err;
+        }
+    }
     ctx->topology = D;
+
+    
 	// detect my id and mark the flag here
     for (size_t s = 0; s < ctx->topology->numShards; s++) {
         for (size_t n = 0; n < ctx->topology->shards[s].numNodes; n++) {
             if (!strcmp(ctx->topology->shards[s].nodes[n].id, ctx->my_id)) {
-                printf("My Node: %s!\n", ctx->my_id);
                 ctx->topology->shards[s].nodes[n].flags |= MRNode_Self;
             }
         }
     }
+   
+err:
+   if (ctx->ok == 0) {
+    MRClusterTopology_Free(D);
+  }
+  
+
 }
+
+cluster ::= cluster MYID shardid(B) . {
+    ctx->my_id = B;
+}
+
+cluster ::= cluster HASHFUNC STRING(A) SLOTS INTEGER(B) . {
+    ctx->shardFunc = A.strval;
+    ctx->numSlots = B.intval;
+}
+
+
+cluster ::= cluster has_replication(A) . {
+    ctx->replication = A;
+}
+
+cluster ::= . {
+
+}
+
 
 topology(A) ::= RANGES INTEGER(B) . {
     
     A = MR_NewTopology(B.intval, 4096);
+    // this is the default hash func
+    A->hashFunc = MRHashFunc_CRC12;
 }
 //topology -> shardlist -> shard -> endpoint
 
@@ -69,10 +127,6 @@ topology(A) ::= topology(B) shard(C). {
 
 has_replication(A) ::= HASREPLICATION . {
     A =  1;
-}
-
-has_replication(A) ::= . {
-    A =  0;
 }
 
 shard(A) ::= SHARD shardid(B) SLOTRANGE INTEGER(C) INTEGER(D) endpoint(E) master(F). {
@@ -90,15 +144,15 @@ shard(A) ::= SHARD shardid(B) SLOTRANGE INTEGER(C) INTEGER(D) endpoint(E) master
 
 
 shardid(A) ::= STRING(B). {
-	A = B.strval;
+	A = strdup(B.strval);
 }
+
 shardid(A) ::= INTEGER(B). {
 	asprintf(&A, "%lld", B.intval);
 }
 
 endpoint(A) ::= tcp_addr(B). {
 	MREndpoint_Parse(B, &A);
-    free(B);
 }
 
 endpoint(A) ::= endpoint(B) unix_addr(C) . {
@@ -112,7 +166,7 @@ tcp_addr(A) ::= ADDR STRING(B) . {
 } 
 
 unix_addr(A) ::= UNIXADDR STRING(B). {
-	A = B.strval;
+	A = strdup(B.strval);
 }
 
 master(A) ::= MASTER . {
@@ -128,26 +182,30 @@ master(A) ::= . {
 
 MRClusterTopology *MR_ParseTopologyRequest(const char *c, size_t len, char **err)  {
 
-    //printf("Parsing query %s\n", c);
-    yy_scan_bytes(c, len);
+    
+    YY_BUFFER_STATE buf = yy_scan_bytes(c, len);
+
     void* pParser =  MRTopologyRequest_ParseAlloc (malloc);        
     int t = 0;
 
-    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, .errorMsg = NULL };
-    //ParseNode *ret = NULL;
-    //ParserFree(pParser);
+    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, 
+                    .errorMsg = NULL, .numSlots = 0, .shardFunc = MRHashFunc_CRC12 };
+    
     while (ctx.ok && 0 != (t = yylex())) {
         MRTopologyRequest_Parse(pParser, t, tok, &ctx);                
     }
-    if (ctx.ok) {
-        MRTopologyRequest_Parse (pParser, 0, tok, &ctx);
-    }
+    //if (ctx.ok) {
+        MRTopologyRequest_Parse(pParser, 0, tok, &ctx);
+    //}
     
     MRTopologyRequest_ParseFree(pParser, free);
 
     if (err) {
         *err = ctx.errorMsg;
     }
+    parseCtx_Free(&ctx);
+    yy_delete_buffer(buf);
+
     return ctx.topology;
   }
 

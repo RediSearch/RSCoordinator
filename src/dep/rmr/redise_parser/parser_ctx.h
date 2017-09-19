@@ -7,6 +7,8 @@
 typedef struct {
   MRClusterTopology *topology;
   char *my_id;
+  char *shardFunc;
+  int numSlots;
   int replication;
   int ok;
   char *errorMsg;

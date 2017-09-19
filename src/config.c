@@ -29,21 +29,6 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
   conf->numPartitions = numPartitions;
   conf->type = DetectClusterType();
 
-  // Parse the endpoint
-  char *ep = NULL;
-  RMUtil_ParseArgsAfter("ENDPOINT", argv, argc, "c", &ep);
-  if (ep) {
-    MREndpoint endp;
-    if (MREndpoint_Parse(ep, &endp) == REDIS_ERR) {
-      RedisModule_Log(ctx, "error", "Invalid endpoint %s\n", ep);
-      return REDISMODULE_ERR;
-    }
-    conf->myEndpoint = malloc(sizeof(MREndpoint));
-    *conf->myEndpoint = endp;
-    RedisModule_Log(ctx, "notice", "Our endpoint: %s@%s:%d", endp.auth ? endp.auth : "", endp.host,
-                    endp.port);
-  }
-
   return REDISMODULE_OK;
 }
 

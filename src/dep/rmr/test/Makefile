@@ -7,7 +7,7 @@ ifndef RMUTIL_LIBDIR
 	RMUTIL_LIBDIR=../src/dep/rmutil
 endif
 
-SRC_DIR = ../
+SRC_DIR?=$(shell sh -c 'cd ../ && pwd')
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
@@ -28,11 +28,11 @@ LIBS=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
 
 
 test_parser:
-	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
 	$(sh -c ./$@)
 
 test_cluster:
-	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
 	$(sh -c ./$@)
 
 .PHONY: test_parser

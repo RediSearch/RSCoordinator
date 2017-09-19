@@ -284,6 +284,7 @@ static ShardFunc selectHashFunc(MRHashFunc f) {
     case MRHashFunc_CRC16:
       return CRC16ShardFunc;
   }
+  return NULL;
 }
 int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
 
@@ -295,8 +296,11 @@ int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
   }
   cl->lastTopologyUpdate = now;
 
-  if (cl->sf == NULL) {
+  // if the topology has updated, we update to the new one
+  if (newTopo->hashFunc != MRHashFunc_None) {
     cl->sf = selectHashFunc(newTopo->hashFunc);
+  } else if (cl->topo) {
+    newTopo->hashFunc = cl->topo->hashFunc;
   }
 
   MRClusterTopology *old = cl->topo;

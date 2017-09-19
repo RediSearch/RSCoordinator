@@ -19,6 +19,7 @@
 #include <math.h>
 #include "info_command.h"
 #include "version.h"
+#include <sys/param.h>
 
 SearchCluster __searchCluster;
 
@@ -574,9 +575,30 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
       ctx, clusterConfig.type == ClusterType_RedisLabs ? "redislabs" : "redis_oss");
   n++;
 
+  // Report hash func
+  MRClusterTopology *topo = MR_GetCurrentTopology();
+  RedisModule_ReplyWithSimpleString(ctx, "hash_func");
+  n++;
+  if (topo) {
+    RedisModule_ReplyWithSimpleString(
+        ctx,
+        topo->hashFunc == MRHashFunc_CRC12
+            ? MRHASHFUNC_CRC12_STR
+            : (topo->hashFunc == MRHashFunc_CRC16 ? MRHASHFUNC_CRC16_STR : "n/a"));
+  } else {
+    RedisModule_ReplyWithSimpleString(ctx, "n/a");
+  }
+  n++;
+
+  // Report topology
+  RedisModule_ReplyWithSimpleString(ctx, "num_slots");
+  n++;
+  RedisModule_ReplyWithLongLong(ctx, topo ? (long long)topo->numSlots : 0);
+  n++;
+
   RedisModule_ReplyWithSimpleString(ctx, "slots");
   n++;
-  MRClusterTopology *topo = MR_GetCurrentTopology();
+
   if (!topo) {
     RedisModule_ReplyWithNull(ctx);
     n++;
@@ -625,6 +647,22 @@ int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (!topo) {
     return REDISMODULE_ERR;
   }
+
+  // If the cluster hash func or cluster slots has changed, set the new value
+  switch (topo->hashFunc) {
+    case MRHashFunc_CRC12:
+      PartitionCtx_SetSlotTable(&__searchCluster.part, crc12_slot_table, MIN(4096, topo->numSlots));
+      break;
+    case MRHashFunc_CRC16:
+      PartitionCtx_SetSlotTable(&__searchCluster.part, crc16_slot_table,
+                                MIN(16384, topo->numSlots));
+      break;
+    case MRHashFunc_None:
+    default:
+      // do nothing
+      break;
+  }
+
   // send the topology to the cluster
   if (MR_UpdateTopology(topo) != REDISMODULE_OK) {
     // failed update
@@ -657,12 +695,18 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   /* Configure cluster injections */
   ShardFunc sf;
-  Partitioner pt;
+
   MRClusterTopology *initialTopology = NULL;
+
+  const char **slotTable = NULL;
+  size_t tableSize = 0;
+
   switch (clusterConfig.type) {
     case ClusterType_RedisLabs:
       sf = CRC12ShardFunc;
-      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc12_slot_table, 4096);
+      slotTable = crc12_slot_table;
+      tableSize = 4096;
+
       break;
     case ClusterType_RedisOSS:
     default:
@@ -672,12 +716,13 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
         return REDISMODULE_ERR;
       }
       sf = CRC16ShardFunc;
-      pt = NewSimplePartitioner(clusterConfig.numPartitions, crc16_slot_table, 16384);
+      slotTable = crc16_slot_table;
+      tableSize = 16384;
   }
 
   MRCluster *cl = MR_NewCluster(initialTopology, sf, 2);
   MR_Init(cl);
-  __searchCluster = NewSearchCluster(clusterConfig.numPartitions, pt);
+  __searchCluster = NewSearchCluster(clusterConfig.numPartitions, slotTable, tableSize);
 
   return REDISMODULE_OK;
 }

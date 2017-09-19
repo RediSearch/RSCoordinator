@@ -20,6 +20,7 @@ LIBHIREDIS=hiredis/libhiredis.a
 
 all: hiredis triemap librmr.a
 
+%.c: %.y
 
 hiredis:
 	$(MAKE) -C ./hiredis static

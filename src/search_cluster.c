@@ -2,53 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 #include "search_cluster.h"
-#include "crc16_tags.h"
-#include "fnv.h"
+#include "partition.h"
 
-typedef struct {
-  size_t size;
-  const char **table;
-  size_t tableSize;
-} SimplePartitioner;
-
-size_t SP_PartitionForKey(void *ctx, const char *key, size_t len) {
-  SimplePartitioner *sp = ctx;
-  return fnv_32a_buf((void *)key, len, 0) % sp->size;
-}
-
-void SP_Free(void *ctx) {
-  SimplePartitioner *sp = ctx;
-  free(sp);
-}
-
-const char *SP_PartitionTag(void *ctx, size_t partition) {
-  SimplePartitioner *sp = ctx;
-
-  if (partition > sp->size) {
-    return NULL;
-  }
-
-  size_t step = sp->tableSize / sp->size;
-  // printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
-  return sp->table[((partition + 1) * step - 1) % sp->tableSize];
-}
-
-Partitioner NewSimplePartitioner(size_t numPartitions, const char **table, size_t tableSize) {
-
-  SimplePartitioner *sp = malloc(sizeof(SimplePartitioner));
-  *sp = (SimplePartitioner){.size = numPartitions,
-                            .table = calloc(numPartitions, sizeof(const char *))};
-  sp->table = table;
-  sp->tableSize = tableSize;
-
-  return (Partitioner){.ctx = sp,
-                       .PartitionForKey = SP_PartitionForKey,
-                       .PartitionTag = SP_PartitionTag,
-                       .Free = SP_Free};
-}
-
-SearchCluster NewSearchCluster(size_t size, Partitioner pt) {
-  return (SearchCluster){.size = size, .part = pt};
+SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize) {
+  SearchCluster ret = (SearchCluster){.size = size};
+  PartitionCtx_Init(&ret.part, size, table, tableSize);
+  return ret;
 }
 
 int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
@@ -63,8 +22,8 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   char *rewriteArg = cmd->args[arg];
   char *tagged;
 
-  size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
-  asprintf(&tagged, "%s{%s}", rewriteArg, sc->part.PartitionTag(sc->part.ctx, part));
+  size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
+  asprintf(&tagged, "%s{%s}", rewriteArg, PartitionTag(&sc->part, part));
   MRCommand_ReplaceArgNoDup(cmd, arg, tagged);
 
   return 1;
@@ -81,8 +40,8 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
 
     char *tagged;
 
-    size_t part = sc->part.PartitionForKey(sc->part.ctx, partitionArg, strlen(partitionArg));
-    asprintf(&tagged, "%s{%s}", shardingArg, sc->part.PartitionTag(sc->part.ctx, part));
+    size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
+    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
     MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
   }
   return 1;
@@ -99,8 +58,7 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
     char *arg = cmd->args[it->keyOffset];
     char *tagged;
-    asprintf(&tagged, "%s{%s}", arg,
-             it->cluster->part.PartitionTag(it->cluster->part.ctx, it->offset++));
+    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset++));
     // printf("tagged: %s\n", tagged);
     MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
   }

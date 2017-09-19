@@ -883,11 +883,11 @@ static void yy_reduce(
     // translate optional shard func from arguments to proper enum.
     // We will only get it from newer versions of the cluster, so if we don't get it we assume 
     // CRC12 / 4096
-    yymsp[0].minor.yy45->hashFunc = MRHashFunc_CRC12;
+    yymsp[0].minor.yy45->hashFunc = MRHashFunc_None;
     if (ctx->shardFunc) {
-        if (!strncmp(ctx->shardFunc, MRHASHFUNC_CRC12_STR, strlen(MRHASHFUNC_CRC12_STR))) {
+        if (!strncasecmp(ctx->shardFunc, MRHASHFUNC_CRC12_STR, strlen(MRHASHFUNC_CRC12_STR))) {
             yymsp[0].minor.yy45->hashFunc = MRHashFunc_CRC12;
-        } else if (!strncmp(ctx->shardFunc, MRHASHFUNC_CRC16_STR, strlen(MRHASHFUNC_CRC16_STR))) {
+        } else if (!strncasecmp(ctx->shardFunc, MRHASHFUNC_CRC16_STR, strlen(MRHASHFUNC_CRC16_STR))) {
             yymsp[0].minor.yy45->hashFunc = MRHashFunc_CRC16;
         } else {
             // ERROR!
@@ -1333,7 +1333,7 @@ MRClusterTopology *MR_ParseTopologyRequest(const char *c, size_t len, char **err
     int t = 0;
 
     parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, 
-                    .errorMsg = NULL, .numSlots = 0, .shardFunc = MRHashFunc_CRC12 };
+                    .errorMsg = NULL, .numSlots = 0, .shardFunc = MRHashFunc_None };
     
     while (ctx.ok && 0 != (t = yylex())) {
         MRTopologyRequest_Parse(pParser, t, tok, &ctx);                

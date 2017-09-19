@@ -40,6 +40,7 @@ MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
   // printf("Creating a topology of %zd slots\n", len);
   MRClusterTopology *topo = calloc(1, sizeof(MRClusterTopology));
   topo->hashFunc = MRHashFunc_CRC16;
+
   topo->numSlots = 16384;
   topo->numShards = 0;
   topo->shards = calloc(len, sizeof(MRClusterShard));

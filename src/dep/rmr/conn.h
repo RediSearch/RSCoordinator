@@ -6,9 +6,9 @@
 #include "endpoint.h"
 #include "command.h"
 
-#include "../triemap/triemap.h"\
+#include "../triemap/triemap.h"
 
-#define MR_CONN_POOL_SIZE 4
+#define MR_CONN_POOL_SIZE 8
 
 /* The state of the connection */
 typedef enum {

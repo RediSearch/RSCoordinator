@@ -920,7 +920,7 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
 
         self.assertEqual(d['index_name'], 'idx')
         self.assertEqual(d['index_options'], ['NOFIELDS'])
-        self.assertListEqual(d['fields'], [['title', 'type', 'TEXT', 'weight', '1']])
+        self.assertListEqual(d['fields'], [['title', 'type', 'TEXT', 'WEIGHT', '1']])
 
         self.assertEquals(int(d['num_docs']), combined['num_docs'])
         self.assertEquals(int(d['num_terms']), combined['num_terms'])

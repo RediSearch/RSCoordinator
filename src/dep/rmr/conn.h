@@ -8,7 +8,7 @@
 
 #include "../triemap/triemap.h"
 
-#define MR_CONN_POOL_SIZE 8
+#define MR_CONN_POOL_SIZE 2
 
 /* The state of the connection */
 typedef enum {

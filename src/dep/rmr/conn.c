@@ -111,7 +111,7 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
     MRConn *conn = pool->conns[0];
     // the node hasn't changed address, we don't need to do anything */
     if (!strcmp(conn->ep.host, ep->host) && conn->ep.port == ep->port) {
-      //printf("No need to switch conn pools!\n");
+      // printf("No need to switch conn pools!\n");
       return 0;
     }
 

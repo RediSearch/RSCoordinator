@@ -152,9 +152,9 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
   return s1 < s2 ? 1 : (s1 > s2 ? -1 : strcmp(r2->id, r1->id));
 }
 
-searchResult *newResult(MRReply *arr, int j, int scoreOffset, int payloadOffset, int fieldsOffset,
-                        int sortKeyOffset) {
-  searchResult *res = malloc(sizeof(searchResult));
+searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,
+                        int payloadOffset, int fieldsOffset, int sortKeyOffset) {
+  searchResult *res = cached ? cached : malloc(sizeof(searchResult));
   res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
@@ -197,6 +197,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   size_t num = req->offset + req->limit;
   heap_t *pq = malloc(heap_sizeof(num));
   heap_init(pq, cmp_results, req, num);
+  searchResult *cached = NULL;
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
     if (MRReply_Type(arr) == MR_REPLY_ERROR) {
@@ -224,12 +225,13 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         step--;
         fieldsOffset = -1;
       }
+      int jj = 0;
       // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
       //         scoreOffset, fieldsOffset, sortKeyOffset);
-      for (int j = 1; j < len; j += step) {
+      for (int j = 1; j < len; j += step, jj++) {
         searchResult *res =
-            newResult(arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
-
+            newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
+        cached = NULL;
         // fprintf(stderr, "Response %d result %d Reply docId %s score: %f\n", i, j, res->id,
         //         res->score);
 
@@ -239,18 +241,21 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
         } else {
           searchResult *smallest = heap_peek(pq);
-          if (cmp_results(res, smallest, req) < 0) {
+          int c = cmp_results(res, smallest, req);
+          if (c < 0) {
             smallest = heap_poll(pq);
             heap_offerx(pq, res);
-            free(smallest);
+            cached = smallest;
           } else {
-            free(res);
+            // If the result is lower than the last result in the heap - we can stop now
+            cached = res;
+            break;
           }
         }
       }
     }
   }
-
+  if (cached) free(cached);
   // If we didn't get any results and we got an error - return it.
   // If some shards returned results and some errors - we prefer to show the results we got an not
   // return an error. This might change in the future

@@ -22,10 +22,14 @@ MRReply *MRReply_Duplicate(redisReply *rep);
 /* Currently a single cluster is supported */
 static MRCluster *cluster_g = NULL;
 
+static int concurrentRequests_g = 0;
+
 /* MapReduce context for a specific command's execution */
 typedef struct MRCtx {
   struct timespec startTime;
+  struct timespec firstRespTime;
   struct timespec endTime;
+  int timeHistogram[1000];
   int numReplied;
   int numExpected;
   int numErrored;
@@ -42,6 +46,7 @@ int64_t MR_RequestDuration(MRCtx *ctx) {
   return ((int64_t)1000000 * ctx->endTime.tv_sec + ctx->endTime.tv_nsec / 1000) -
          ((int64_t)1000000 * ctx->startTime.tv_sec + ctx->startTime.tv_nsec / 1000);
 }
+
 void MR_SetCoordinationStrategy(MRCtx *ctx, MRCoordinationStrategy strategy) {
   ctx->strategy = strategy;
 }
@@ -52,6 +57,8 @@ MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   MRCtx *ret = malloc(sizeof(MRCtx));
   clock_gettime(CLOCK_REALTIME, &ret->startTime);
   ret->endTime = ret->startTime;
+  ret->firstRespTime = ret->startTime;
+  memset(ret->timeHistogram, 0, sizeof(ret->timeHistogram));
   ret->numReplied = 0;
   ret->numErrored = 0;
   ret->numExpected = 0;
@@ -93,11 +100,14 @@ static void freePrivDataCB(void *p) {
   // printf("FreePrivData called!\n");
   if (p) {
     MRCtx *mc = p;
+    concurrentRequests_g--;
     MRCtx_Free(mc);
   }
 }
 
 static int timeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  // concurrentRequests_g--;
+  fprintf(stderr, "Timeout!\n");
   return RedisModule_ReplyWithError(ctx, "Timeout calling command");
 }
 
@@ -106,7 +116,14 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
   // RedisModule_AutoMemory(ctx);
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
   clock_gettime(CLOCK_REALTIME, &mc->endTime);
-  // printf("Request duration: %.02fms\n", (double)MR_RequestDuration(mc) / 1000);
+
+  // fprintf(stderr, "Queue size now %d\n", concurrentRequests_g);
+  // fprintf(stderr, "Response histogram: ");
+  // for (int i = 0; i < 20; i++) {
+  //   fprintf(stderr, "%d ", mc->timeHistogram[i]);
+  // }
+  // fputc('\n', stderr);
+
   mc->redisCtx = ctx;
 
   return mc->reducer(mc, mc->numReplied, mc->replies);
@@ -115,8 +132,18 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 /* The callback called from each fanout request to aggregate their replies */
 static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   MRCtx *ctx = privdata;
+
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME, &now);
+
+  long long ms = ((int64_t)1000 * now.tv_sec + now.tv_nsec / 1000000) -
+                 ((int64_t)1000 * ctx->startTime.tv_sec + ctx->startTime.tv_nsec / 1000000);
+  if (ms < 1000) {
+    ctx->timeHistogram[ms]++;
+  }
+
   if (ctx->numReplied == 0 && ctx->numErrored == 0) {
-    clock_gettime(CLOCK_REALTIME, &ctx->startTime);
+    clock_gettime(CLOCK_REALTIME, &ctx->firstRespTime);
   }
   if (!r) {
     ctx->numErrored++;
@@ -177,7 +204,16 @@ static struct MRRequestCtx *RQ_Pop(MRRequestQueue *q) {
     uv_mutex_unlock(q->lock);
     return NULL;
   }
+  if (concurrentRequests_g > MR_CONN_POOL_SIZE * 2) {
+    // fprintf(stderr, "Cannot proceed - queue size %d\n", concurrentRequests_g);
+    uv_mutex_unlock(q->lock);
+    return NULL;
+  }
+  // else {
+  //   fprintf(stderr, "queue size %d\n", concurrentRequests_g);
+  // }
   struct MRRequestCtx *r = q->queue[--q->sz];
+
   uv_mutex_unlock(q->lock);
   return r;
 }
@@ -186,6 +222,7 @@ static void rqAsyncCb(uv_async_t *async) {
   MRRequestQueue *q = async->data;
   struct MRRequestCtx *req;
   while (NULL != (req = RQ_Pop(q))) {
+    concurrentRequests_g++;
     req->cb(req);
   }
 }
@@ -365,6 +402,7 @@ size_t MR_NumHosts() {
 /* on-loop update topology request. This can't be done from the main thread */
 static void uvUpdateTopologyRequest(struct MRRequestCtx *mc) {
   MRCLuster_UpdateTopology(cluster_g, (MRClusterTopology *)mc->ctx);
+  concurrentRequests_g--;
   free(mc);
 }
 

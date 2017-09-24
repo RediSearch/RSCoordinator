@@ -341,7 +341,7 @@ void MRTopologyRequest_ParseTrace(FILE *TraceFILE, char *zTracePrompt){
 ** are required.  The following table supplies these names */
 static const char *const yyTokenName[] = { 
   "$",             "MYID",          "HASHFUNC",      "STRING",      
-  "SLOTS",         "INTEGER",       "RANGES",        "HASREPLICATION",
+  "NUMSLOTS",      "INTEGER",       "RANGES",        "HASREPLICATION",
   "SHARD",         "SLOTRANGE",     "ADDR",          "UNIXADDR",    
   "MASTER",        "error",         "shard",         "endpoint",    
   "topology",      "master",        "has_replication",  "cluster",     
@@ -355,7 +355,7 @@ static const char *const yyTokenName[] = {
 static const char *const yyRuleName[] = {
  /*   0 */ "root ::= cluster topology",
  /*   1 */ "cluster ::= cluster MYID shardid",
- /*   2 */ "cluster ::= cluster HASHFUNC STRING SLOTS INTEGER",
+ /*   2 */ "cluster ::= cluster HASHFUNC STRING NUMSLOTS INTEGER",
  /*   3 */ "cluster ::= cluster has_replication",
  /*   4 */ "cluster ::=",
  /*   5 */ "topology ::= RANGES INTEGER",
@@ -927,7 +927,7 @@ err:
 #line 928 "grammar.c"
 }
         break;
-      case 2: /* cluster ::= cluster HASHFUNC STRING SLOTS INTEGER */
+      case 2: /* cluster ::= cluster HASHFUNC STRING NUMSLOTS INTEGER */
 {  yy_destructor(yypParser,19,&yymsp[-4].minor);
 #line 100 "grammar.y"
 {

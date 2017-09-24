@@ -288,6 +288,7 @@ static ShardFunc selectHashFunc(MRHashFunc f) {
 }
 int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopo) {
 
+  if (!newTopo) return REDIS_ERR;
   // only update the topology every N seconds
   time_t now = time(NULL);
   if (cl->topo != NULL && cl->lastTopologyUpdate + cl->topologyUpdateMinInterval > now) {

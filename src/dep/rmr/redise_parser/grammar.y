@@ -97,7 +97,7 @@ cluster ::= cluster MYID shardid(B) . {
     ctx->my_id = B;
 }
 
-cluster ::= cluster HASHFUNC STRING(A) SLOTS INTEGER(B) . {
+cluster ::= cluster HASHFUNC STRING(A) NUMSLOTS INTEGER(B) . {
     ctx->shardFunc = A.strval;
     ctx->numSlots = B.intval;
 }

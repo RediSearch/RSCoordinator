@@ -4,7 +4,7 @@
 
 void testParser() {
   const char *q =
-      "MYID 1 HASREPLICATION HASHFUNC CRC16 SLOTS 1337 RANGES 2 SHARD 1 SLOTRANGE 0 2047 ADDR "
+      "MYID 1 HASREPLICATION HASHFUNC CRC16 NUMSLOTS 1337 RANGES 2 SHARD 1 SLOTRANGE 0 2047 ADDR "
       "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j@10.0.1.7:20293 UNIXADDR "
       "unix:/tmp/redis-1.sock MASTER SHARD 2 SLOTRANGE 0 2047 ADDR "
       "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j@10.0.1.50:20293 SHARD 3 SLOTRANGE 2048 "
@@ -99,7 +99,7 @@ void testHashFunc() {
   mu_assert_int_eq(MRHashFunc_None, topo->hashFunc);
   MRClusterTopology_Free(topo);
 
-  q = "MYID 1 HASHFUNC CRC16 SLOTS 1337 "
+  q = "MYID 1 HASHFUNC CRC16 NUMSLOTS 1337 "
       "RANGES 1 "
       "SHARD 1 SLOTRANGE 0 2047 ADDR "
       "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j@10.0.1.7:20293";
@@ -117,7 +117,7 @@ void testHashFunc() {
   MRClusterTopology_Free(topo);
 
   // Test error in func
-  q = "MYID 1 HASHFUNC CRC13 SLOTS 1337 "
+  q = "MYID 1 HASHFUNC CRC13 NUMSLOTS 1337 "
       "RANGES 1 "
       "SHARD 1 SLOTRANGE 0 2047 ADDR "
       "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j@10.0.1.7:20293";
@@ -129,7 +129,7 @@ void testHashFunc() {
   free(err);
 
   // Test error in slotnum
-  q = "MYID 1 HASHFUNC CRC13 SLOTS 1337 "
+  q = "MYID 1 HASHFUNC CRC13 NUMSLOTS 1337 "
       "RANGES 1 "
       "SHARD 1 SLOTRANGE 0 2047 ADDR "
       "7EM5XV8XoDoazyvOnMOxbphgClZPGju2lZvm4pvDl3WHvk4j@10.0.1.7:20293";

@@ -36,6 +36,50 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
+/* A reducer that just merges N arrays of the same length, selecting the first non NULL reply from
+ * each */
+int mergeArraysReducer(struct MRCtx *mc, int count, MRReply **replies) {
+
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+
+  int j = 0;
+  int stillValid;
+  do {
+    // the number of still valid arrays in the response
+    stillValid = 0;
+
+    for (int i = 0; i < count; i++) {
+      // if this is not an array - ignore it
+      if (MRReply_Type(replies[i]) != MR_REPLY_ARRAY) continue;
+      // if we've overshot the array length - ignore this one
+      if (MRReply_Length(replies[i]) <= j) continue;
+      // increase the number of valid replies
+      stillValid++;
+
+      // get the j element of array i
+      MRReply *ele = MRReply_ArrayElement(replies[i], j);
+      // if it's a valid response OR this is the last array we are scanning -
+      // add this element to the merged array
+      if (MRReply_Type(ele) != MR_REPLY_NIL || i + 1 == count) {
+        // if this is the first reply - we need to crack open a new array reply
+        if (j == 0) RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+        MR_ReplyWithMRReply(ctx, ele);
+        j++;
+        break;
+      }
+    }
+  } while (stillValid > 0);
+
+  // j 0 means we could not process a single reply element from any reply
+  if (j == 0) {
+    return RedisModule_ReplyWithError(ctx, "Could not process replies");
+  }
+  RedisModule_ReplySetArrayLength(ctx, j);
+
+  return REDISMODULE_OK;
+}
+
 int singleReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
@@ -345,8 +389,32 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
       SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, partPos, partPos);
     }
   }
+  // MRCommand_Print(&cmd);
   MR_MapSingle(MR_CreateCtx(ctx, NULL), singleReplyReducer, cmd);
 
+  return REDISMODULE_OK;
+}
+
+/* FT.MGET {idx} {key} ... */
+int MGetCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own FT command with _FT. command */
+  MRCommand_SetPrefix(&cmd, "_FT");
+  for (int i = 2; i < argc; i++) {
+    SearchCluster_RewriteCommandArg(&__searchCluster, &cmd, i, i);
+  }
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
+  MR_Map(mrctx, mergeArraysReducer, cg);
+  cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
 
@@ -791,6 +859,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.DEL", SafeCmd(SingleShardCommandHandler), "readonly", 0,
                                    0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.GET", SafeCmd(SingleShardCommandHandler), "readonly", 0,
+                                   0, -1));
+  RM_TRY(
+      RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
 
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));

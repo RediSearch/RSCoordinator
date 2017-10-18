@@ -7,7 +7,7 @@ RUN set -ex;\
     deps="$DEPS";\
     apt-get update; \
 	apt-get install -y --no-install-recommends $deps;\
-    pip install rmtest s3cmd ramp-packer; 
+    pip install rmtest s3cmd ramp-packer=1.2.3; 
 
 
 # # Package the runner

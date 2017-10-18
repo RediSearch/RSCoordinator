@@ -15,6 +15,9 @@ struct mrCommandConf __commandConfig[] = {
     // document commands
     {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1, 1},
     {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey, 1, 2},
+    {"_FT.GET", MRCommand_Read | MRCommand_MultiKey, 1, 2},
+    {"_FT.MGET", MRCommand_Read | MRCommand_MultiKey, 1, 2},
+
     {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey, 1, 2},
     {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey, 1, 2},
 
@@ -44,6 +47,8 @@ struct mrCommandConf __commandConfig[] = {
     {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1, 2},
     {"FT.DROP", MRCommand_Read | MRCommand_Coordination, -1, 1},
     {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.GET", MRCommand_Read | MRCommand_Coordination, -1, 2},
+    {"FT.MGET", MRCommand_Read | MRCommand_Coordination, -1, 2},
 
     // Auto complete coordination commands
     {"FT.SUGADD", MRCommand_Read | MRCommand_Coordination, -1, 1},
@@ -159,7 +164,7 @@ void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix) {
   char *buf = NULL;
   asprintf(&buf, "%s.%s", newPrefix, suffix);
   MRCommand_ReplaceArgNoDup(cmd, 0, buf);
-   _getCommandConfId(cmd);
+  _getCommandConfId(cmd);
 }
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg) {
   if (index < 0 || index >= cmd->num) {

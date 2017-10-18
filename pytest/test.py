@@ -854,6 +854,28 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             for i in range(1, 30, 3):
                 self.assertEqual(res[i + 1], 'payload %s' % res[i])
 
+    def testGet(self):
+        self.broadcast(self.client, 'flushdb')
+        with self.redis() as r:
+            
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'foo', 'text', 'bar', 'text'))
+
+            for i in range(100):
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+                                                'foo', 'hello world', 'bar', 'wat wat'))
+
+            for i in range(100):
+                res = r.execute_command('ft.get', 'idx', 'doc%d' % i)
+                self.assertIsNotNone(res)
+                self.assertListEqual(['foo', 'hello world', 'bar', 'wat wat'], res)
+
+            rr = r.execute_command('ft.mget', 'idx', *('doc%d' % i for i in range(100)))
+            self.assertEqual(len(rr), 100)
+            for res in rr:
+                self.assertIsNotNone(res)
+                self.assertListEqual(['foo', 'hello world', 'bar', 'wat wat'], res)
+ 
     def testInfoCommand(self):
         from itertools import combinations
 

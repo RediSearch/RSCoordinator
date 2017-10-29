@@ -16,7 +16,6 @@
 
     static void parseCtx_Free(parseCtx *ctx) {
         if (ctx->my_id) {
-            printf("freeing %s\n", ctx->my_id);
             free(ctx->my_id);
         }
     }
@@ -188,7 +187,7 @@ MRClusterTopology *MR_ParseTopologyRequest(const char *c, size_t len, char **err
     void* pParser =  MRTopologyRequest_ParseAlloc (malloc);        
     int t = 0;
 
-    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, 
+    parseCtx ctx = {.topology = NULL, .ok = 1, .replication = 0, .my_id = NULL,
                     .errorMsg = NULL, .numSlots = 0, .shardFunc = MRHashFunc_None };
     
     while (ctx.ok && 0 != (t = yylex())) {

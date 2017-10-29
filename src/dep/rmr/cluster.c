@@ -53,7 +53,6 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
     it = TrieMap_Iterate(currentNodes, "", 0);
     while (TrieMapIterator_Next(it, &k, &len, &p)) {
       k[len] = '\0';
-      // printf("Removing node %s from conn manager\n", k);
       MRConnManager_Disconnect(&cl->mgr, k);
     }
     TrieMapIterator_Free(it);

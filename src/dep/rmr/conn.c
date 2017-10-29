@@ -111,7 +111,7 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
     MRConn *conn = pool->conns[0];
     // the node hasn't changed address, we don't need to do anything */
     if (!strcmp(conn->ep.host, ep->host) && conn->ep.port == ep->port) {
-      // printf("No need to switch conn pools!\n");
+      // fprintf(stderr, "No need to switch conn pools!\n");
       return 0;
     }
 
@@ -171,10 +171,14 @@ int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
 
 /* Stop the connection and make sure it frees itself on disconnect */
 void MRConn_Stop(MRConn *conn) {
-  printf("Stopping conn to %s:%d\n", conn->ep.host, conn->ep.port);
-  conn->state = MRConn_Stopping;
-  if (conn->conn) {
-    redisAsyncDisconnect(conn->conn);
+  if (conn && conn->state != MRConn_Stopping) {
+    fprintf(stderr, "Stopping conn to %s:%d\n", conn->ep.host, conn->ep.port);
+    conn->state = MRConn_Stopping;
+    if (conn->conn) {
+      redisAsyncDisconnect(conn->conn);
+    }
+  } else if (conn) {
+    fprintf(stderr, "Conn to %s:%d already disconnecting\n", conn->ep.host, conn->ep.port);
   }
 }
 
@@ -210,7 +214,7 @@ void _MRConn_StartReconnectLoop(MRConn *conn) {
 void _MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
   MRConn *conn = c->data;
   if (c->err || !r) {
-    printf("Error sending auth. Reconnecting...");
+    fprintf(stderr, "Error sending auth. Reconnecting...");
     conn->state = MRConn_Disconnected;
     _MRConn_StartReconnectLoop(conn);
   }
@@ -219,24 +223,24 @@ void _MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   /* AUTH error */
   if (rep->type == REDIS_REPLY_ERROR) {
-    printf("Error authenticating: %s\n", rep->str);
+    fprintf(stderr, "Error authenticating: %s\n", rep->str);
     conn->state = MRConn_AuthDenied;
     /*we don't try to reconnect to failed connections */
     return;
   }
 
   /* Success! we are now connected! */
-  printf("Connected and authenticated to %s:%d\n", conn->ep.host, conn->ep.port);
+  fprintf(stderr, "Connected and authenticated to %s:%d\n", conn->ep.host, conn->ep.port);
   conn->state = MRConn_Connected;
 }
 
 /* hiredis async connect callback */
 void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   MRConn *conn = c->data;
-  // printf("Connect callback! status :%d\n", status);
+  // fprintf(stderr, "Connect callback! status :%d\n", status);
   // if the connection is not stopped - try to reconnect
   if (status != REDIS_OK && conn->state != MRConn_Stopped) {
-    printf("Error on connect: %s\n", c->errstr);
+    fprintf(stderr, "Error on connect: %s\n", c->errstr);
     conn->state = MRConn_Disconnected;
     _MRConn_StartReconnectLoop(conn);
     return;
@@ -254,17 +258,17 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
       _MRConn_StartReconnectLoop(conn);
     }
 
-    printf("Authenticating %s:%d\n", conn->ep.host, conn->ep.port);
+    fprintf(stderr, "Authenticating %s:%d\n", conn->ep.host, conn->ep.port);
     return;
   }
   conn->state = MRConn_Connected;
-  printf("Connected %s:%d...\n", conn->ep.host, conn->ep.port);
+  fprintf(stderr, "Connected %s:%d...\n", conn->ep.host, conn->ep.port);
 }
 
 void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
 
   MRConn *conn = c->data;
-  // printf("Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
+  // fprintf(stderr, "Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
   // MRConn_Stopped means the disconnect was initiated by us and not due to failure
   if (conn->state != MRConn_Stopping) {
     conn->state = MRConn_Disconnected;
@@ -294,11 +298,12 @@ int _MRConn_Connect(MRConn *conn) {
 
   conn->conn = NULL;
   conn->state = MRConn_Disconnected;
-  // printf("Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
+  // fprintf(stderr, "Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
 
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
   if (c->err) {
-    printf("Could not connect to node %s:%d: %s\n", conn->ep.host, conn->ep.port, c->errstr);
+    fprintf(stderr, "Could not connect to node %s:%d: %s\n", conn->ep.host, conn->ep.port,
+            c->errstr);
     redisAsyncFree(c);
     return REDIS_ERR;
   }

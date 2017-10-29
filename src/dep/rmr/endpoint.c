@@ -40,7 +40,7 @@ void MREndpoint_Copy(MREndpoint *dst, const MREndpoint *src) {
   }
 
   if (src->unixSock) {
-    dst->host = strdup(src->host);
+    dst->unixSock = strdup(src->unixSock);
   }
 
   if (src->auth) {

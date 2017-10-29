@@ -79,7 +79,7 @@ root ::=  cluster topology(D). {
 	// detect my id and mark the flag here
     for (size_t s = 0; s < ctx->topology->numShards; s++) {
         for (size_t n = 0; n < ctx->topology->shards[s].numNodes; n++) {
-            if (!strcmp(ctx->topology->shards[s].nodes[n].id, ctx->my_id)) {
+            if (ctx->my_id && !strcmp(ctx->topology->shards[s].nodes[n].id, ctx->my_id)) {
                 ctx->topology->shards[s].nodes[n].flags |= MRNode_Self;
             }
         }

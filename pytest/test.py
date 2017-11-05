@@ -352,7 +352,74 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             res = r.execute_command('ft.search', 'idx', 'constant term9*', 'nocontent')
             self.assertEqual([0], res)
 
-    
+    def testNoIndex(self):
+        with self.redis() as r:
+            self.broadcast(r, 'flushdb')
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 
+                    'foo', 'text', 
+                    'num', 'numeric', 'sortable', 'noindex',
+                    'extra', 'text', 'noindex', 'sortable'))
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '0.1', 'fields',
+                                                'foo', 'hello world', 'num', 1, 'extra', 'lorem ipsum'))
+            res = r.execute_command('ft.search', 'idx', 'hello world', 'nocontent')
+            self.assertListEqual([1, 'doc1'], res)
+            res = r.execute_command('ft.search', 'idx', 'lorem ipsum', 'nocontent')
+            self.assertListEqual([0], res)
+            res = r.execute_command('ft.search', 'idx', '@num:[1 1]', 'nocontent')
+            self.assertListEqual([0], res)
+
+
+    def testPartial(self):
+        with self.redis() as r:
+            self.broadcast(r, 'flushdb')
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 
+                        'foo', 'text', 
+                        'num', 'numeric', 'sortable', 'noindex', 
+                        'extra', 'text', 'noindex'))
+            #print r.execute_command('ft.info', 'idx')
+
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '0.1', 'fields',
+                                                'foo', 'hello world', 'num', 1, 'extra', 'lorem ipsum'))
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc2', '0.1', 'fields',
+                                                'foo', 'hello world', 'num', 2, 'extra', 'abba'))
+            res = r.execute_command('ft.search', 'idx', 'hello world', 'sortby', 'num', 'asc', 'nocontent', 'withsortkeys')
+            self.assertListEqual([2L, 'doc1', '1', 'doc2', '2'], res)
+            res = r.execute_command('ft.search', 'idx', 'hello world', 'sortby', 'num', 'desc', 'nocontent', 'withsortkeys')
+            self.assertListEqual([2L, 'doc2', '2', 'doc1', '1'], res)
+            
+            
+            # Updating non indexed fields doesn't affect search results
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '0.1', 'replace', 'partial',
+                                                'fields', 'num', 3, 'extra', 'jorem gipsum'))
+            res = r.execute_command('ft.search', 'idx', 'hello world','sortby', 'num', 'desc',)
+            self.assertListEqual([2L,'doc1', ['foo', 'hello world', 'num', '3', 'extra', 'jorem gipsum'],
+                                     'doc2', ['foo', 'hello world', 'num', '2', 'extra', 'abba']], res)
+            res = r.execute_command('ft.search', 'idx', 'hello', 'nocontent', 'withscores')
+            # Updating only indexed field affects search results
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '0.1', 'replace', 'partial',
+                                                'fields', 'foo', 'wat wet'))
+            res = r.execute_command('ft.search', 'idx', 'hello world', 'nocontent')
+            self.assertListEqual([1L, 'doc2'], res)
+            res = r.execute_command('ft.search', 'idx', 'wat', 'nocontent')
+            self.assertListEqual([1L, 'doc1'], res)
+
+            # Test updating of score and no fields
+            res = r.execute_command('ft.search', 'idx', 'wat', 'nocontent', 'withscores')
+            self.assertLess(float(res[2]), 1)
+            #self.assertListEqual([1L, 'doc1'], res)
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '1.0', 'replace', 'partial', 'fields'))
+            res = r.execute_command('ft.search', 'idx', 'wat', 'nocontent', 'withscores')
+            self.assertGreater(float(res[2]), 1)
+
+            # Test updating payloads
+            res = r.execute_command('ft.search', 'idx', 'wat', 'nocontent', 'withpayloads')
+            self.assertIsNone(res[2])
+            self.assertOk(r.execute_command('ft.add', 'idx', 'doc1', '1.0', 'replace', 'partial', 'payload', 'foobar', 'fields'))
+            res = r.execute_command('ft.search', 'idx', 'wat', 'nocontent', 'withpayloads')
+            self.assertEqual('foobar', res[2])
+
     def testSortBy(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -375,7 +442,33 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
             self.assertListEqual([100L, 'doc2', '98', 'doc3', '97', 'doc4', '96', 'doc5', '95', 'doc6', '94'], res)
 
 
-
+    def testNestedIntersection(self):
+        with self.redis() as r:
+            self.broadcast(r, 'FLUSHDB')
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'a', 'text', 'b', 'text', 'c', 'text', 'd', 'text'))
+            for i in range(20):
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, float(i+1)/20, 'fields',
+                                                'a', 'foo', 'b', 'bar', 'c', 'baz', 'd', 'gaz'))
+            res = [
+                r.execute_command('ft.search', 'idx', 'foo bar baz gaz', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@a:foo @b:bar @c:baz @d:gaz', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@b:bar @a:foo @c:baz @d:gaz', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@c:baz @b:bar @a:foo @d:gaz', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@d:gaz @c:baz @b:bar @a:foo', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@a:foo (@b:bar (@c:baz @d:gaz))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@c:baz (@a:foo (@b:bar (@c:baz @d:gaz)))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@b:bar (@a:foo (@c:baz @d:gaz))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', '@d:gaz (@a:foo (@c:baz @b:bar))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', 'foo (bar baz gaz)', 'nocontent'),
+                r.execute_command('ft.search', 'idx', 'foo (bar (baz gaz))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', 'foo (bar (foo bar) (foo bar))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', 'foo (foo (bar baz (gaz)))', 'nocontent'),
+                r.execute_command('ft.search', 'idx', 'foo (foo (bar (baz (gaz (foo bar (gaz))))))', 'nocontent')]
+            
+            for r in res:
+                self.assertListEqual(res[0], r)
+            
     def testNot(self):
         with self.redis() as r:
             self.broadcast(r, 'flushdb')
@@ -982,6 +1075,110 @@ class SearchTestCase(ModuleTestCase('../src/module.so')):
 
                 for option in filter(None, combo):
                     self.assertTrue(option in opts)
+    
+    def testReturning(self):
+        self.cmd('FT.BROADCAST', 'FLUSHDB')
+        
+        self.assertCmdOk('ft.create', 'idx', 'schema', 'f1',
+                         'text', 'f2', 'text', 'n1', 'numeric', 'f3', 'text')
+        for i in range(10):
+            self.assertCmdOk('ft.add', 'idx', 'DOC_{0}'.format(i), 1.0, 'fields',
+                             'f2', 'val2', 'f1', 'val1', 'f3', 'val3',
+                             'n1', i)
+
+        # RETURN 0. Simplest case
+        for x in self.retry_with_reload():
+            res = self.cmd('ft.search', 'idx', 'val*', 'return', '0')
+            self.assertEqual(11, len(res))
+            self.assertEqual(10, res[0])
+            for r in res[1:]:
+                self.assertTrue(r.startswith('DOC_'))
+
+        for field in ('f1', 'f2', 'f3', 'n1'):
+            res = self.cmd('ft.search', 'idx', 'val*', 'return', 1, field)
+            self.assertEqual(21, len(res))
+            self.assertEqual(10, res[0])
+            for pair in grouper(res[1:], 2):
+                docname, fields = pair
+                self.assertEqual(2, len(fields))
+                self.assertEqual(field, fields[0])
+                self.assertTrue(docname.startswith('DOC_'))
+
+        # Test when field is not found
+        res = self.cmd('ft.search', 'idx', 'val*', 'return', 1, 'nonexist')
+        self.assertEqual(21, len(res))
+        self.assertEqual(10, res[0])
+        for pair in grouper(res[1:], 2):
+            _, pair = pair
+            self.assertEqual(None, pair[1])
+
+    def testNoStem(self):
+        self.cmd('FT.BROADCAST', 'FLUSHDB')
+
+        self.cmd('ft.create', 'idx', 'schema', 'body', 'text', 'name', 'text', 'nostem')
+        for _ in self.retry_with_reload():
+            try:
+                self.cmd('ft.del', 'idx', 'doc')
+            except redis.ResponseError:
+                pass
+
+            # Insert a document
+            self.assertCmdOk('ft.add', 'idx', 'doc', 1.0, 'fields',
+                             'body', "located",
+                             'name', "located")
+
+            # Now search for the fields
+            res_body = self.cmd('ft.search', 'idx', '@body:location')
+            res_name = self.cmd('ft.search', 'idx', '@name:location')
+            self.assertEqual(0, res_name[0])
+            self.assertEqual(1, res_body[0])
+
+    def testSearchNonexistField(self):
+        self.cmd('FT.BROADCAST', 'FLUSHDB')
+        # GH Issue 133
+        self.cmd('ft.create', 'idx', 'schema', 'title', 'text',
+                 'weight', 5.0, 'body', 'text', 'url', 'text')
+        self.cmd('ft.add', 'idx', 'd1', 1.0, 'nosave', 'fields', 'title',
+                 'hello world', 'body', 'lorem dipsum', 'place', '-77.0366 38.8977')
+        self.cmd('ft.search', 'idx', 'Foo', 'GEOFILTER', 'place', '-77.0366', '38.8977', '1', 'km')
+
+    def testSortbyMissingField(self):
+        # GH Issue 131
+        self.cmd('FT.BROADCAST', 'FLUSHDB')
+        self.cmd('ft.create', 'ix', 'schema', 'txt', 'text', 'num', 'numeric', 'sortable')
+        self.cmd('ft.add', 'ix', 'doc1', 1.0, 'fields', 'txt', 'foo')
+        self.cmd('ft.search', 'ix', 'foo', 'sortby', 'num')
+    
+    def testParallelIndexing(self):
+        # GH Issue 207
+        self.cmd('FT.BROADCAST', 'FLUSHDB')
+        self.cmd('ft.create', 'idx', 'schema', 'txt', 'text')
+        from threading import Thread
+        self.server.client()
+        ndocs = 100
+
+        def runner(tid):
+            cli = self.server.client()
+            for num in range(ndocs):
+                cli.execute_command('ft.add', 'idx', 'doc{}_{}'.format(tid, num), 1.0,
+                                    'fields', 'txt', 'hello world' * 20)
+        ths = []
+        for tid in range(10):
+            ths.append(Thread(target=runner, args=(tid,)))
+
+        [th.start() for th in ths]
+        [th.join() for th in ths]
+        res = self.cmd('ft.info', 'idx')
+        d = {res[i]: res[i + 1] for i in range(0, len(res), 2)}
+        self.assertEqual(1000, int(d['num_docs']))
+                        
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    from itertools import izip_longest
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    args = [iter(iterable)] * n
+    return izip_longest(fillvalue=fillvalue, *args)
+
 
 
 if __name__ == '__main__':

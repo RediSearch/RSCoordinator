@@ -165,6 +165,17 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
 
   // Detect "NOCONTENT"
   req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, 3) != 0;
+
+  // if RETURN exists - make sure we don't have RETURN 0
+  if (!req->noContent && RMUtil_ArgExists("RETURN", argv, argc, 3)) {
+    long long numReturns = -1;
+    RMUtil_ParseArgsAfter("RETURN", argv, argc, "l", &numReturns);
+    // RETURN 0 equals NOCONTENT
+    if (numReturns == 0) {
+      req->noContent = 1;
+    }
+  }
+
   req->withPayload = RMUtil_ArgExists("WITHPAYLOADS", argv, argc, 3) != 0;
 
   // Parse LIMIT argument
@@ -244,6 +255,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   searchResult *cached = NULL;
   for (int i = 0; i < count; i++) {
     MRReply *arr = replies[i];
+    if (!arr) continue;
     if (MRReply_Type(arr) == MR_REPLY_ERROR) {
       lastError = arr;
       continue;

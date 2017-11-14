@@ -7,4 +7,5 @@
 **/*.o
 **/*.a
 .git
+**/print_version
 site

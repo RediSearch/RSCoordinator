@@ -11,6 +11,14 @@ clean:
 	$(MAKE) -C ./src clean
 .PHONY: clean
 
-docker_package:
+BRANCH=$(shell git branch | awk '/\*/{print $$2}')
+docker:
 	docker build . -t rscoordinator
-	docker run -it --rm -v ~/.s3cfg:/root/.s3cfg -v `pwd`/src:/src rscoordinator
+
+# Create a package from the current branch and upload it to s3
+docker_package:
+	docker run -e BRANCH=$(BRANCH) -it --rm -v ~/.s3cfg:/root/.s3cfg -v `pwd`/src:/src rscoordinator
+
+# RELEASES ONLY: Create the "latest" package and a package for the current version, and upload them to s3
+docker_release:
+	docker run -it --rm -v ~/.s3cfg:/root/.s3cfg -v `pwd`/src:/src rscoordinator make all package_release upload

@@ -87,16 +87,39 @@ rmutil:
 clean:
 	rm -rvf *.xo *.so *.o *.a
 
+# Format the version printing utility
+print_version: version.h print_version.c
+	@$(CC) -o $@ -DPRINT_VERSION_TARGET $@.c
+.PHONY: print_version
+
+## Package the module into a RAMP package on master builds and version tag builds
 CWD=$(shell pwd)
-package: module.so
-	$(eval PACK=$(shell ramp-packer -m ramp.yml --output "redisearch-enterprise.{os}-{architecture}.latest.zip" "$(CWD)/module.so"))
+PACKAGE_NAME=redisearch-enterprise
+ifndef BRANCH
+	BRANCH=$(shell git branch | awk '/\*/{print $$2}')
+endif
+RAMP_COMMAND=ramp-packer
+BUILD_DIR:=$(shell mktemp -d)
+
+# Build a RELEASE package(s): the version number plus a "latest" package
+package_release: module.so print_version
+	@$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "$(CWD)/module.so";\
+	@$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "$(CWD)/module.so";\
+.PHONY: package_release
+
+# Build a package for the current branch
+package: module.so print_version
+	@# On normal build - package the branch latest
+	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.$(BRANCH).zip" "$(CWD)/module.so";\
 .PHONY: package
 
-upload: package
-	s3cmd -c $(S3_CONFIG) put $(PACK) --acl-public s3://redismodules/redisearch-enterprise/
+# Upload package files from the build dir to s3
+upload:
+	s3cmd -c $(S3_CONFIG) put $(BUILD_DIR)/*.zip --acl-public s3://redismodules/$(PACKAGE_NAME)/
 .PHONY: upload
 
 deepclean:
+	rm -f print_version
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.l[oa]" -exec rm {} \; -print
 	find ./ -name "*.so" -exec rm {} \; -print

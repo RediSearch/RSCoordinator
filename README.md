@@ -14,13 +14,13 @@ Most of the API that it exposes is identical to RediSearch's with the sole disti
 
 ```
 # Creating an index
-> DFT.CREATE myIdx SCHEMA foo TEXT 
+> FT.CREATE myIdx SCHEMA foo TEXT 
 
 # Adding a document
-> DFT.ADD myIdx doc1 1.0 FIELDS foo "hello world"
+> FT.ADD myIdx doc1 1.0 FIELDS foo "hello world"
 
 # Searching
-> DFT.SEARCH myIdx "hello world"
+> FT.SEARCH myIdx "hello world"
 ```
 
 The syntax of all these commands is identical to that of the equivalent RediSearch commands.
@@ -63,18 +63,32 @@ loadmodule /path/to/rscoordinator/module.so PARTITIONS 5 TYPE redislabs
 
 - **PARTITIONS {num_partitions}**: The number of *logical* partitions the index will use. As a rule of thumb, this should be equal to the number of shards (master redis instances) in the cluster. It must be greater than 0.
 
-- **TYPE {redis_oss|redislabs}**: The cluster type. Since the cluster architectures differ, the module has adaptive logic for each of them.
+# Packaging new versions
 
-  **redis_oss**: Use this when running the cluster on an open source redis cluster. When using this option, you must also specify our ENDPOINT (see below), so we can read the cluster state from it.
+We use a docker image for Linux builds, and use that to generate RAMP packages. 
 
-  **redislabs**: Use this to run RSCoordinator on Redis Labs Enterprise Cluster. In this case, there is no need to specify the endpoint.
+## Package a version of the current branch
 
-- **[ENDPOINT {[password@]host:port}]**: For redis OSS cluster only. We use this option to poll redis for the cluster topology. Soon to be deprecated!
+```sh
+make docker_package
+```
 
-# Installing on Redis Enterprise Cluster
+This will generate a RAMP package with the current branch and upload it to s3, i.e. `s3://redismodules/redisearch-enterprise/redisearch-enterprise.Linux-x86_64.master.zip`
 
-See [RLEC](RLEC.md) instrutions.
+## Package release versions
+
+
+```sh
+make docker_release
+```
+
+This will generate two RAMP packages:
+
+1. A package with the current version as defined in `version.h`. e.g. `redisearch-enterprise.Linux-x86_64.0.92.0.zip`
+
+2. The "latest" package which always points to the latest stable release, e.g. `redisearch-enterprise.Linux-x86_64.latest.zip`
+
 
 # Commands
 
-# 
+See http://redisearch.io/Commands/

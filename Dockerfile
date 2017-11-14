@@ -21,5 +21,5 @@ RUN set -ex;\
 ENV S3_CONFIG "/root/.s3cfg"
 WORKDIR /src
 
-CMD make deepclean all && make upload
-# CMD ["redis-server", "--loadmodule", "/var/lib/redis/modules/redisearch.so"]
+CMD make all && make -e BRANCH=${BRANCH} package upload
+

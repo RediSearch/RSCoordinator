@@ -8,7 +8,7 @@ RUN set -ex;\
     apt-get update; \
 	apt-get install -y --no-install-recommends $deps;
 RUN set -ex;\    
-    pip2 install rmtest s3cmd ramp-packer; 
+    pip2 install rmtest s3cmd ramp-packer>=1.3.7; 
 
 ENV S3_CONFIG "/root/.s3cfg"
 WORKDIR /src

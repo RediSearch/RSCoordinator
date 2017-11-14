@@ -98,7 +98,7 @@ PACKAGE_NAME=redisearch-enterprise
 ifndef BRANCH
 	BRANCH=$(shell git branch | awk '/\*/{print $$2}')
 endif
-RAMP_COMMAND=ramp-packer
+RAMP_COMMAND=ramp-packer -m ramp.yml
 BUILD_DIR:=$(shell mktemp -d)
 
 # Build a RELEASE package(s): the version number plus a "latest" package

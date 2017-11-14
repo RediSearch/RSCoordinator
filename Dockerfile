@@ -10,16 +10,8 @@ RUN set -ex;\
 RUN set -ex;\    
     pip2 install rmtest s3cmd ramp-packer; 
 
-
-# # Package the runner
-# FROM redis:latest
-# ENV LIBDIR /var/lib/redis/modules
-# WORKDIR /data
-# RUN set -ex;\
-#     mkdir -p "$LIBDIR";
-# COPY --from=builder /src/redisearch.so  "$LIBDIR"
 ENV S3_CONFIG "/root/.s3cfg"
 WORKDIR /src
 
-CMD make all && make -e BRANCH=${BRANCH} package upload
+CMD make deepclean all && make -e BRANCH=${BRANCH} package upload
 

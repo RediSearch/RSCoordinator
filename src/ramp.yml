@@ -15,4 +15,3 @@ capabilities:
     - persistence_aof
     - persistence_rdb
     - clustering
-

@@ -103,20 +103,17 @@ BUILD_DIR:=$(shell mktemp -d)
 
 # Build a RELEASE package(s): the version number plus a "latest" package
 package_release: module.so print_version
-	@$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "$(CWD)/module.so";\
-	@$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "$(CWD)/module.so";\
-.PHONY: package_release
+	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "$(CWD)/module.so";\
 
 # Build a package for the current branch
-package: module.so print_version
+package: module.so
 	@# On normal build - package the branch latest
 	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.$(BRANCH).zip" "$(CWD)/module.so";\
-.PHONY: package
 
 # Upload package files from the build dir to s3
 upload:
 	s3cmd -c $(S3_CONFIG) put $(BUILD_DIR)/*.zip --acl-public s3://redismodules/$(PACKAGE_NAME)/
-.PHONY: upload
 
 deepclean:
 	rm -f print_version

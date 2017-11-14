@@ -62,7 +62,7 @@ libuv.a:
 	cp "$(LIBUV_LIBDIR)/libuv.a" ./
 
 libredisearch.a:
-	make -C dep/RediSearch/src libredisearch.a
+	make -C dep/RediSearch/src libredisearch.a -j 8
 
 # Remove the module base file so we always recompile it with the correct build flags
 module.so: $(shell rm -f module.o)
@@ -77,23 +77,24 @@ oss: module.so
 
 
 rmr:
-	$(MAKE) -C dep/rmr hiredis all
+	$(MAKE) -j 4 -C dep/rmr hiredis all
 .PHONY: rmr
 
 rmutil:
-	$(MAKE) -C dep/rmutil all
+	$(MAKE) -j 4 -C dep/rmutil all
 .PHONY: rmutil
 
 clean:
 	rm -rvf *.xo *.so *.o *.a
 
+CWD=$(shell pwd)
 package: module.so
-	$(eval PACK=$(shell module_packer -c "PARTITIONS 1"  -o "rscoordinator.{os}-{architecture}.latest.zip" "`pwd`/module.so"))
-#.PHONY: package
+	$(eval PACK=$(shell ramp-packer -m ramp.yml --output "redisearch-enterprise.{os}-{architecture}.latest.zip" "$(CWD)/module.so"))
+.PHONY: package
 
 upload: package
-	s3cmd -c $(S3_CONFIG) put $(PACK) --acl-public s3://redismodules/rscoordinator/
-.PHONY: upload	
+	s3cmd -c $(S3_CONFIG) put $(PACK) --acl-public s3://redismodules/redisearch-enterprise/
+.PHONY: upload
 
 deepclean:
 	find ./ -name "*.[oa]" -exec rm {} \; -print

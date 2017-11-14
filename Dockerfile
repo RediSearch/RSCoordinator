@@ -6,8 +6,9 @@ ENV DEPS "python python-setuptools python-pip wget unzip build-essential autocon
 RUN set -ex;\
     deps="$DEPS";\
     apt-get update; \
-	apt-get install -y --no-install-recommends $deps;\
-    pip install rmtest s3cmd ramp-packer==1.2.3; 
+	apt-get install -y --no-install-recommends $deps;
+RUN set -ex;\    
+    pip2 install rmtest s3cmd ramp-packer; 
 
 
 # # Package the runner
@@ -19,5 +20,6 @@ RUN set -ex;\
 # COPY --from=builder /src/redisearch.so  "$LIBDIR"
 ENV S3_CONFIG "/root/.s3cfg"
 WORKDIR /src
-CMD make deepclean && make all && make package upload
+
+CMD make deepclean all && make upload
 # CMD ["redis-server", "--loadmodule", "/var/lib/redis/modules/redisearch.so"]

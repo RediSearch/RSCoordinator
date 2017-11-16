@@ -27,6 +27,8 @@ struct mrCommandConf __commandConfig[] = {
     {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1, 1},
     {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+    {"_FT.TAGVALS", MRCommand_Read | MRCommand_SingleKey, 1, 1},
+
 
     // Suggest commands
     {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1, 1},

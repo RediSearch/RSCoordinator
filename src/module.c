@@ -36,6 +36,53 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
+/* A reducer that just merges N arrays of strings by chaining them into one big array with no duplicates */
+int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+
+  
+  MRReply *err = NULL;
+  int nArrs = 0;
+  size_t totalLen = 0;
+  TrieMap *dict = NewTrieMap();
+  // Add all the array elements into the dedup dict
+  for (int i = 0; i < count; i++) {
+    if (replies[i] && MRReply_Type(replies[i]) == MR_REPLY_ARRAY) {
+      for (size_t j = 0; j < MRReply_Length(replies[i]); j++) {
+        size_t sl = 0;
+        char *s =  MRReply_String(MRReply_ArrayElement(replies[i], j), &sl);
+        if (s && sl) {
+          TrieMap_Add(dict, s, sl, NULL, NULL);
+        }
+      }
+    } else if (MRReply_Type(replies[i]) == MR_REPLY_ERROR && err == NULL) {
+      err = replies[i];
+    }
+  }
+  // if there are no arr
+  if (dict->cardinality == 0) {
+    if (err) {
+      return MR_ReplyWithMRReply(ctx, err);
+    } else {
+      return RedisModule_ReplyWithError(ctx, "Could not perfrom query");
+    }
+  }
+
+
+  char *s;
+  tm_len_t sl;
+  void *p;
+  TrieMapIterator *it = TrieMap_Iterate(dict, "", 0);
+  RedisModule_ReplyWithArray(ctx, dict->cardinality);
+  while (TrieMapIterator_Next(it, &s, &sl, &p)) {
+    RedisModule_ReplyWithStringBuffer(ctx, s, sl);
+  }
+  
+  TrieMapIterator_Free(it);
+  TrieMap_Free(dict, NULL);
+
+  return REDISMODULE_OK;
+}
 /* A reducer that just merges N arrays of the same length, selecting the first non NULL reply from
  * each */
 int mergeArraysReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -467,6 +514,24 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
+int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own FT command with _FT. command */
+  MRCommand_SetPrefix(&cmd, "_FT");
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+  MR_Map(MR_CreateCtx(ctx, NULL), uniqueStringsReducer, cg);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
 int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 2) {
@@ -666,10 +731,9 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   n++;
   if (topo) {
     RedisModule_ReplyWithSimpleString(
-        ctx,
-        topo->hashFunc == MRHashFunc_CRC12
-            ? MRHASHFUNC_CRC12_STR
-            : (topo->hashFunc == MRHashFunc_CRC16 ? MRHASHFUNC_CRC16_STR : "n/a"));
+        ctx, topo->hashFunc == MRHashFunc_CRC12
+                 ? MRHASHFUNC_CRC12_STR
+                 : (topo->hashFunc == MRHashFunc_CRC16 ? MRHASHFUNC_CRC16_STR : "n/a"));
   } else {
     RedisModule_ReplyWithSimpleString(ctx, "n/a");
   }
@@ -865,13 +929,15 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   }
 
   /*********************************************************
-  * Single-shard simple commands
-  **********************************************************/
+   * Single-shard simple commands
+   **********************************************************/
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADD", SafeCmd(SingleShardCommandHandler), "readonly", 0,
                                    0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.DEL", SafeCmd(SingleShardCommandHandler), "readonly", 0,
                                    0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.GET", SafeCmd(SingleShardCommandHandler), "readonly", 0,
+                                   0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.TAGVALS", SafeCmd(TagValsCommandHandler), "readonly", 0,
                                    0, -1));
   RM_TRY(
       RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
@@ -903,8 +969,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
       RedisModule_CreateCommand(ctx, "FT.INFO", SafeCmd(InfoCommandHandler), "readonly", 0, 0, -1));
 
   /*********************************************************
-  * Complex coordination search commands
-  **********************************************************/
+   * Complex coordination search commands
+   **********************************************************/
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler),
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",
@@ -913,8 +979,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
                                    0, 0, -1));
 
   /*********************************************************
-  * RS Cluster specific commands
-  **********************************************************/
+   * RS Cluster specific commands
+   **********************************************************/
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERSET", SafeCmd(SetClusterCommand), "readonly", 0,
                                    0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERREFRESH", SafeCmd(RefreshClusterCommand),

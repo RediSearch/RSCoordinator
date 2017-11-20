@@ -28,10 +28,10 @@ SOURCEDIR=$(abspath ../)
 CC_SOURCES = ../src/search_cluster.c  ../src/fnv.c ../src/partition.c $(wildcard ../src/dep/rmr/redise_parser/*.c) 
 CC_OBJECTS = $(patsubst %.c, %.o, $(CC_SOURCES))
 
-LIBS= $(abspath ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/rmutil/librmutil.a ../src/dep/triemap/libtriemap.a )
+LIBS= $(abspath ../src/dep/rmr/librmr.a ../src/dep/rmr/hiredis/libhiredis.a  ../src/libuv.a ../src/dep/rmutil/librmutil.a ../src/dep/triemap/libtriemap.a )
 
 test_searchcluster:
-	$(CC)  -o ./$@ $@.c $(CFLAGS) $(CC_OBJECTS) $(LIBS) -lc -lpthread -luv
+	$(CC)  -o ./$@ $@.c $(CFLAGS) $(CC_OBJECTS) $(LIBS) -lc -lpthread -lm
 	./$@
 .PHONY: test_searchcluster
 

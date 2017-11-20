@@ -7,7 +7,7 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: make -j 8
+          command: make
       - run:
           name: Test
           command: make test

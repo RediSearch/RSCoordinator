@@ -24,17 +24,17 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-LIBS:=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
+LIBS:=  ../librmr.a ../hiredis/libhiredis.a ../../triemap/libtriemap.a 
 
 TEST_SOURCES = $(abspath $(wildcard test_*.c))
 TEST_OBJECTS = $(patsubst %.c, %.o, $(TEST_SOURCES)  )
 TEST_EXECUTABLES = $(patsubst %.c, %.run, $(TEST_SOURCES)  )
 %.run: %.o
-	$(CC) $(CFLAGS) -o $@ $^  $(CFLAGS) $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
+	$(CC) $(CFLAGS) -o $@ $^  $(CFLAGS) $(OBJS)  -L"$(RM_INCLUDE_DIR)" $(LIBS) -lc -lpthread -luv -lm
 
 all: build test
 
-build: $(TEST_OBJECTS) $(TEST_EXECUTABLES) $(DEPS) 
+build: $(TEST_OBJECTS) $(TEST_EXECUTABLES)
 
 # Test all
 test: build $(TEST_EXECUTABLES)

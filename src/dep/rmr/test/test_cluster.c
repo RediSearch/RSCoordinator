@@ -28,59 +28,94 @@ void testEndpoint() {
 void testShardingFunc() {
   
   MRCommand cmd = MR_NewCommand(2, "foo", "baz");
-  uint shard = CRC16ShardFunc(&cmd, 4096);
+  mr_slot_t shard = CRC16ShardFunc(&cmd, 4096);
   mu_assert_int_eq(shard, 717);
   MRCommand_Free(&cmd);
 }
 
-MRClusterShard *_MRCluster_FindShard(MRCluster *cl, uint slot);
 
-// void testCluster() {
 
-//   int N = 4;
-//   const char *hosts[] = {"localhost:6379", "localhost:6389", "localhost:6399", "localhost:6409"};
-//   New
-//   MRTopologyProvider tp =
-//       NewStaticTopologyProvider(4096, N, hosts[0], hosts[1], hosts[2], hosts[3]);
+static MRClusterTopology *getTopology(size_t numSlots, size_t numNodes,  const char **hosts){
+  
+  MRClusterTopology *topo = malloc(sizeof(*topo));
+  topo->numShards = numNodes;
+  topo->numSlots = numSlots;
+  topo->shards = calloc(numNodes, sizeof(MRClusterShard));
+  size_t slotRange = numSlots / numNodes;
 
-//   StaticTopologyProvider *stp = tp.ctx;
-//   mu_check(stp != NULL);
-//   mu_check(stp->numNodes == N);
-//   mu_check(stp->numSlots == 4096);
+  MRClusterNode nodes[numNodes];
+  for (int i = 0; i < numNodes; i++) {
+    if (REDIS_OK!=MREndpoint_Parse(hosts[i], &nodes[i].endpoint)) {
+      return NULL;
+    }
+    nodes[i].flags = MRNode_Master;
+    nodes[i].id = strdup(hosts[i]);
+  }
+  int i = 0;
+  for (size_t slot = 0; slot < topo->numSlots; slot += slotRange) {
+    topo->shards[i] = (MRClusterShard){
+        .startSlot = slot, .endSlot = slot + slotRange - 1, .numNodes = 1,
 
-//   MRCluster *cl = MR_NewCluster(tp, CRC16ShardFunc);
-//   mu_check(cl != NULL);
-//   mu_check(cl->sf == CRC16ShardFunc);
-//   //  mu_check(cl->tp == tp);
-//   mu_check(cl->topo.numShards == N);
-//   mu_check(cl->topo.numSlots == 4096);
+    };
+    topo->shards[i].nodes = calloc(1, sizeof(MRClusterNode)),
+    topo->shards[i].nodes[0] = nodes[i];
 
-//   for (int i = 0; i < cl->topo.numShards; i++) {
-//     MRClusterShard *sh = &cl->topo.shards[i];
-//     mu_check(sh->numNodes == 1);
-//     mu_check(sh->startSlot == i * (4096 / N));
-//     mu_check(sh->endSlot == sh->startSlot + (4096 / N) - 1);
-//     mu_check(!strcmp(sh->nodes[0].id, hosts[i]));
+    i++;
+  }
 
-//     printf("%d..%d --> %s\n", sh->startSlot, sh->endSlot, sh->nodes[0].id);
-//   }
+  return topo;
+}
+MRClusterShard *_MRCluster_FindShard(MRCluster *cl, mr_slot_t slot);
 
-//   MRCommand cmd = MR_NewCommand("FT.SEARCH", 3, "foob", "bar", "baz");
-//   uint slot = CRC16ShardFunc(&cmd, cl->topo.numSlots);
-//   mu_check(slot > 0);
-//   MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
-//   mu_check(sh != NULL);
-//   mu_check(sh->numNodes == 1);
-//   mu_check(!strcmp(sh->nodes[0].id, hosts[3]));
-//   printf("%d..%d --> %s\n", sh->startSlot, sh->endSlot, sh->nodes[0].id);
+void testCluster() {
 
-//   // MRClust_Free(cl);
-// }
+  int n = 4;
+  const char *hosts[] = {"localhost:6379", "localhost:6389", "localhost:6399", "localhost:6409"};
+  MRClusterTopology *topo = getTopology(4096, n, hosts);
+
+  MRCluster *cl = MR_NewCluster(topo, CRC16ShardFunc,1);
+  mu_check(cl != NULL);
+  mu_check(cl->sf == CRC16ShardFunc);
+  //  mu_check(cl->tp == tp);
+  mu_check(cl->topo->numShards == n);
+  mu_check(cl->topo->numSlots == 4096);
+
+  for (int i = 0; i < cl->topo->numShards; i++) {
+    MRClusterShard *sh = &cl->topo->shards[i];
+    mu_check(sh->numNodes == 1);
+    mu_check(sh->startSlot == i * (4096 / n));
+    mu_check(sh->endSlot == sh->startSlot + (4096 / n) - 1);
+    mu_check(!strcmp(sh->nodes[0].id, hosts[i]));
+
+    printf("%d..%d --> %s\n", sh->startSlot, sh->endSlot, sh->nodes[0].id);
+  }
+
+}
+
+void testClusterSharding() {
+  int n = 4;
+  const char *hosts[] = {"localhost:6379", "localhost:6389", "localhost:6399", "localhost:6409"};
+  MRClusterTopology *topo = getTopology(4096, n, hosts);
+
+  MRCluster *cl = MR_NewCluster(topo, CRC16ShardFunc,1);
+  MRCommand cmd = MR_NewCommand(4, "_FT.SEARCH", "foob", "bar", "baz");
+  mr_slot_t slot = CRC16ShardFunc(&cmd, cl->topo->numSlots);
+  printf("%d\n", slot);
+  mu_check(slot > 0);
+  MRClusterShard *sh = _MRCluster_FindShard(cl, slot);
+  mu_check(sh != NULL);
+  mu_check(sh->numNodes == 1);
+  mu_check(!strcmp(sh->nodes[0].id, hosts[3]));
+  printf("%d..%d --> %s\n", sh->startSlot, sh->endSlot, sh->nodes[0].id);
+
+  // MRClust_Free(cl);
+}
 
 int main(int argc, char **argv) {
   MU_RUN_TEST(testEndpoint);
   MU_RUN_TEST(testShardingFunc);
-  //MU_RUN_TEST(testCluster);
+  MU_RUN_TEST(testCluster);
+  MU_RUN_TEST(testClusterSharding);
   MU_REPORT();
 
   return minunit_status;

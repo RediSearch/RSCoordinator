@@ -9,23 +9,21 @@
 #include "command.h"
 #include "node.h"
 
-#ifndef uint
-typedef unsigned int uint;
-#endif
+typedef uint16_t mr_slot_t;
 
 /* A "shard" represents a slot range of the cluster, with its associated nodes. For each sharding
  * key, we select the slot based on the hash function, and then look for the shard in the cluster's
  * shard array */
 typedef struct {
-  uint startSlot;
-  uint endSlot;
+  mr_slot_t startSlot;
+  mr_slot_t endSlot;
   size_t numNodes;
   size_t capNodes;
   MRClusterNode *nodes;
 } MRClusterShard;
 
 /* Create a new cluster shard to be added to a topology */
-MRClusterShard MR_NewClusterShard(int startSlot, int endSlots, size_t capNodes);
+MRClusterShard MR_NewClusterShard(mr_slot_t startSlot, mr_slot_t endSlots, size_t capNodes);
 void MRClusterShard_AddNode(MRClusterShard *sh, MRClusterNode *n);
 // MR_NewToplogy
 // MRTopology_AddShard MRShard_AddNode
@@ -58,7 +56,7 @@ void MRClusterNode_Free(MRClusterNode *n);
 
 /* A function that tells the cluster which shard to send a command to. should return -1 if not
  * applicable */
-typedef uint (*ShardFunc)(MRCommand *cmd, uint numSlots);
+typedef mr_slot_t (*ShardFunc)(MRCommand *cmd, mr_slot_t numSlots);
 
 /* A cluster has nodes and connections that can be used by the engine to send requests */
 typedef struct {
@@ -127,7 +125,7 @@ MRCluster *MR_NewCluster(MRClusterTopology *topology, ShardFunc sharder,
  * provider's current context is used. Otherwise, we call its function with the given context */
 int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopology);
 
-uint CRC16ShardFunc(MRCommand *cmd, uint numSlots);
-uint CRC12ShardFunc(MRCommand *cmd, uint numSlots);
+mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots);
+mr_slot_t CRC12ShardFunc(MRCommand *cmd, mr_slot_t numSlots);
 
 #endif

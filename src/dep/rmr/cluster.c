@@ -229,7 +229,7 @@ char *_MRGetShardKey(MRCommand *cmd, size_t *len) {
   return k;
 }
 
-uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
+mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
 
   size_t len;
 
@@ -239,7 +239,8 @@ uint CRC16ShardFunc(MRCommand *cmd, uint numSlots) {
   return crc % numSlots;
 }
 
-uint CRC12ShardFunc(MRCommand *cmd, uint numSlots) {
+
+mr_slot_t CRC12ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
   size_t len;
 
   char *k = _MRGetShardKey(cmd, &len);
@@ -326,7 +327,7 @@ size_t MRCluster_NumNodes(MRCluster *cl) {
   return cl->nodeMap ? MRNodeMap_NumNodes(cl->nodeMap) : 0;
 }
 
-MRClusterShard MR_NewClusterShard(int startSlot, int endSlot, size_t capNodes) {
+MRClusterShard MR_NewClusterShard(mr_slot_t startSlot, mr_slot_t endSlot, size_t capNodes) {
   MRClusterShard ret = (MRClusterShard){
       .startSlot = startSlot,
       .endSlot = endSlot,

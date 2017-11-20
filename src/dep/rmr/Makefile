@@ -34,6 +34,8 @@ triemap:
 librmr.a: hiredis triemap | $(CC_OBJECTS)
 	ar rcs $@ $(CC_OBJECTS)
 
+test: librmr.a
+	$(MAKE) -C ./test
 clean:
 	rm -rf *.o *.a
 

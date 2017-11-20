@@ -7,6 +7,11 @@ build:
 	$(MAKE) -C ./src all
 .PHONY: build
 
+test: build
+	$(MAKE) -C ./test
+	$(MAKE) -C ./src/dep/rmr/test
+	$(MAKE) -C ./src/dep/RediSearch/src redisearch.so test
+	
 clean:
 	$(MAKE) -C ./src clean
 .PHONY: clean

@@ -7,9 +7,11 @@ ifndef RMUTIL_LIBDIR
 	RMUTIL_LIBDIR:=$(abspath ../src/dep/rmutil)
 endif
 
+DEP_DIR := $(abspath ../src/dep)
+
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS := -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
+CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(DEP_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
 
 
 # Compile flags for linux / osx
@@ -22,25 +24,18 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= $(abspath ../src/search_cluster.o ../src/dep/rmr/crc16.o ../src/dep/rmr/crc12.o ../src/fnv.o $(wildcard ../src/dep/rmr/redise_parser/*.c ))
-LIBS= $(abspath ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a )
+SOURCEDIR=$(abspath ../)
+CC_SOURCES = ../src/search_cluster.c  ../src/fnv.c ../src/partition.c $(wildcard ../src/dep/rmr/redise_parser/*.c) 
+CC_OBJECTS = $(patsubst %.c, %.o, $(CC_SOURCES))
+
+LIBS= $(abspath ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/rmutil/librmutil.a ../src/dep/triemap/libtriemap.a )
 
 test_searchcluster:
-	$(CC)  -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
-	$(sh -c ./$@)
-
-test_parser:
-	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
-	$(sh -c ./$@)
-
-test_cluster:
-	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
-	$(sh -c ./$@)
-
+	$(CC)  -o ./$@ $@.c $(CFLAGS) $(CC_OBJECTS) $(LIBS) -lc -lpthread -luv
+	./$@
 .PHONY: test_searchcluster
-.PHONY: test_parser
-.PHONY: test_cluster
 
+all: test_searchcluster
 
 clean:
 	rm -rf *.xo *.so *.o

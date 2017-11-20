@@ -282,6 +282,8 @@ static ShardFunc selectHashFunc(MRHashFunc f) {
       return CRC12ShardFunc;
     case MRHashFunc_CRC16:
       return CRC16ShardFunc;
+    default:
+    break;
   }
   return NULL;
 }

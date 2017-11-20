@@ -1,13 +1,13 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../../..
+	RM_INCLUDE_DIR=$(abspath ../../..)
 endif
 
 ifndef RMUTIL_LIBDIR
 	RMUTIL_LIBDIR=../src/dep/rmutil
 endif
 
-SRC_DIR?=$(shell sh -c 'cd ../ && pwd')
+SRC_DIR?=$(abspath ../)
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
@@ -24,21 +24,41 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-LIBS=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
+LIBS:=  ../hiredis/libhiredis.a ../librmr.a ../../triemap/libtriemap.a
 
+TEST_SOURCES = $(abspath $(wildcard test_*.c))
+TEST_OBJECTS = $(patsubst %.c, %.o, $(TEST_SOURCES)  )
+TEST_EXECUTABLES = $(patsubst %.c, %.run, $(TEST_SOURCES)  )
+%.run: %.o
+	$(CC) $(CFLAGS) -o $@ $^  $(CFLAGS) $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
 
-test_parser:
-	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
-	$(sh -c ./$@)
+all: build test
 
-test_cluster:
-	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -L"$(RM_INCLUDE_DIR)" -lc -lpthread -luv
-	$(sh -c ./$@)
+build: $(TEST_OBJECTS) $(TEST_EXECUTABLES) $(DEPS) 
 
-.PHONY: test_parser
-.PHONY: test_cluster
+# Test all
+test: build $(TEST_EXECUTABLES)
+	set -e; \
+	for t in test_*.run;\
+	 do ./$$t;\
+	done
 
+memcheck: build $(TEST_EXECUTABLES)
+	set -e; \
+	for t in test_*.run;\
+	 do valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --show-possibly-lost=no ./$$t;\
+	done
+
+# Target for individual tests - make run:{test name}, e.g. "make run:query" will run test_query.run
+run\:%: 
+	$(MAKE) test_$*.run
+	./test_$*.run
 
 clean:
-	rm -rf *.xo *.so *.o
+	-rm -f *.o
+	-rm -f *.run
+	-rm -f ext-example/*.o ext-example/*.so 
 
+.PHONY: clean
+
+rebuild: clean all

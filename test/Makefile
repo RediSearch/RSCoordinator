@@ -1,15 +1,15 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../src
+	RM_INCLUDE_DIR:=$(abspath ../src)
 endif
 
 ifndef RMUTIL_LIBDIR
-	RMUTIL_LIBDIR=../src/dep/rmutil
+	RMUTIL_LIBDIR:=$(abspath ../src/dep/rmutil)
 endif
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS = -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
+CFLAGS := -I"$(RM_INCLUDE_DIR)" -Wall -g -fPIC -O1 -std=gnu99  
 
 
 # Compile flags for linux / osx
@@ -22,8 +22,8 @@ else
 endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
-OBJS= ../src/search_cluster.o ../src/dep/rmr/crc16.o ../src/dep/rmr/crc12.o ../src/fnv.o $(wildcard ../src/dep/rmr/redise_parser/*.c)
-LIBS= ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a
+OBJS= $(abspath ../src/search_cluster.o ../src/dep/rmr/crc16.o ../src/dep/rmr/crc12.o ../src/fnv.o $(wildcard ../src/dep/rmr/redise_parser/*.c ))
+LIBS= $(abspath ../src/dep/rmr/hiredis/libhiredis.a   ../src/dep/rmr/librmr.a ../src/dep/triemap/libtriemap.a )
 
 test_searchcluster:
 	$(CC)  -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
@@ -34,7 +34,7 @@ test_parser:
 	$(sh -c ./$@)
 
 test_cluster:
-	$(CC) -o ./$@ $@.c $(OBJS) $(LIBS) -lc -lpthread -luv
+	$(CC) -o ./$@ $@.c $(CFLAGS) $(OBJS) $(LIBS) -lc -lpthread -luv
 	$(sh -c ./$@)
 
 .PHONY: test_searchcluster

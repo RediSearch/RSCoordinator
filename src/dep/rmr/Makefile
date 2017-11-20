@@ -1,15 +1,15 @@
 #set environment variable RM_INCLUDE_DIR to the location of redismodule.h
 ifndef RM_INCLUDE_DIR
-	RM_INCLUDE_DIR=../../
+	RM_INCLUDE_DIR=$(abspath ../../)
 endif
 
-LIBUV_INCLUDE_DIR=../libuv/include
+LIBUV_INCLUDE_DIR=$(abspath ../libuv/include)
+export LIBUV_INCLUDE_DIR
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
 DEBUGFLAGS ?= -O0 -g -ggdb
 CFLAGS ?= -I$(RM_INCLUDE_DIR) -I$(LIBUV_INCLUDE_DIR) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  
-
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 SOURCEDIR=$(shell pwd -P)
@@ -37,3 +37,5 @@ librmr.a: hiredis triemap | $(CC_OBJECTS)
 clean:
 	rm -rf *.o *.a
 
+distclean: clean
+	find ./ -name "*.[oa]" -print -exec rm -f {} \;

@@ -70,11 +70,14 @@ module.so: $(shell rm -f module.o)
 module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
+module-oss.so: $(shell rm -f module.o)
+module-oss.so: CFLAGS+=-DREDISEARCH_OSS_BUILD
+module-oss.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
+	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
 # OSS is a special build for internal testing on OSS clusters. 
 # Unless the module is built with "make oss" it cannot run inside OSS cluster
-oss: CFLAGS+=-DREDISEARCH_OSS_BUILD
-oss: module.so
+oss: module-oss.so
 
 
 rmr:

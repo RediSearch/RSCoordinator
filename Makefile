@@ -11,6 +11,8 @@ test: build
 	$(MAKE) -C ./test
 	$(MAKE) -C ./src/dep/rmr/test test
 	$(MAKE) -C ./src/dep/RediSearch/src redisearch.so test
+	$(MAKE) -C ./src module-oss.so
+	$(MAKE) -C ./pytest 
 	
 clean:
 	$(MAKE) -C ./src clean

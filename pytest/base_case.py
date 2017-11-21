@@ -2,7 +2,9 @@ from rmtest.cluster import ClusterModuleTestCase
 import redis
 import unittest
 from contextlib import contextmanager
-class BaseSearchTestCase(ClusterModuleTestCase('../src/module.so')):
+
+
+class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so')):
 
     def setUp(self):
         self.flushdb()
@@ -16,11 +18,7 @@ class BaseSearchTestCase(ClusterModuleTestCase('../src/module.so')):
     def flushdb(self):
         self.broadcast('flushdb')
 
-    
     @contextmanager
     def redis(self):
-        
+
         yield self.client()
-
-    
-

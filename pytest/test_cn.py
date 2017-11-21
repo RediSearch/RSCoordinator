@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from rmtest import ModuleTestCase
+from base_case import BaseSearchTestCase
 import redis
 import unittest
 import os
@@ -8,10 +8,9 @@ import os
 SRCTEXT='./cn_sample.txt'
 GENTXT='./genesis.txt'
 
-class CnTestCase(ModuleTestCase('../redisearch.so')):
+class CnTestCase(BaseSearchTestCase):
     def testCn(self):
         text = open(SRCTEXT).read()
-        self.cmd('ft.broadcast', 'flushdb')
         self.cmd('ft.create', 'idx', 'schema', 'txt', 'text')
         self.cmd('ft.add', 'idx', 'doc1', 1.0, 'LANGUAGE', 'CHINESE', 'FIELDS', 'txt', text)
         res = self.cmd('ft.search', 'idx', '之旅', 'SUMMARIZE', 'HIGHLIGHT', 'LANGUAGE', 'chinese')

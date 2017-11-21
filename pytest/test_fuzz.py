@@ -1,11 +1,11 @@
-from rmtest import ModuleTestCase
+from base_case import BaseSearchTestCase
 import redis
 import unittest
 import random
 import time
 
 
-class SearchTestCase(ModuleTestCase('../redisearch.so')):
+class SearchTestCase(BaseSearchTestCase):
 
     _tokens = {}
     _docs = {}
@@ -35,7 +35,7 @@ class SearchTestCase(ModuleTestCase('../redisearch.so')):
 
     def createIndex(self, r):
 
-        r.execute_command('ft.broadcast', 'flushdb')
+        
         self.assertOk(r.execute_command(
             'ft.create', 'idx', 'schema', 'txt', 'text'))
 

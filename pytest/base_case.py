@@ -1,12 +1,26 @@
-from rmtest import ModuleTestCase
+from rmtest.cluster import ClusterModuleTestCase
 import redis
 import unittest
+from contextlib import contextmanager
+class BaseSearchTestCase(ClusterModuleTestCase('../src/module.so')):
 
-class BaseSearchTestCase(ModuleTestCase('../src/module.so')):
+    def setUp(self):
+        self.flushdb()
 
-    @classmethod
-    def broadcast(cls, r, cmd, *args):
-        return r.execute_command('ft.broadcast', cmd, *args)
+    def search(self, *args):
+        return self.client().execute_command('ft.search', *args)
 
-    def search(self, r, *args):
-        return r.execute_command('ft.search', *args)
+    def broadcast(self, cmd, *args):
+        return self.client().execute_command('ft.broadcast', cmd, *args)
+
+    def flushdb(self):
+        self.broadcast('flushdb')
+
+    
+    @contextmanager
+    def redis(self):
+        
+        yield self.client()
+
+    
+

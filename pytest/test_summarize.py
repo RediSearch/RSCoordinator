@@ -7,7 +7,6 @@ class SummarizeTestCase(BaseSearchTestCase):
         
         # Load the file
         txt = open('./genesis.txt', 'r').read()
-        self.cmd('ft.broadcast', 'flushdb')
         self.cmd('ft.create', 'idx', 'schema', 'txt', 'text')
         self.cmd('ft.add', 'idx', 'gen1', 1.0, 'fields', 'txt', txt)
 
@@ -59,7 +58,6 @@ class SummarizeTestCase(BaseSearchTestCase):
     def testSummarizationMultiField(self):
         p1 = "Redis is an open-source in-memory database project implementing a networked, in-memory key-value store with optional durability. Redis supports different kinds of abstract data structures, such as strings, lists, maps, sets, sorted sets, hyperloglogs, bitmaps and spatial indexes. The project is mainly developed by Salvatore Sanfilippo and is currently sponsored by Redis Labs.[4] Redis Labs creates and maintains the official Redis Enterprise Pack."
         p2 = "Redis typically holds the whole dataset in memory. Versions up to 2.4 could be configured to use what they refer to as virtual memory[19] in which some of the dataset is stored on disk, but this feature is deprecated. Persistence is now achieved in two different ways: one is called snapshotting, and is a semi-persistent durability mode where the dataset is asynchronously transferred from memory to disk from time to time, written in RDB dump format. Since version 1.1 the safer alternative is AOF, an append-only file (a journal) that is written as operations modifying the dataset in memory are processed. Redis is able to rewrite the append-only file in the background in order to avoid an indefinite growth of the journal."
-        self.cmd('ft.broadcast', 'flushdb')
         self.cmd('FT.CREATE', 'idx', 'SCHEMA', 'txt1', 'TEXT', 'txt2', 'TEXT')
         self.cmd('FT.ADD', 'idx', 'redis', 1.0, 'FIELDS', 'txt1', p1, 'txt2', p2)
 
@@ -77,7 +75,6 @@ class SummarizeTestCase(BaseSearchTestCase):
         self.assertEqual([1L, 'redis', ['txt1', 'memory database project implementing a networked, in-memory ... by Salvatore Sanfilippo... ', 'txt2', 'dataset in memory. Versions... as virtual memory[19] in... persistent durability mode where the dataset is asynchronously transferred from memory... ']], res)
 
     def testSummarizationDisabled(self):
-        self.cmd('ft.broadcast', 'flushdb')
         self.cmd('FT.CREATE', 'idx', 'NOOFFSETS', 'SCHEMA', 'body', 'TEXT')
         self.cmd('FT.ADD', 'idx', 'doc', 1.0, 'FIELDS', 'body', 'hello world')
         with self.assertResponseError():
@@ -89,7 +86,7 @@ class SummarizeTestCase(BaseSearchTestCase):
             res = self.cmd('FT.SEARCH', 'idx2', 'hello', 'SUMMARIZE', 'FIELDS', 1, 'body')
 
     def testSummarizationNoSave(self):
-        self.cmd('ft.broadcast', 'flushdb')
+
         self.cmd('FT.CREATE', 'idx', 'SCHEMA', 'body', 'TEXT')
         self.cmd('FT.ADD', 'idx', 'doc', 1.0, 'NOSAVE', 'fields', 'body', 'hello world')
         res = self.cmd('FT.SEARCH', 'idx', 'hello', 'SUMMARIZE', 'RETURN', 1, 'body')
@@ -97,7 +94,7 @@ class SummarizeTestCase(BaseSearchTestCase):
         self.assertEqual([1L, 'doc', ['body', None]], res)
 
     def testSummarizationMeta(self):
-        self.cmd('ft.broadcast', 'flushdb')
+
         self.cmd('ft.create', 'idx', 'schema', 'foo', 'text', 'bar', 'text', 'baz', 'text')
         self.cmd('ft.add', 'idx', 'doc1', 1.0, 'fields', 'foo', 'pill', 'bar', 'pillow', 'baz', 'piller')
 

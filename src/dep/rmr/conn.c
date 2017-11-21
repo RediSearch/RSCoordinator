@@ -23,7 +23,9 @@ typedef struct {
 MRConnPool *_MR_NewConnPool(MREndpoint *ep, size_t num) {
   MRConnPool *pool = malloc(sizeof(*pool));
   *pool = (MRConnPool){
-      .num = num, .rr = 0, .conns = calloc(num, sizeof(MRConn *)),
+      .num = num,
+      .rr = 0,
+      .conns = calloc(num, sizeof(MRConn *)),
   };
 
   /* Create the connection */
@@ -230,7 +232,7 @@ void _MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
   }
 
   /* Success! we are now connected! */
-  fprintf(stderr, "Connected and authenticated to %s:%d\n", conn->ep.host, conn->ep.port);
+  // fprintf(stderr, "Connected and authenticated to %s:%d\n", conn->ep.host, conn->ep.port);
   conn->state = MRConn_Connected;
 }
 
@@ -262,7 +264,7 @@ void _MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     return;
   }
   conn->state = MRConn_Connected;
-  fprintf(stderr, "Connected %s:%d...\n", conn->ep.host, conn->ep.port);
+  // fprintf(stderr, "Connected %s:%d...\n", conn->ep.host, conn->ep.port);
 }
 
 void _MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {

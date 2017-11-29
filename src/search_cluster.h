@@ -37,4 +37,8 @@ int SearchCluster_RewriteCommand(SearchCluster *c, MRCommand *cmd, int partition
  * index
  * of the argument being tagged, and it may be the paritioning key itself */
 int SearchCluster_RewriteCommandArg(SearchCluster *c, MRCommand *cmd, int partitionKey, int arg);
+
+/* Make sure that if the cluster is unaware of its sizing, it will take the size from the topology
+ */
+void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo);
 #endif

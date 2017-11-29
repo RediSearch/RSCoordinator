@@ -36,13 +36,13 @@ int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
-/* A reducer that just merges N arrays of strings by chaining them into one big array with no duplicates */
+/* A reducer that just merges N arrays of strings by chaining them into one big array with no
+ * duplicates */
 int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
 
-  
   MRReply *err = NULL;
-  
+
   TrieMap *dict = NewTrieMap();
   int nArrs = 0;
   // Add all the array elements into the dedup dict
@@ -51,7 +51,7 @@ int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
       nArrs++;
       for (size_t j = 0; j < MRReply_Length(replies[i]); j++) {
         size_t sl = 0;
-        char *s =  MRReply_String(MRReply_ArrayElement(replies[i], j), &sl);
+        char *s = MRReply_String(MRReply_ArrayElement(replies[i], j), &sl);
         if (s && sl) {
           TrieMap_Add(dict, s, sl, NULL, NULL);
         }
@@ -67,7 +67,7 @@ int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
       return MR_ReplyWithMRReply(ctx, err);
     } else {
       // the arrays were empty
-      if (nArrs>0) {
+      if (nArrs > 0) {
         RedisModule_ReplyWithArray(ctx, 0);
       } else {
         return RedisModule_ReplyWithError(ctx, "Could not perfrom query");
@@ -75,7 +75,6 @@ int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
     goto cleanup;
   }
-
 
   char *s;
   tm_len_t sl;
@@ -86,7 +85,7 @@ int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
   while (TrieMapIterator_Next(it, &s, &sl, &p)) {
     RedisModule_ReplyWithStringBuffer(ctx, s, sl);
   }
-  
+
   TrieMapIterator_Free(it);
 
 cleanup:
@@ -728,7 +727,7 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
   RedisModule_ReplyWithSimpleString(ctx, "num_partitions");
   n++;
-  RedisModule_ReplyWithLongLong(ctx, clusterConfig.numPartitions);
+  RedisModule_ReplyWithLongLong(ctx, __searchCluster.size);
   n++;
   RedisModule_ReplyWithSimpleString(ctx, "cluster_type");
   n++;
@@ -794,6 +793,9 @@ int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
   RedisModule_AutoMemory(ctx);
   MRClusterTopology *topo = RedisCluster_GetTopology(ctx);
+
+  SearchCluster_EnsureSize(ctx, &__searchCluster, topo);
+
   MR_UpdateTopology(topo);
   RedisModule_ReplyWithSimpleString(ctx, "OK");
 
@@ -808,6 +810,7 @@ int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_ERR;
   }
 
+  SearchCluster_EnsureSize(ctx, &__searchCluster, topo);
   // If the cluster hash func or cluster slots has changed, set the new value
   switch (topo->hashFunc) {
     case MRHashFunc_CRC12:

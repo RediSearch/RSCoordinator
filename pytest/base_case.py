@@ -4,7 +4,8 @@ import unittest
 from contextlib import contextmanager
 
 
-class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so')):
+class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so',
+                                               num_nodes=3, module_args=['PARTITIONS', 'AUTO'])):
 
     def setUp(self):
         self.flushdb()

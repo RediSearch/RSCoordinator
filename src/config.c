@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "dep/rmutil/util.h"
+#include "dep/rmutil/strings.h"
 #include "dep/rmr/endpoint.h"
 #include "dep/rmr/hiredis/hiredis.h"
 
@@ -21,10 +22,19 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
 
   /* Parse the partition number */
   long long numPartitions = 0;
-  RMUtil_ParseArgsAfter("PARTITIONS", argv, argc, "l", &numPartitions);
-  if (numPartitions <= 0) {
-    RedisModule_Log(ctx, "warning", "Invalid num partitions %d", numPartitions);
-    return REDISMODULE_ERR;
+  int pi = -1;
+  if ((pi = RMUtil_ArgIndex("PARTITIONS", argv, argc)) >= 0) {
+    // Allow PARTITIONS AUTO (which is similar to 0)
+    if (pi < argc - 1 && RMUtil_StringEqualsC(argv[pi + 1], "AUTO")) {
+      numPartitions = 0;
+    } else {
+      // Parse number of partitions manually
+      if (RMUtil_ParseArgsAfter("PARTITIONS", argv, argc, "l", &numPartitions) == REDISMODULE_ERR ||
+          numPartitions < 0) {
+        RedisModule_Log(ctx, "warning", "Invalid num partitions %d", numPartitions);
+        return REDISMODULE_ERR;
+      }
+    }
   }
   conf->numPartitions = numPartitions;
   conf->type = DetectClusterType();

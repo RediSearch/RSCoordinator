@@ -54,6 +54,10 @@ void MRClusterTopology_Free(MRClusterTopology *t);
 
 void MRClusterNode_Free(MRClusterNode *n);
 
+/* Check the validity of the topology. A topology is considered valid if we have shards, and the
+ * slot coverage is complete */
+int MRClusterTopology_IsValid(MRClusterTopology *t);
+
 /* A function that tells the cluster which shard to send a command to. should return -1 if not
  * applicable */
 typedef mr_slot_t (*ShardFunc)(MRCommand *cmd, mr_slot_t numSlots);

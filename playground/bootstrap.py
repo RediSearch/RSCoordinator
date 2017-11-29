@@ -8,8 +8,8 @@ with open('Procfile.%d' % num, "w+") as f:
         port = 7000 + i
         f.write("redis-%d: redis-server ./common.conf --port %d --cluster-config-file %d.conf \
                 --dbfilename %d.rdb \
-                --loadmodule ../src/module-oss.so PARTITIONS %d\n"
-                % (port, port, port, port, num, port))
+                --loadmodule ../src/module-oss.so PARTITIONS AUTO\n"
+                % (port, port, port, port))
 
 print("bootstrap command:")
 print ("./bin/redis-trib.rb create --replicas 0 %s" %

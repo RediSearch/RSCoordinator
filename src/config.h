@@ -18,7 +18,7 @@ extern SearchClusterConfig clusterConfig;
 
 #define DEFAULT_CLUSTER_CONFIG                      \
   (SearchClusterConfig) {                           \
-    .numPartitions = 1, .type = DetectClusterType() \
+    .numPartitions = 0, .type = DetectClusterType() \
   }
 
 /* Detect the cluster type, by trying to see if we are running inside RLEC.

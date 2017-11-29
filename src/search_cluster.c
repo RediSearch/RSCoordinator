@@ -92,3 +92,15 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
                               .Len = SCCommandMuxIterator_Len,
                               .ctx = mux};
 }
+
+/* Make sure that the cluster either has a size or updates its size from the topology when updated.
+ * If the user did not define the number of partitions, we just take the number of shards in the
+ * first topology update and get a fix on that */
+void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo) {
+  // If the cluster doesn't have a size yet - set the partition number aligned to the shard number
+  if (c->size == 0 && MRClusterTopology_IsValid(topo)) {
+    RedisModule_Log(ctx, "notice", "Setting number of partitions to %d", topo->numShards);
+    c->size = topo->numShards;
+    PartitionCtx_SetSize(&c->part, topo->numShards);
+  }
+}

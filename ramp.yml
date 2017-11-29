@@ -2,17 +2,15 @@ display_name: redisearch-enterprise
 author: RedisLabs
 email: dvir@redislabs.com
 description: High performance search index on top of redis - enterprise version
-homepage: http://redisearch.io
+homepage: 'http://redisearch.io'
 license: Commercial
-command_line_args: "PARTITIONS 1"
-min_redis_version: "4.0"
-min_redis_pack_version: "5.0"
+command_line_args: PARTITIONS AUTO
+min_redis_version: '4.0'
+min_redis_pack_version: '5.0'
 capabilities:
     - types
-    - failover_migrate
-    - reshard_rebalance
+    - replica_of
     - failover_migrate
     - persistence_aof
     - persistence_rdb
     - clustering
-

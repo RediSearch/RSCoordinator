@@ -189,7 +189,7 @@ static struct MRRequestCtx *RQ_Pop(MRRequestQueue *q) {
     uv_mutex_unlock(q->lock);
     return NULL;
   }
-  if (concurrentRequests_g > MR_CONN_POOL_SIZE * 2) {
+  if (concurrentRequests_g > MR_CONN_POOL_SIZE * 10) {
     // fprintf(stderr, "Cannot proceed - queue size %d\n", concurrentRequests_g);
     uv_mutex_unlock(q->lock);
     return NULL;

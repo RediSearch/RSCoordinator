@@ -278,24 +278,43 @@ class SearchTestCase(BaseSearchTestCase):
             'ft.create', 'idx', 'schema', 'foo', 'text', 'bar', 'numeric', 'sortable'))
         q = '(hello world) "what what" hello|world @bar:[10 100]|@bar:[200 300]'
         res = self.cmd('ft.explain', 'idx', q)
-
-        self.assertEqual(res, """INTERSECT {
-  hello
-  world
-  EXACT {
-    what
-    what
-  }
+        print res
+        self.assertEqual("""INTERSECT {
   UNION {
     hello
+    +hello(expanded)
+  }
+  UNION {
     world
+    +world(expanded)
+  }
+  EXACT {
+    UNION {
+      what
+      +what(expanded)
+    }
+    UNION {
+      what
+      +what(expanded)
+    }
+  }
+  UNION {
+    UNION {
+      hello
+      +hello(expanded)
+    }
+    UNION {
+      world
+      +world(expanded)
+    }
   }
   UNION {
     NUMERIC {10.000000 <= @bar <= 100.000000}
     NUMERIC {200.000000 <= @bar <= 300.000000}
   }
 }
-""")
+""", res)
+
     #@unittest.expectedFailure
 
     def testPaging(self):
@@ -801,14 +820,31 @@ class SearchTestCase(BaseSearchTestCase):
                                'title', 'hello kitty'))
 
         res = self.cmd(
-            'ft.search', 'idx', 'hellos', "nocontent", "expander", "SBSTEM")
+            'ft.search', 'idx', 'kitties', "nocontent", "expander", "SBSTEM")
         self.assertEqual(2, len(res))
         self.assertEqual(1, res[0])
 
         res = self.cmd(
-            'ft.search', 'idx', 'hellos', "nocontent", "expander", "noexpander")
+            'ft.search', 'idx', 'kitties', "nocontent", "expander", "noexpander")
         self.assertEqual(1, len(res))
         self.assertEqual(0, res[0])
+
+        res = self.cmd(
+            'ft.search', 'idx', 'kitti', "nocontent")
+        self.assertEqual(2, len(res))
+        self.assertEqual(1, res[0])
+
+        res = self.cmd(
+            'ft.search', 'idx', 'kitti', "nocontent", 'verbatim')
+        self.assertEqual(1, len(res))
+        self.assertEqual(0, res[0])
+
+        # Calling a stem directly works even with VERBATIM.
+        # You need to use the + prefix escaped
+        res = self.cmd(
+            'ft.search', 'idx', '\\+kitti', "nocontent", 'verbatim')
+        self.assertEqual(2, len(res))
+        self.assertEqual(1, res[0])
 
     def testNumericRange(self):
 

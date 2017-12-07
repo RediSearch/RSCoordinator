@@ -31,7 +31,8 @@ class SearchTestCase(BaseSearchTestCase):
 
                 res = self.cmd('ft.explain', 'idx',
                                '@field_%d:token_%d' % (i, i)).strip()
-                self.assertEqual('@field_%d:token_%d' % (i, i), res)
+                self.assertEqual(
+                    '@field_%d:UNION {\n  @field_%d:token_%d\n  @field_%d:+token_%d(expanded)\n}' % (i, i, i, i, i), res)
 
                 res = self.search(
                     'idx', 'hello @field_%d:token_%d' % (i, i), 'NOCONTENT')

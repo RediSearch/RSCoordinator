@@ -29,7 +29,6 @@ typedef struct MRCtx {
   struct timespec startTime;
   struct timespec firstRespTime;
   struct timespec endTime;
-  int timeHistogram[1000];
   int numReplied;
   int numExpected;
   int numErrored;
@@ -58,7 +57,6 @@ MRCtx *MR_CreateCtx(RedisModuleCtx *ctx, void *privdata) {
   clock_gettime(CLOCK_REALTIME, &ret->startTime);
   ret->endTime = ret->startTime;
   ret->firstRespTime = ret->startTime;
-  memset(ret->timeHistogram, 0, sizeof(ret->timeHistogram));
   ret->numReplied = 0;
   ret->numErrored = 0;
   ret->numExpected = 0;
@@ -117,13 +115,6 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
   MRCtx *mc = RedisModule_GetBlockedClientPrivateData(ctx);
   clock_gettime(CLOCK_REALTIME, &mc->endTime);
 
-  // fprintf(stderr, "Queue size now %d\n", concurrentRequests_g);
-  // fprintf(stderr, "Response histogram: ");
-  // for (int i = 0; i < 20; i++) {
-  //   fprintf(stderr, "%d ", mc->timeHistogram[i]);
-  // }
-  // fputc('\n', stderr);
-
   mc->redisCtx = ctx;
 
   return mc->reducer(mc, mc->numReplied, mc->replies);
@@ -135,12 +126,6 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   struct timespec now;
   clock_gettime(CLOCK_REALTIME, &now);
-
-  long long ms = ((int64_t)1000 * now.tv_sec + now.tv_nsec / 1000000) -
-                 ((int64_t)1000 * ctx->startTime.tv_sec + ctx->startTime.tv_nsec / 1000000);
-  if (ms < 1000) {
-    ctx->timeHistogram[ms]++;
-  }
 
   if (ctx->numReplied == 0 && ctx->numErrored == 0) {
     clock_gettime(CLOCK_REALTIME, &ctx->firstRespTime);
@@ -209,9 +194,7 @@ static struct MRRequestCtx *RQ_Pop(MRRequestQueue *q) {
     uv_mutex_unlock(q->lock);
     return NULL;
   }
-  // else {
-  //   fprintf(stderr, "queue size %d\n", concurrentRequests_g);
-  // }
+
   struct MRRequestCtx *r = q->queue[--q->sz];
 
   uv_mutex_unlock(q->lock);
@@ -249,7 +232,7 @@ static void sideThread(void *arg) {
     if (uv_run(uv_default_loop(), UV_RUN_DEFAULT)) break;
     usleep(1000);
   }
-  printf("Uv loop exited!\n");
+  fprintf(stderr, "Uv loop exited!\n");
 }
 
 uv_thread_t loop_th;
@@ -349,11 +332,6 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cb = uvFanoutRequest;
   RQ_Push(&rq_g, rc);
   return REDIS_OK;
-
-  // uv_work_t *wr = malloc(sizeof(uv_work_t));
-  // wr->data = rc;
-  // uv_queue_work(uv_default_loop(), wr, uvFanoutRequest, NULL);
-  // return 0;
 }
 
 int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {

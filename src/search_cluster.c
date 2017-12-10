@@ -12,7 +12,7 @@ SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize
 
 int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
 
-  if (arg < 0) {
+  if (arg < 0 || arg >= cmd->num || partitionKey >= cmd->num) {
     return 0;
   }
 
@@ -33,6 +33,9 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
 
   int sk = -1;
   if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
+    if (partitionKey >= cmd->num || sk >= cmd->num) {
+      return 0;
+    }
     // the partition arg is the arg which we select the partition on
     char *partitionArg = cmd->args[partitionKey];
     // the sharding arg is the arg that we will add the partition tag to

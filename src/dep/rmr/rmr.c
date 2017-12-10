@@ -105,7 +105,7 @@ static void freePrivDataCB(void *p) {
 
 static int timeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   // concurrentRequests_g--;
-  fprintf(stderr, "Timeout!\n");
+  RedisModule_Log(ctx, "notice", "Timed out coordination request");
   return RedisModule_ReplyWithError(ctx, "Timeout calling command");
 }
 
@@ -288,7 +288,6 @@ static void uvFanoutRequest(struct MRRequestCtx *mc) {
 }
 
 static void uvMapRequest(struct MRRequestCtx *mc) {
-
   MRCtx *mrctx = mc->ctx;
   mrctx->numReplied = 0;
   mrctx->reducer = mc->f;
@@ -353,6 +352,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
 
   rc->cb = uvMapRequest;
   RQ_Push(&rq_g, rc);
+
   return REDIS_OK;
 }
 

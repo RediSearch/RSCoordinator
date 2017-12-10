@@ -301,7 +301,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   // got no replies - this means timeout
   if (count == 0 || req->limit < 0) {
-    return RedisModule_ReplyWithError(ctx, "Could not send query to cluter");
+    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
   }
 
   long long total = 0;

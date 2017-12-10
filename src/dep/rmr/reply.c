@@ -127,7 +127,7 @@ int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
     case MR_REPLY_STRING: {
       size_t len;
       char *str = MRReply_String(rep, &len);
-      return RedisModule_ReplyWithString(ctx, RedisModule_CreateString(ctx, str, len));
+      return RedisModule_ReplyWithStringBuffer(ctx, str, len);
     }
 
     case MR_REPLY_STATUS:

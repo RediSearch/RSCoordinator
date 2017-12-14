@@ -2,12 +2,14 @@ from rmtest.cluster import ClusterModuleTestCase
 import redis
 import unittest
 from contextlib import contextmanager
+import time
 
 
 class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so',
                                                num_nodes=3, module_args=['PARTITIONS', 'AUTO'])):
 
     def setUp(self):
+        time.sleep(1)
         self.flushdb()
 
     def search(self, *args):

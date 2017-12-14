@@ -9,7 +9,10 @@ class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so',
                                                num_nodes=3, module_args=['PARTITIONS', 'AUTO'])):
 
     def setUp(self):
-        time.sleep(1)
+        # Update all the nodes
+        self.client().execute_command('ft.clusterrefresh')
+        self.broadcast('ft.clusterrefresh')
+
         self.flushdb()
 
     def search(self, *args):

@@ -63,15 +63,12 @@ int uniqueStringsReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   // if there are no values - either reply with an empty array or an error
   if (dict->cardinality == 0) {
-    if (err) {
-      return MR_ReplyWithMRReply(ctx, err);
+
+    if (nArrs > 0) {
+      // the arrays were empty - return an empty array
+      RedisModule_ReplyWithArray(ctx, 0);
     } else {
-      // the arrays were empty
-      if (nArrs > 0) {
-        RedisModule_ReplyWithArray(ctx, 0);
-      } else {
-        return RedisModule_ReplyWithError(ctx, "Could not perfrom query");
-      }
+      return RedisModule_ReplyWithError(ctx, err ? (const char *)err : "Could not perfrom query");
     }
     goto cleanup;
   }

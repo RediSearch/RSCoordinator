@@ -278,7 +278,8 @@ class SearchTestCase(BaseSearchTestCase):
             'ft.create', 'idx', 'schema', 'foo', 'text', 'bar', 'numeric', 'sortable'))
         q = '(hello world) "what what" hello|world @bar:[10 100]|@bar:[200 300]'
         res = self.cmd('ft.explain', 'idx', q)
-        print res
+        # print res
+
         self.assertEqual("""INTERSECT {
   UNION {
     hello
@@ -289,14 +290,8 @@ class SearchTestCase(BaseSearchTestCase):
     +world(expanded)
   }
   EXACT {
-    UNION {
-      what
-      +what(expanded)
-    }
-    UNION {
-      what
-      +what(expanded)
-    }
+    what
+    what
   }
   UNION {
     UNION {

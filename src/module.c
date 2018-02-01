@@ -245,15 +245,20 @@ int cmp_results(const void *p1, const void *p2, const void *udata) {
   const searchResult *r1 = p1, *r2 = p2;
 
   const searchRequestCtx *req = udata;
+  int cmp = 0;
+  // Compary by sorting keys
   if (r1->sortKey && r2->sortKey && req->withSortby) {
+    // Sort by numeric sorting keys
     if (r1->sortKeyNum != HUGE_VAL && r2->sortKeyNum != HUGE_VAL) {
-      // fprintf(stderr, "Comparing NUMBAS! %f<>%f\n", r2->sortKeyNum, r1->sortKeyNum);
-      double cmp = r2->sortKeyNum - r1->sortKeyNum;
-      return (req->sortAscending ? -cmp : cmp);
+      double diff = r2->sortKeyNum - r1->sortKeyNum;
+      cmp = diff < 0 ? -1 : (diff > 0 ? 1 : 0);
+    } else {
+      // Sort by string sort keys
+      cmp = strcmp(r2->sortKey, r1->sortKey);
     }
-
-    // fprintf(stderr, "Comparing %s<>%s\n", r2->sortKey, r1->sortKey);
-    return (req->sortAscending ? -1 : 1) * strcmp(r2->sortKey, r1->sortKey);
+    // in case of a tie - compare ids
+    if (!cmp) cmp = strcmp(r2->id, r1->id);
+    return (req->sortAscending ? -cmp : cmp);
   }
 
   double s1 = r1->score, s2 = r2->score;

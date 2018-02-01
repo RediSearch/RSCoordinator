@@ -9,6 +9,7 @@ typedef enum { ClusterType_RedisOSS = 0, ClusterType_RedisLabs = 1 } MRClusterTy
 typedef struct {
   size_t numPartitions;
   MRClusterType type;
+  int timeoutMS;
 } SearchClusterConfig;
 
 extern SearchClusterConfig clusterConfig;
@@ -16,9 +17,9 @@ extern SearchClusterConfig clusterConfig;
 #define CLUSTER_TYPE_OSS "redis_oss"
 #define CLUSTER_TYPE_RLABS "redislabs"
 
-#define DEFAULT_CLUSTER_CONFIG                      \
-  (SearchClusterConfig) {                           \
-    .numPartitions = 0, .type = DetectClusterType() \
+#define DEFAULT_CLUSTER_CONFIG                                         \
+  (SearchClusterConfig) {                                              \
+    .numPartitions = 0, .type = DetectClusterType(), .timeoutMS = 500, \
   }
 
 /* Detect the cluster type, by trying to see if we are running inside RLEC.

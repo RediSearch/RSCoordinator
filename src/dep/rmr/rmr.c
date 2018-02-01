@@ -24,6 +24,9 @@ static MRCluster *cluster_g = NULL;
 
 static int concurrentRequests_g = 0;
 
+/* Coordination request timeout */
+long long timeout_g = 500;
+
 /* MapReduce context for a specific command's execution */
 typedef struct MRCtx {
   struct timespec startTime;
@@ -238,9 +241,10 @@ static void sideThread(void *arg) {
 uv_thread_t loop_th;
 
 /* Initialize the MapReduce engine with a node provider */
-void MR_Init(MRCluster *cl) {
+void MR_Init(MRCluster *cl, long long timeoutMS) {
 
   cluster_g = cl;
+  timeout_g = timeoutMS;
 
   // MRCluster_ConnectAll(cluster_g);
   printf("Creating thread...\n");
@@ -320,8 +324,8 @@ static void uvMapRequest(struct MRRequestCtx *mc) {
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
-  ctx->redisCtx =
-      RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler, freePrivDataCB, 500);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
+                                          freePrivDataCB, timeout_g);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -347,8 +351,8 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
     }
   }
 
-  ctx->redisCtx =
-      RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler, freePrivDataCB, 500);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
+                                          freePrivDataCB, timeout_g);
 
   rc->cb = uvMapRequest;
   RQ_Push(&rq_g, rc);
@@ -364,8 +368,8 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
 
-  ctx->redisCtx =
-      RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler, freePrivDataCB, 500);
+  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
+                                          freePrivDataCB, timeout_g);
 
   rc->cb = uvMapRequest;
   RQ_Push(&rq_g, rc);

@@ -39,6 +39,14 @@ int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleStrin
   conf->numPartitions = numPartitions;
   conf->type = DetectClusterType();
 
+  /* Read the query timeout */
+  if (argc >= 2 && RMUtil_ArgIndex("TIMEOUT", argv, argc) >= 0) {
+    long long to = 500;
+    RMUtil_ParseArgsAfter("TIMEOUT", argv, argc, "l", &to);
+    if (to > 0) {
+      conf->timeoutMS = to;
+    }
+  }
   return REDISMODULE_OK;
 }
 

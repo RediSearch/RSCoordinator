@@ -23,7 +23,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 void MR_SetCoordinationStrategy(struct MRCtx *ctx, MRCoordinationStrategy strategy);
 
 /* Initialize the MapReduce engine with a node provider */
-void MR_Init(MRCluster *cl);
+void MR_Init(MRCluster *cl, long long timeoutMS);
 
 /* Set a new topology for the cluster */
 int MR_UpdateTopology(MRClusterTopology *newTopology);

@@ -855,8 +855,9 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     clusterConfig = DEFAULT_CLUSTER_CONFIG;
   }
 
-  RedisModule_Log(ctx, "notice", "Cluster configuration: %d partitions, type: %d",
-                  clusterConfig.numPartitions, clusterConfig.type);
+  RedisModule_Log(ctx, "notice",
+                  "Cluster configuration: %d partitions, type: %d, coordinator timeout: %dms",
+                  clusterConfig.numPartitions, clusterConfig.type, clusterConfig.timeoutMS);
 
   /* Configure cluster injections */
   ShardFunc sf;
@@ -886,7 +887,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   MRCluster *cl = MR_NewCluster(initialTopology, sf, 2);
-  MR_Init(cl);
+  MR_Init(cl, clusterConfig.timeoutMS);
   __searchCluster = NewSearchCluster(clusterConfig.numPartitions, slotTable, tableSize);
 
   return REDISMODULE_OK;

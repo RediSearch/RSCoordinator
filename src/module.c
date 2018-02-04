@@ -22,6 +22,7 @@
 #include <sys/param.h>
 
 SearchCluster __searchCluster;
+#define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -441,6 +442,9 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -472,6 +476,10 @@ int MGetCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -493,7 +501,10 @@ int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, i
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
-
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -531,7 +542,10 @@ int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
-
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -549,7 +563,10 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
-
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc - 1, &argv[1]);
@@ -571,7 +588,10 @@ int InfoCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     // FT.INFO {index}
     return RedisModule_WrongArity(ctx);
   }
-
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   MRCommand_SetPrefix(&cmd, "_FT");
@@ -589,6 +609,10 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   // MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
+  }
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
   RedisModule_AutoMemory(ctx);
 
@@ -629,6 +653,10 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   // MR_UpdateTopology(ctx);
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
+  }
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
   RedisModule_AutoMemory(ctx);
 
@@ -691,7 +719,10 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
-
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(&__searchCluster)) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   RedisModule_AutoMemory(ctx);
   // MR_UpdateTopology(ctx);
 

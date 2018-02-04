@@ -361,6 +361,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
 }
 
 int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
+
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
   rc->ctx = ctx;
   rc->f = reducer;

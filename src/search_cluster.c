@@ -10,7 +10,14 @@ SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize
   return ret;
 }
 
+inline int SearchCluster_Ready(SearchCluster *sc) {
+  return sc != NULL && sc->size != 0 && sc->part.table != NULL;
+}
+
 int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
+
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(sc)) return 0;
 
   if (arg < 0 || arg >= cmd->num || partitionKey >= cmd->num) {
     return 0;
@@ -30,10 +37,12 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
 }
 
 int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitionKey) {
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(sc)) return 0;
 
   int sk = -1;
   if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
-    if (partitionKey >= cmd->num || sk >= cmd->num) {
+    if (partitionKey < 0 || partitionKey >= cmd->num || sk >= cmd->num) {
       return 0;
     }
     // the partition arg is the arg which we select the partition on
@@ -52,6 +61,9 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
 /* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
 int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   SCCommandMuxIterator *it = ctx;
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(it->cluster)) return 0;
+
   /* at end */
   if (it->offset >= it->cluster->size) {
     return 0;

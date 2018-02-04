@@ -10,6 +10,7 @@
 typedef struct {
   size_t size;
   PartitionCtx part;
+
 } SearchCluster;
 
 /* Create a search cluster with a given number of partitions (size) and a partitioner.
@@ -24,6 +25,8 @@ typedef struct {
   size_t offset;
   SearchCluster *cluster;
 } SCCommandMuxIterator;
+
+int SearchCluster_Ready(SearchCluster *sc);
 
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */

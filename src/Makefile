@@ -22,9 +22,10 @@ LIBUV_INCLUDE_DIR = $(LIBUV_DIR)/include
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS = -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" \
+CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" \
 		-Wall -Wno-unused-function $(DEBUGFLAGS) -fPIC -std=gnu99 \
-		-D_GNU_SOURCE -DREDIS_MODULE_TARGET
+		-D_GNU_SOURCE -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API 
+
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 

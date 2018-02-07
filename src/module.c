@@ -288,12 +288,14 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   res->sortKey =
       sortKeyOffset > 0 ? MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), NULL) : NULL;
   if (res->sortKey) {
-    char *eptr;
-    double d = strtod(res->sortKey, &eptr);
-    if (eptr != res->sortKey && *eptr == 0) {
-      // fprintf(stderr, "Parsed %s as %f\n", res->sortKey, d);
-      res->sortKeyNum = d;
+    if (res->sortKey[0] == '#') {
+      char *eptr;
+      double d = strtod(res->sortKey + 1, &eptr);
+      if (eptr != res->sortKey + 1 && *eptr == 0) {
+        res->sortKeyNum = d;
+      }
     }
+    // fprintf(stderr, "Sort key string '%s', num '%f\n", res->sortKey, res->sortKeyNum);
   }
   return res;
 }
@@ -348,8 +350,8 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         searchResult *res =
             newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
         cached = NULL;
-        // fprintf(stderr, "Response %d result %d Reply docId %s score: %f\n", i, j, res->id,
-        //         res->score);
+        // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
+        //         res->id, res->score, res->sortKeyNum);
 
         if (heap_count(pq) < heap_size(pq)) {
           // printf("Offering result score %f\n", res->score);

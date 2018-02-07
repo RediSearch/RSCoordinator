@@ -394,10 +394,10 @@ class SearchTestCase(BaseSearchTestCase):
                                'foo', 'hello world', 'num', 2, 'extra', 'abba'))
         res = self.cmd('ft.search', 'idx', 'hello world', 'sortby',
                        'num', 'asc', 'nocontent', 'withsortkeys')
-        self.assertListEqual([2L, 'doc1', '1', 'doc2', '2'], res)
+        self.assertListEqual([2L, 'doc1', '#1', 'doc2', '#2'], res)
         res = self.cmd('ft.search', 'idx', 'hello world', 'sortby',
                        'num', 'desc', 'nocontent', 'withsortkeys')
-        self.assertListEqual([2L, 'doc2', '2', 'doc1', '1'], res)
+        self.assertListEqual([2L, 'doc2', '#2', 'doc1', '#1'], res)
 
         # Updating non indexed fields doesn't affect search results
         self.assertOk(self.cmd('ft.add', 'idx', 'doc1', '0.1', 'replace', 'partial',
@@ -460,7 +460,7 @@ class SearchTestCase(BaseSearchTestCase):
         res = self.cmd('ft.search', 'idx', 'world', 'nocontent',
                        'sortby', 'bar', 'desc', 'withsortkeys', 'limit', '2', '5')
         self.assertListEqual(
-            [100L, 'doc2', '98', 'doc3', '97', 'doc4', '96', 'doc5', '95', 'doc6', '94'], res)
+            [100L, 'doc2', '#98', 'doc3', '#97', 'doc4', '#96', 'doc5', '#95', 'doc6', '#94'], res)
 
     def testNestedIntersection(self):
 

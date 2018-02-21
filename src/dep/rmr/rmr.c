@@ -24,8 +24,9 @@ static MRCluster *cluster_g = NULL;
 
 static int concurrentRequests_g = 0;
 
+#define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 50)
 /* Coordination request timeout */
-long long timeout_g = 500;
+long long timeout_g = 5000;
 
 /* MapReduce context for a specific command's execution */
 typedef struct MRCtx {
@@ -99,15 +100,14 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
 
 static void freePrivDataCB(void *p) {
   // printf("FreePrivData called!\n");
+  if (concurrentRequests_g > 0) concurrentRequests_g--;
   if (p) {
     MRCtx *mc = p;
-    concurrentRequests_g--;
     MRCtx_Free(mc);
   }
 }
 
 static int timeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  // concurrentRequests_g--;
   RedisModule_Log(ctx, "notice", "Timed out coordination request");
   return RedisModule_ReplyWithError(ctx, "Timeout calling command");
 }
@@ -164,43 +164,57 @@ struct MRRequestCtx {
   MRCommand *cmds;
   int numCmds;
   void (*cb)(struct MRRequestCtx *);
+  struct MRRequestCtx *next;
 };
 
 typedef struct {
-  struct MRRequestCtx **queue;
+  struct MRRequestCtx *head;
+  struct MRRequestCtx *tail;
+
   size_t sz;
-  size_t cap;
-  uv_mutex_t *lock;
+  uv_mutex_t lock;
   uv_async_t async;
 } MRRequestQueue;
 
 static void RQ_Push(MRRequestQueue *q, struct MRRequestCtx *req) {
-  uv_mutex_lock(q->lock);
-  if (q->sz == q->cap) {
-    q->cap += q->cap ? q->cap : 1;
-    q->queue = realloc(q->queue, q->cap * sizeof(struct MRRequestCtx *));
+  uv_mutex_lock(&q->lock);
+  // append the request to the tail of the list
+  if (q->tail) {
+    // make it the next of the current tail
+    q->tail->next = req;
+    // set a new tail
+    q->tail = req;
+  } else {  // no tail means no head - empty queue
+    q->head = q->tail = req;
   }
-  q->queue[q->sz++] = req;
+  q->sz++;
 
-  uv_mutex_unlock(q->lock);
+  uv_mutex_unlock(&q->lock);
   uv_async_send(&q->async);
 }
 
 static struct MRRequestCtx *RQ_Pop(MRRequestQueue *q) {
-  uv_mutex_lock(q->lock);
-  if (q->sz == 0) {
-    uv_mutex_unlock(q->lock);
+  uv_mutex_lock(&q->lock);
+  // fprintf(stderr, "%d %zd\n", concurrentRequests_g, q->sz);
+
+  if (q->head == NULL) {
+    uv_mutex_unlock(&q->lock);
     return NULL;
   }
-  if (concurrentRequests_g > MR_CONN_POOL_SIZE * 10) {
-    // fprintf(stderr, "Cannot proceed - queue size %d\n", concurrentRequests_g);
-    uv_mutex_unlock(q->lock);
+  if (concurrentRequests_g > MAX_CONCURRENT_REQUESTS) {
+    uv_mutex_unlock(&q->lock);
+    // If the queue is full we need to wake up the drain callback
+    uv_async_send(&q->async);
+
     return NULL;
   }
 
-  struct MRRequestCtx *r = q->queue[--q->sz];
+  struct MRRequestCtx *r = q->head;
+  q->head = r->next;
+  if (!q->head) q->tail = NULL;
+  q->sz--;
 
-  uv_mutex_unlock(q->lock);
+  uv_mutex_unlock(&q->lock);
   return r;
 }
 
@@ -215,10 +229,9 @@ static void rqAsyncCb(uv_async_t *async) {
 
 static void RQ_Init(MRRequestQueue *q, size_t cap) {
   q->sz = 0;
-  q->cap = cap;
-  q->lock = malloc(sizeof(*q->lock));
-  uv_mutex_init(q->lock);
-  q->queue = calloc(q->cap, sizeof(struct MRRequestCtx *));
+  q->head = NULL;
+  q->tail = NULL;
+  uv_mutex_init(&q->lock);
   // TODO: Add close cb
   uv_async_init(uv_default_loop(), &q->async, rqAsyncCb);
   q->async.data = q;
@@ -234,6 +247,7 @@ static void sideThread(void *arg) {
   while (1) {
     if (uv_run(uv_default_loop(), UV_RUN_DEFAULT)) break;
     usleep(1000);
+    fprintf(stderr, "restarting loop!\n");
   }
   fprintf(stderr, "Uv loop exited!\n");
 }
@@ -331,6 +345,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
+  rc->next = NULL;
 
   rc->cb = uvFanoutRequest;
   RQ_Push(&rq_g, rc);
@@ -343,6 +358,8 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
   rc->f = reducer;
   rc->cmds = calloc(cmds.Len(cmds.ctx), sizeof(MRCommand));
   rc->numCmds = cmds.Len(cmds.ctx);
+  rc->next = NULL;
+
   // copy the commands from the iterator to the conext's array
   for (int i = 0; i < rc->numCmds; i++) {
     if (!cmds.Next(cmds.ctx, &rc->cmds[i])) {
@@ -368,6 +385,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
+  rc->next = NULL;
 
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
                                           freePrivDataCB, timeout_g);
@@ -386,6 +404,7 @@ size_t MR_NumHosts() {
 static void uvUpdateTopologyRequest(struct MRRequestCtx *mc) {
   MRCLuster_UpdateTopology(cluster_g, (MRClusterTopology *)mc->ctx);
   concurrentRequests_g--;
+  // fprintf(stderr, "topo update: conc requests: %d\n", concurrentRequests_g);
   free(mc);
 }
 
@@ -398,6 +417,8 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
   struct MRRequestCtx *rc = calloc(1, sizeof(*rc));
   rc->ctx = newTopo;
   rc->cb = uvUpdateTopologyRequest;
+  rc->next = NULL;
+
   RQ_Push(&rq_g, rc);
   return REDIS_OK;
 }

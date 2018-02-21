@@ -29,7 +29,6 @@ struct mrCommandConf __commandConfig[] = {
     {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1, 1},
     {"_FT.TAGVALS", MRCommand_Read | MRCommand_SingleKey, 1, 1},
 
-
     // Suggest commands
     {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1, 1},
@@ -113,7 +112,8 @@ MRCommand MRCommand_Copy(MRCommand *cmd) {
 
 MRCommand MR_NewCommand(int argc, ...) {
   MRCommand cmd = (MRCommand){
-      .num = argc, .args = calloc(argc, sizeof(char *)),
+      .num = argc,
+      .args = calloc(argc, sizeof(char *)),
   };
 
   va_list ap;
@@ -128,7 +128,8 @@ MRCommand MR_NewCommand(int argc, ...) {
 
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
   MRCommand cmd = (MRCommand){
-      .num = argc, .args = calloc(argc, sizeof(char *)),
+      .num = argc,
+      .args = calloc(argc, sizeof(char *)),
   };
   for (int i = 0; i < argc; i++) {
     cmd.args[i] = strdup(RedisModule_StringPtrLen(argv[i], NULL));
@@ -220,4 +221,12 @@ void MRCommand_Print(MRCommand *cmd) {
     printf("%s ", cmd->args[i]);
   }
   printf("\n");
+}
+
+void MRCommand_FPrint(FILE *fd, MRCommand *cmd) {
+
+  for (int i = 0; i < cmd->num; i++) {
+    fprintf(fd, "%s ", cmd->args[i]);
+  }
+  fprintf(fd, "\n");
 }

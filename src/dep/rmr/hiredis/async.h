@@ -92,6 +92,10 @@ typedef struct redisAsyncContext {
     /* Regular command callbacks */
     redisCallbackList replies;
 
+    /* Address used for connect() */
+    struct sockaddr *saddr;
+    size_t addrlen;
+
     /* Subscription callbacks */
     struct {
         redisCallbackList invalid;

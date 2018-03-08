@@ -158,6 +158,9 @@ typedef struct redisContext {
         char *path;
     } unix_sock;
 
+    /* For non-blocking connect */
+    struct sockadr *saddr;
+    size_t addrlen;
 } redisContext;
 
 redisContext *redisConnect(const char *ip, int port);

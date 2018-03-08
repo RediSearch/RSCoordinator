@@ -630,6 +630,8 @@ void redisFree(redisContext *c) {
         free(c->unix_sock.path);
     if (c->timeout)
         free(c->timeout);
+    if (c->saddr)
+        free(c->saddr);
     free(c);
 }
 

@@ -37,7 +37,7 @@
 
 #include "hiredis.h"
 
-#if defined(__sun)
+#if defined(__sun) || defined(AIX)
 #define AF_LOCAL AF_UNIX
 #endif
 
@@ -49,5 +49,6 @@ int redisContextConnectBindTcp(redisContext *c, const char *addr, int port,
                                const char *source_addr);
 int redisContextConnectUnix(redisContext *c, const char *path, const struct timeval *timeout);
 int redisKeepAlive(redisContext *c, int interval);
+int redisCheckConnectDone(redisContext *c, int *completed);
 
 #endif

@@ -336,7 +336,8 @@ static void __redisAsyncDisconnect(redisAsyncContext *ac) {
 
     if (ac->err == 0) {
         /* For clean disconnects, there should be no pending callbacks. */
-        assert(__redisShiftCallback(&ac->replies,NULL) == REDIS_ERR);
+        int ret = __redisShiftCallback(&ac->replies,NULL);
+        assert(ret == REDIS_ERR);
     } else {
         /* Disconnection is caused by an error, make sure that pending
          * callbacks cannot call new commands. */
@@ -492,22 +493,22 @@ void redisProcessCallbacks(redisAsyncContext *ac) {
  * write event fires. When connecting was not successful, the connect callback
  * is called with a REDIS_ERR status and the context is free'd. */
 static int __redisAsyncHandleConnect(redisAsyncContext *ac) {
+    int completed = 0;
     redisContext *c = &(ac->c);
-
-    if (redisCheckSocketError(c) == REDIS_ERR) {
-        /* Try again later when connect(2) is still in progress. */
-        if (errno == EINPROGRESS)
-            return REDIS_OK;
-
-        if (ac->onConnect) ac->onConnect(ac,REDIS_ERR);
+    if (redisCheckConnectDone(c, &completed) == REDIS_ERR) {
+        /* Error! */
+        redisCheckSocketError(c);
+        if (ac->onConnect) ac->onConnect(ac, REDIS_ERR);
         __redisAsyncDisconnect(ac);
         return REDIS_ERR;
+    } else if (completed == 1) {
+        /* connected! */
+        if (ac->onConnect) ac->onConnect(ac, REDIS_OK);
+        c->flags |= REDIS_CONNECTED;
+        return REDIS_OK;
+    } else {
+        return REDIS_OK;
     }
-
-    /* Mark context as connected. */
-    c->flags |= REDIS_CONNECTED;
-    if (ac->onConnect) ac->onConnect(ac,REDIS_OK);
-    return REDIS_OK;
 }
 
 /* This function should be called when the socket is readable.
@@ -676,6 +677,8 @@ int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *priv
     int len;
     int status;
     len = redisFormatSdsCommandArgv(&cmd,argc,argv,argvlen);
+    if (len < 0)
+        return REDIS_ERR;
     status = __redisAsyncCommand(ac,fn,privdata,cmd,len);
     sdsfree(cmd);
     return status;

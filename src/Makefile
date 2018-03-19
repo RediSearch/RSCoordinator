@@ -72,7 +72,7 @@ module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
 module-oss.so: $(shell rm -f module.o)
-module-oss.so: CFLAGS+=-DREDISEARCH_OSS_BUILD
+module-oss.so: CFLAGS+=-DREDISEARCH_OSS_BUILD -mpopcnt
 module-oss.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
 	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 

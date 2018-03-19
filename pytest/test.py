@@ -123,44 +123,59 @@ class SearchTestCase(BaseSearchTestCase):
         self.assertTrue(float(res[4]) > 0)
 
     def testDelete(self):
+        with self.redis() as r:
+            r.flushdb()
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'f', 'text'))
 
-        self.assertOk(self.cmd(
-            'ft.create', 'idx', 'schema', 'f', 'text'))
+            for i in range(100):
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+                                                'f', 'hello world'))
 
-        for i in range(100):
-            self.assertOk(self.cmd('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
-                                   'f', 'hello world'))
+            for i in range(100):
+                # the doc hash should exist now
+                self.assertIsNotNone(r.execute_command(
+                    'ft.get', 'idx', 'doc%d' % i))
 
-        for i in range(100):
-            self.assertEqual(1, self.cmd(
-                'ft.del', 'idx', 'doc%d' % i))
-            # second delete should return 0
-            self.assertEqual(0, self.cmd(
-                'ft.del', 'idx', 'doc%d' % i))
+                # Delete the actual docs only half of the time
+                self.assertEqual(1, r.execute_command(
+                    'ft.del', 'idx', 'doc%d' % i, 'DD' if i % 2 == 0 else ''))
+                # second delete should return 0
+                self.assertEqual(0, r.execute_command(
+                    'ft.del', 'idx', 'doc%d' % i))
 
-            res = self.cmd(
-                'ft.search', 'idx', 'hello', 'nocontent', 'limit', 0, 100)
-            self.assertNotIn('doc%d' % i, res)
-            self.assertEqual(res[0], 100 - i - 1)
-            self.assertEqual(len(res), 100 - i)
+                # After del with DD the doc hash should not exist
+                if i % 2 == 0:
+                    self.assertIsNone(r.execute_command(
+                        'ft.get', 'idx', 'doc%d' % i))
+                else:
+                    self.assertIsNotNone(r.execute_command(
+                        'ft.get', 'idx', 'doc%d' % i))
 
-            # test reinsertion
-            self.assertOk(self.cmd('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
-                                   'f', 'hello world'))
-            res = self.cmd(
-                'ft.search', 'idx', 'hello', 'nocontent', 'limit', 0, 100)
-            self.assertIn('doc%d' % i, res)
-            self.assertEqual(1, self.cmd(
-                'ft.del', 'idx', 'doc%d' % i))
-        did = 'rrrr'
-        self.assertOk(self.cmd('ft.add', 'idx', did, 1, 'fields',
-                               'f', 'hello world'))
-        self.assertEqual(1, self.cmd('ft.del', 'idx', did))
-        self.assertEqual(0, self.cmd('ft.del', 'idx', did))
-        self.assertOk(self.cmd('ft.add', 'idx', did, 1, 'fields',
-                               'f', 'hello world'))
-        self.assertEqual(1, self.cmd('ft.del', 'idx', did))
-        self.assertEqual(0, self.cmd('ft.del', 'idx', did))
+                res = r.execute_command(
+                    'ft.search', 'idx', 'hello', 'nocontent', 'limit', 0, 100)
+                self.assertNotIn('doc%d' % i, res)
+                self.assertEqual(res[0], 100 - i - 1)
+                self.assertEqual(len(res), 100 - i)
+
+                # test reinsertion
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+                                                'f', 'hello world'))
+                res = r.execute_command(
+                    'ft.search', 'idx', 'hello', 'nocontent', 'limit', 0, 100)
+                self.assertIn('doc%d' % i, res)
+                self.assertEqual(1, r.execute_command(
+                    'ft.del', 'idx', 'doc%d' % i))
+
+            did = 'rrrr'
+            self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
+                                            'f', 'hello world'))
+            self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
+            self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
+            self.assertOk(r.execute_command('ft.add', 'idx', did, 1, 'fields',
+                                            'f', 'hello world'))
+            self.assertEqual(1, r.execute_command('ft.del', 'idx', did))
+            self.assertEqual(0, r.execute_command('ft.del', 'idx', did))
 
     def testReplace(self):
 
@@ -198,20 +213,53 @@ class SearchTestCase(BaseSearchTestCase):
         self.assertEqual('doc1', res[1])
 
     def testDrop(self):
+        with self.redis() as r:
+            r.flushdb()
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'f', 'text', 'n', 'numeric', 't', 'tag', 'g', 'geo'))
 
-        self.assertOk(self.cmd(
-            'ft.create', 'idx', 'schema', 'f', 'text'))
+            for i in range(100):
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+                                                'f', 'hello world', 'n', 666, 't', 'foo bar',
+                                                'g', '19.04,47.497'))
+            keys = r.keys('*')
 
-        for i in range(200):
-            self.assertOk(self.cmd('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
-                                   'f', 'hello world'))
+            keys = list(itertools.chain(*self.broadcast('keys', '*')))
+            self.assertGreater(len(keys), 100)
 
-        keys = list(itertools.chain(*self.broadcast('keys', '*')))
-        self.assertGreaterEqual(len(keys), 200)
+            self.assertOk(r.execute_command('ft.drop', 'idx'))
+            keys = list(itertools.chain(*self.broadcast('keys', '*')))
+            self.assertEqual(len(keys), 0)
 
-        self.assertOk(self.cmd('ft.drop', 'idx'))
-        keys = list(itertools.chain(*self.broadcast('keys', '*')))
-        self.assertEqual(0, len(keys))
+            # Now do the same with KEEPDOCS
+            self.assertOk(r.execute_command(
+                'ft.create', 'idx', 'schema', 'f', 'text', 'n', 'numeric', 't', 'tag', 'g', 'geo'))
+
+            for i in range(100):
+                self.assertOk(r.execute_command('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+                                                'f', 'hello world', 'n', 666, 't', 'foo bar',
+                                                'g', '19.04,47.497'))
+            keys = list(itertools.chain(*self.broadcast('keys', '*')))
+            self.assertGreater(len(keys), 100)
+
+            self.assertOk(r.execute_command('ft.drop', 'idx', 'KEEPDOCS'))
+            keys = list(itertools.chain(*self.broadcast('keys', '*')))
+            self.assertEqual(100, len(keys))
+    # def testDrop(self):
+
+    #     self.assertOk(self.cmd(
+    #         'ft.create', 'idx', 'schema', 'f', 'text'))
+
+    #     for i in range(200):
+    #         self.assertOk(self.cmd('ft.add', 'idx', 'doc%d' % i, 1.0, 'fields',
+    #                                'f', 'hello world'))
+
+    #     keys = list(itertools.chain(*self.broadcast('keys', '*')))
+    #     self.assertGreaterEqual(len(keys), 200)
+
+    #     self.assertOk(self.cmd('ft.drop', 'idx'))
+    #     keys = list(itertools.chain(*self.broadcast('keys', '*')))
+    #     self.assertEqual(0, len(keys))
 
     def testCustomStopwords(self):
 
@@ -418,7 +466,7 @@ class SearchTestCase(BaseSearchTestCase):
         # Test updating of score and no fields
         res = self.cmd('ft.search', 'idx', 'wat', 'nocontent', 'withscores')
         self.assertLess(float(res[2]), 1)
-        #self.assertListEqual([1L, 'doc1'], res)
+        # self.assertListEqual([1L, 'doc1'], res)
         self.assertOk(self.cmd('ft.add', 'idx', 'doc1',
                                '1.0', 'replace', 'partial', 'fields'))
         res = self.cmd('ft.search', 'idx', 'wat', 'nocontent', 'withscores')
@@ -530,7 +578,7 @@ class SearchTestCase(BaseSearchTestCase):
 
         self.assertEqual(self.cmd(
             'ft.search', 'idx', 'constant -(term0|term1|term2|term3|term4|nothing)', 'nocontent'), [0])
-        #self.assertEqual(self.cmd('ft.search', 'idx', 'constant -(term1 term2)', 'nocontent')[0], N)
+        # self.assertEqual(self.cmd('ft.search', 'idx', 'constant -(term1 term2)', 'nocontent')[0], N)
 
     def testInKeys(self):
 

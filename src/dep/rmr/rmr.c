@@ -15,7 +15,7 @@
 #include "rmr.h"
 #include "redismodule.h"
 #include "cluster.h"
-
+#include "chan.h"
 /* Copy a redisReply object. Defined in reply.c */
 MRReply *MRReply_Duplicate(redisReply *rep);
 
@@ -421,4 +421,13 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
 
   RQ_Push(&rq_g, rc);
   return REDIS_OK;
+}
+
+typedef struct MRIterator {
+  MRCtx *mc;
+  MRChannel *chan;
+} MRIterator;
+
+MRReply *MRIterator_Next(MRIterator *it) {
+  return MRChannel_Pop(it->chan);
 }

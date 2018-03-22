@@ -423,11 +423,70 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
   return REDIS_OK;
 }
 
-typedef struct MRIterator {
-  MRCtx *mc;
+struct MRIteratorCtx;
+
+typedef int (*MRIteratorCallback)(struct MRIteratorCtx *ctx, MRReply *rep, MRCommand *cmd);
+
+typedef struct MRIteratorCtx {
+  MRCluster *cluster;
   MRChannel *chan;
+  void *privdata;
+  MRIteratorCallback cb;
+
+} MRIteratorCtx;
+
+typedef struct {
+  struct MRIteratorCtx *ic;
+  MRCommand cmd;
+} MRIteratorCallbackCtx;
+
+typedef struct MRIterator {
+  MRIteratorCtx ctx;
+  MRIteratorCallbackCtx *cbxs;
+  size_t len;
 } MRIterator;
 
+static void mrIteratorRedisCB(redisAsyncContext *c, void *r, void *privdata) {
+  MRIteratorCallbackCtx *ctx = privdata;
+  if (!r) {
+    // ctx->numErrored++;
+    // TODO: report error
+  } else {
+    MRReply *rp = MRReply_Duplicate(r);
+    ctx->ic->cb(ctx->ic, rp, &ctx->cmd);
+  }
+}
+
+MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privdata) {
+
+  MRIterator *ret = malloc(sizeof(ret));
+  *ret = (MRIterator){
+      .ctx = {.cluster = cluster_g, .chan = MR_NewChannel(0), .privdata = privdata, .cb = cb},
+      .cbxs = calloc(cg.Len(cg.ctx), sizeof(MRIteratorCallbackCtx)),
+      .len = 0,
+  };
+  for (size_t i = 0; i < cg.Len(cg.ctx); i++) {
+    ret->cbxs[i].ic = &ret->ctx;
+    if (!cg.Next(cg.ctx, &ret->cbxs[i].cmd)) {
+      ret->len = i;
+      break;
+    }
+  }
+
+  for (size_t i = 0; i < ret->len; i++) {
+    MRCluster_SendCommand(ret->ctx.cluster, MRCluster_MastersOnly, &ret->cbxs[i].cmd,
+                          mrIteratorRedisCB, &ret->cbxs[i]);
+  }
+
+  return ret;
+}
+
 MRReply *MRIterator_Next(MRIterator *it) {
-  return MRChannel_Pop(it->chan);
+  return MRChannel_Pop(it->ctx.chan);
+}
+
+void cb(MRCommand cmd) {
+}
+void foo() {
+  MRCommand cmd = MR_NewCommand(10, "FT.AGGREGATE", "idx", "*");
 }

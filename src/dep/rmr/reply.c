@@ -68,19 +68,19 @@ int _parseFloat(char *str, size_t len, double *d) {
   return 1;
 }
 
-MRReply *MRReply_Duplicate(redisReply *rep) {
+MRReply *MRReply_Duplicate(redisReply *src) {
   MRReply *ret = malloc(sizeof(MRReply));
-  *ret = *rep;
+  *ret = *src;
 
-  if (rep->str) {
-    ret->str = strndup(rep->str, rep->len);
+  if (src->str) {
+    src->str = NULL;
+    src->len = 0;
   }
-  if (rep->element && rep->elements) {
-    ret->element = calloc(rep->elements, sizeof(redisReply *));
-    for (int i = 0; i < rep->elements; i++) {
-      ret->element[i] = MRReply_Duplicate(rep->element[i]);
-    }
+  if (src->element && src->elements) {
+    src->element = NULL;
+    src->elements = 0;
   }
+  src->type = REDIS_REPLY_NIL;
   // memset(rep, 0, sizeof(*rep));
   return ret;
 }

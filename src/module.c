@@ -20,6 +20,7 @@
 #include "info_command.h"
 #include "version.h"
 #include <sys/param.h>
+#include <pthread.h>
 
 SearchCluster __searchCluster;
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
@@ -539,6 +540,66 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
+int distScanCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
+
+  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {
+    MRIteratorCallback_Done(ctx, 1);
+    return REDIS_ERR;
+  }
+
+  long long curs = MRReply_Integer(MRReply_ArrayElement(rep, 0));
+  if (MRReply_Length(rep) > 1) {
+    MRIteratorCallback_AddReply(ctx, MRReply_ArrayElement(rep, 1));
+  }
+  printf("got cursor %lld\n", curs);
+  if (curs == 0) {
+    MRIteratorCallback_Done(ctx, 0);
+    return REDIS_OK;
+  }
+  char buf[128];
+  sprintf(buf, "%lld", curs);
+  MRCommand_ReplaceArg(cmd, 1, buf);
+  MRCommand_FPrint(stderr, cmd);
+  MRIteratorCallback_ResendCommand(ctx, cmd);
+  return REDIS_OK;
+}
+
+void *consumeIterator(void *arg) {
+  void **targ = arg;
+  RedisModuleBlockedClient *bc = targ[0];
+  MRIterator *it = targ[1];
+
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(bc);
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+  MRReply *r = NULL;
+  int count = 0;
+  while (NULL != (r = MRIterator_Next(it))) {
+    MR_ReplyWithMRReply(ctx, r);
+    count++;
+  }
+  RedisModule_ReplySetArrayLength(ctx, count);
+  RedisModule_UnblockClient(bc, NULL);
+  return NULL;
+}
+int DistScanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  MRCommand cmd = MR_NewCommand(2, "SCAN", "0");
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
+
+  MRIterator *it = MR_Iterate(cg, distScanCallback, NULL);
+  return RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
+
+  pthread_t tid;
+  RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
+  void **targ = malloc(sizeof(void *) * 2);
+  targ[0] = bc;
+  targ[1] = it;
+  if (pthread_create(&tid, NULL, consumeIterator, targ) != 0) {
+    RedisModule_AbortBlock(bc);
+    RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
+  }
+  return REDISMODULE_OK;
+}
+
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 3) {
@@ -1009,6 +1070,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   /*********************************************************
    * Multi shard, fanout commands
    **********************************************************/
+  RM_TRY(
+      RedisModule_CreateCommand(ctx, "FT.DSCAN", SafeCmd(DistScanCommand), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersFanoutCommandHandler), "readonly",

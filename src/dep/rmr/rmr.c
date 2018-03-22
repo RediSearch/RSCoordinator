@@ -1,3 +1,4 @@
+#define RMR_C__
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -423,19 +424,19 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
   return REDIS_OK;
 }
 
-struct MRIteratorCtx;
+struct MRIteratorCallbackCtx;
 
-typedef int (*MRIteratorCallback)(struct MRIteratorCtx *ctx, MRReply *rep, MRCommand *cmd);
+typedef int (*MRIteratorCallback)(struct MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd);
 
 typedef struct MRIteratorCtx {
   MRCluster *cluster;
   MRChannel *chan;
   void *privdata;
   MRIteratorCallback cb;
-
+  int pending;
 } MRIteratorCtx;
 
-typedef struct {
+typedef struct MRIteratorCallbackCtx {
   struct MRIteratorCtx *ic;
   MRCommand cmd;
 } MRIteratorCallbackCtx;
@@ -448,13 +449,28 @@ typedef struct MRIterator {
 
 static void mrIteratorRedisCB(redisAsyncContext *c, void *r, void *privdata) {
   MRIteratorCallbackCtx *ctx = privdata;
+  fprintf(stderr, "Got callback!\n");
   if (!r) {
     // ctx->numErrored++;
     // TODO: report error
   } else {
     MRReply *rp = MRReply_Duplicate(r);
-    ctx->ic->cb(ctx->ic, rp, &ctx->cmd);
+    ctx->ic->cb(ctx, rp, &ctx->cmd);
   }
+}
+
+int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd) {
+  ctx->cmd = *cmd;
+  return MRCluster_SendCommand(ctx->ic->cluster, MRCluster_MastersOnly, cmd, mrIteratorRedisCB,
+                               ctx);
+}
+
+int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error) {
+  return --ctx->ic->pending;
+}
+
+int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
+  return MRChannel_Push(ctx->ic->chan, rep);
 }
 
 MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privdata) {
@@ -472,8 +488,10 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
       break;
     }
   }
+  ret->ctx.pending = ret->len;
 
   for (size_t i = 0; i < ret->len; i++) {
+    MRCommand_FPrint(stderr, &ret->cbxs[i].cmd);
     MRCluster_SendCommand(ret->ctx.cluster, MRCluster_MastersOnly, &ret->cbxs[i].cmd,
                           mrIteratorRedisCB, &ret->cbxs[i]);
   }
@@ -482,11 +500,8 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
 }
 
 MRReply *MRIterator_Next(MRIterator *it) {
+  if (it->ctx.pending <= 0) {
+    return NULL;
+  }
   return MRChannel_Pop(it->ctx.chan);
-}
-
-void cb(MRCommand cmd) {
-}
-void foo() {
-  MRCommand cmd = MR_NewCommand(10, "FT.AGGREGATE", "idx", "*");
 }

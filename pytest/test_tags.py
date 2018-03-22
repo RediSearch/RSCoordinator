@@ -6,7 +6,7 @@ from base_case import BaseSearchTestCase
 
 
 class TagsTestCase(BaseSearchTestCase):
-    
+
     def testTagIndex(self):
 
         self.cmd('ft.broadcast', 'flushdb')
@@ -69,8 +69,21 @@ class TagsTestCase(BaseSearchTestCase):
 
         self.flushdb()
 
+    def testTagPrefix(self):
+
+        self.assertOk(self.cmd(
+            'ft.create', 'idx', 'schema', 'title', 'text', 'tags', 'tag', 'separator', ','))
+
+        self.assertOk(self.cmd('ft.add', 'idx', 'doc1', 1.0, 'fields',
+                               'title', 'hello world', 'tags', 'hello world,hello-world,hell,jell'))
+
+        for q in ('@tags:{hello world}', '@tags:{hel*}', '@tags:{hello\\-*}', '@tags:{he*}'):
+            res = self.search('idx', q)
+            self.assertEqual(
+                res[0], 1, msg='Error trying {}, got {}'.format(q, res))
+
     def testInvalidSyntax(self):
-        
+
         # invalid syntax
         with self.assertResponseError():
             self.cmd(

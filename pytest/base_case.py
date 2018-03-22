@@ -11,6 +11,7 @@ class BaseSearchTestCase(ClusterModuleTestCase('../src/module-oss.so',
     def setUp(self):
         # Update all the nodes
         self.client().execute_command('ft.clusterrefresh')
+        time.sleep(0.5)
         self.broadcast('ft.clusterrefresh')
 
         self.flushdb()

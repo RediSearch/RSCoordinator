@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <errno.h>
 
+void *MRCHANNEL_CLOSED = (void *)"MRCHANNEL_CLOSED";
+
 typedef struct chanItem {
   void *ptr;
   struct chanItem *next;
@@ -14,6 +16,7 @@ typedef struct MRChannel {
   chanItem *tail;
   size_t size;
   size_t maxSize;
+  int open;
   pthread_mutex_t lock;
   pthread_cond_t cond;
 } MRChannel;
@@ -27,6 +30,7 @@ MRChannel *MR_NewChannel(size_t max) {
       .tail = NULL,
       .size = 0,
       .maxSize = max,
+      .open = 1,
   };
   pthread_cond_init(&chan->cond, NULL);
   pthread_mutex_init(&chan->lock, NULL);
@@ -60,7 +64,7 @@ int MRChannel_Push(MRChannel *chan, void *ptr) {
 
   pthread_mutex_lock(&chan->lock);
   int rc = 1;
-  if (chan->maxSize > 0 && chan->size == chan->maxSize) {
+  if (!chan->open || (chan->maxSize > 0 && chan->size == chan->maxSize)) {
     rc = 0;
     goto end;
   }
@@ -79,9 +83,9 @@ int MRChannel_Push(MRChannel *chan, void *ptr) {
   chan->size++;
 end:
   pthread_mutex_unlock(&chan->lock);
-  if (rc) {
-    if (pthread_cond_broadcast(&chan->cond)) rc = 0;
-  }
+  // if (rc) {
+  if (pthread_cond_broadcast(&chan->cond)) rc = 0;
+  //}
   return rc;
 }
 
@@ -100,23 +104,27 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
     ts.tv_nsec = tv.tv_usec * 1000;
   }
   pthread_mutex_lock(&chan->lock);
+
   if (chan->size == 0) {
+    if (!chan->open) {
+      pthread_mutex_unlock(&chan->lock);
+      return MRCHANNEL_CLOSED;
+    }
     if (waitMS) {
       // exit on timeout
       if (pthread_cond_timedwait(&chan->cond, &chan->lock, &ts) == ETIMEDOUT) {
-        pthread_mutex_unlock(&chan->lock);
-        return NULL;
+        goto return_null;
       }
     } else {
       if (pthread_cond_wait(&chan->cond, &chan->lock) == EINVAL) {
-        pthread_mutex_unlock(&chan->lock);
-        return NULL;
+        goto return_null;
       }
     }
   }
   chanItem *item = chan->head;
   // this might happen if we got triggered by destroying the queue
-  if (!item) return NULL;
+  if (!item) goto return_null;
+
   chan->head = item->next;
   // empty queue...
   if (!chan->head) chan->tail = NULL;
@@ -126,6 +134,16 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
   void *ret = item->ptr;
   free(item);
   return ret;
+
+return_null:
+  pthread_mutex_unlock(&chan->lock);
+  return NULL;
+}
+
+void MRChannel_Close(MRChannel *chan) {
+  pthread_mutex_lock(&chan->lock);
+  chan->open = 0;
+  pthread_mutex_unlock(&chan->lock);
 }
 
 void *MRChannel_Pop(MRChannel *chan) {

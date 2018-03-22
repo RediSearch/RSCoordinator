@@ -49,6 +49,8 @@ void MRCtx_Free(struct MRCtx *ctx);
  * this should be the RedisModuleCtx */
 struct MRCtx *MR_CreateCtx(struct RedisModuleCtx *ctx, void *privdata);
 
+extern void *MRITERATOR_DONE;
+
 #ifndef RMR_C__
 typedef struct MRIteratorCallbackCtx MRIteratorCallbackCtx;
 typedef struct MRIterator MRIterator;

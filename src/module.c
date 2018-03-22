@@ -546,12 +546,12 @@ int distScanCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
-
-  long long curs = MRReply_Integer(MRReply_ArrayElement(rep, 0));
-  if (MRReply_Length(rep) > 1) {
+  long long curs = 0;
+  MRReply_ToInteger(MRReply_ArrayElement(rep, 0), &curs);
+  if (MRReply_Length(rep) > 1 && MRReply_Type(MRReply_ArrayElement(rep, 1)) == MR_REPLY_ARRAY) {
     MRIteratorCallback_AddReply(ctx, MRReply_ArrayElement(rep, 1));
   }
-  printf("got cursor %lld\n", curs);
+
   if (curs == 0) {
     MRIteratorCallback_Done(ctx, 0);
     return REDIS_OK;
@@ -559,7 +559,7 @@ int distScanCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   char buf[128];
   sprintf(buf, "%lld", curs);
   MRCommand_ReplaceArg(cmd, 1, buf);
-  MRCommand_FPrint(stderr, cmd);
+  // MRCommand_FPrint(stderr, cmd);
   MRIteratorCallback_ResendCommand(ctx, cmd);
   return REDIS_OK;
 }
@@ -573,20 +573,26 @@ void *consumeIterator(void *arg) {
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   MRReply *r = NULL;
   int count = 0;
-  while (NULL != (r = MRIterator_Next(it))) {
-    MR_ReplyWithMRReply(ctx, r);
-    count++;
+
+  while (MRITERATOR_DONE != (r = MRIterator_Next(it))) {
+    if (MR_REPLY_ARRAY == MRReply_Type(r)) {
+      // count += MRReply_Length(r);
+      for (size_t i = 0; i < MRReply_Length(r); i++) {
+        // MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(r, i));
+        count++;
+      }
+    }
   }
-  RedisModule_ReplySetArrayLength(ctx, count);
+  RedisModule_ReplyWithLongLong(ctx, count);
+  RedisModule_ReplySetArrayLength(ctx, 1);
   RedisModule_UnblockClient(bc, NULL);
   return NULL;
 }
 int DistScanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MRCommand cmd = MR_NewCommand(2, "SCAN", "0");
+  MRCommand cmd = MR_NewCommand(4, "SCAN", "0", "COUNT", "1000");
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
 
   MRIterator *it = MR_Iterate(cg, distScanCallback, NULL);
-  // return RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
 
   pthread_t tid;
   RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);

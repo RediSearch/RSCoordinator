@@ -437,7 +437,7 @@ typedef struct MRIteratorCtx {
 } MRIteratorCtx;
 
 typedef struct MRIteratorCallbackCtx {
-  struct MRIteratorCtx *ic;
+  MRIteratorCtx *ic;
   MRCommand cmd;
 } MRIteratorCallbackCtx;
 
@@ -476,14 +476,25 @@ int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
 MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privdata) {
 
   MRIterator *ret = malloc(sizeof(ret));
+  size_t len = cg.Len(cg.ctx);
   *ret = (MRIterator){
-      .ctx = {.cluster = cluster_g, .chan = MR_NewChannel(0), .privdata = privdata, .cb = cb},
-      .cbxs = calloc(cg.Len(cg.ctx), sizeof(MRIteratorCallbackCtx)),
-      .len = 0,
+      .ctx =
+          {
+              .cluster = cluster_g,
+              .chan = MR_NewChannel(0),
+              .privdata = privdata,
+              .cb = cb,
+              .pending = 0,
+          },
+      .cbxs = calloc(len, sizeof(MRIteratorCallbackCtx)),
+      .len = len,
+
   };
-  for (size_t i = 0; i < cg.Len(cg.ctx); i++) {
+  for (size_t i = 0; i < len; i++) {
+
     ret->cbxs[i].ic = &ret->ctx;
-    if (!cg.Next(cg.ctx, &ret->cbxs[i].cmd)) {
+    if (!cg.Next(cg.ctx, &(ret->cbxs[i].cmd))) {
+      MRCommand_FPrint(stderr, &(ret->cbxs[i].cmd));
       ret->len = i;
       break;
     }

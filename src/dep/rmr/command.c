@@ -59,6 +59,7 @@ struct mrCommandConf __commandConfig[] = {
 
     {"KEYS", MRCommand_Read | MRCommand_NoKey, -1, -1},
     {"INFO", MRCommand_Read | MRCommand_NoKey, -1, -1},
+    {"SCAN", MRCommand_Read | MRCommand_NoKey, -1, -1},
 
     // sentinel
     {NULL},

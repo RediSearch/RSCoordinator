@@ -586,7 +586,7 @@ int DistScanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
 
   MRIterator *it = MR_Iterate(cg, distScanCallback, NULL);
-  return RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
+  // return RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
 
   pthread_t tid;
   RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);

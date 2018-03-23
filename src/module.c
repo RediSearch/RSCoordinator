@@ -540,27 +540,31 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-int distScanCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
+int cursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
 
-  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {
+  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
-  long long curs = 0;
-  MRReply_ToInteger(MRReply_ArrayElement(rep, 0), &curs);
-  if (MRReply_Length(rep) > 1 && MRReply_Type(MRReply_ArrayElement(rep, 1)) == MR_REPLY_ARRAY) {
-    MRIteratorCallback_AddReply(ctx, MRReply_ArrayElement(rep, 1));
-  }
 
-  if (curs == 0) {
+  MRIteratorCallback_AddReply(ctx, MRReply_ArrayElement(rep, 0));
+
+  long long curs = 0;
+  if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
+    if (strcasecmp(cmd->args[0], "_FT.CURREAD")) {
+
+      char buf[128];
+      sprintf(buf, "%lld", curs);
+      const char *idx = cmd->args[1];
+      MRCommand newCmd = MR_NewCommand(4, "_FT.CURREAD", idx, buf, "5000");
+      MRCommand_Free(cmd);
+      *cmd = newCmd;
+    }
+    // MRCommand_FPrint(stderr, cmd);
+    MRIteratorCallback_ResendCommand(ctx, cmd);
+  } else {
     MRIteratorCallback_Done(ctx, 0);
-    return REDIS_OK;
   }
-  char buf[128];
-  sprintf(buf, "%lld", curs);
-  MRCommand_ReplaceArg(cmd, 1, buf);
-  // MRCommand_FPrint(stderr, cmd);
-  MRIteratorCallback_ResendCommand(ctx, cmd);
   return REDIS_OK;
 }
 
@@ -570,17 +574,15 @@ void *consumeIterator(void *arg) {
   MRIterator *it = targ[1];
 
   RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(bc);
+  RedisModule_AutoMemory(ctx);
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   MRReply *r = NULL;
   int count = 0;
 
   while (MRITERATOR_DONE != (r = MRIterator_Next(it))) {
-    if (MR_REPLY_ARRAY == MRReply_Type(r)) {
-      // count += MRReply_Length(r);
-      for (size_t i = 0; i < MRReply_Length(r); i++) {
-        // MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(r, i));
-        count++;
-      }
+    for (size_t n = 1; n < MRReply_Length(r); n++) {
+      // MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(r, n));
+      count++;
     }
   }
   RedisModule_ReplyWithLongLong(ctx, count);
@@ -588,11 +590,13 @@ void *consumeIterator(void *arg) {
   RedisModule_UnblockClient(bc, NULL);
   return NULL;
 }
-int DistScanCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MRCommand cmd = MR_NewCommand(4, "SCAN", "0", "COUNT", "1000");
+int AggregateCursor(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  MRCommand cmd = MR_NewCommand(9, "_FT.AGGREGATE", "gh", RedisModule_StringPtrLen(argv[1], NULL),
+                                "apply", "@actor", "as", "@actor", "WITHCURSOR", "5000");
+  MRCommand_FPrint(stderr, &cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&__searchCluster, &cmd);
 
-  MRIterator *it = MR_Iterate(cg, distScanCallback, NULL);
+  MRIterator *it = MR_Iterate(cg, cursorCallback, NULL);
 
   pthread_t tid;
   RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
@@ -1076,8 +1080,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   /*********************************************************
    * Multi shard, fanout commands
    **********************************************************/
-  RM_TRY(
-      RedisModule_CreateCommand(ctx, "FT.DSCAN", SafeCmd(DistScanCommand), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CAGG", SafeCmd(AggregateCursor), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersFanoutCommandHandler), "readonly",

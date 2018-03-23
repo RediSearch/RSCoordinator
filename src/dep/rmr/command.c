@@ -38,6 +38,8 @@ struct mrCommandConf __commandConfig[] = {
     // Coordination commands - they are all read commands since they can be triggered from slaves
     {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1, 2},
     {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.AGGREGATE", MRCommand_Read | MRCommand_Coordination, -1, 1},
+
     {"FT.EXPLAIN", MRCommand_Read | MRCommand_Coordination, -1, 1},
 
     {"FT.FSEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},

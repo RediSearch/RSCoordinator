@@ -364,6 +364,7 @@ typedef struct MRIteratorCtx {
 typedef struct MRIteratorCallbackCtx {
   MRIteratorCtx *ic;
   MRCommand cmd;
+  redisAsyncContext *c;
 } MRIteratorCallbackCtx;
 
 typedef struct MRIterator {

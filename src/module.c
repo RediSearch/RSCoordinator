@@ -226,7 +226,7 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
     long long numReturns = -1;
     RMUtil_ParseArgsAfter("RETURN", argv, argc, "l", &numReturns);
     // RETURN 0 equals NOCONTENT
-    if (numReturns == 0) {
+    if (numReturns <= 0) {
       req->noContent = 1;
     }
   }

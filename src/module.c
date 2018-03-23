@@ -334,7 +334,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         payloadOffset = 2;
         fieldsOffset = 3;
       }
-      if (req->withSortby) {
+      if (req->withSortby || req->withSortingKeys) {
         step++;
         sortKeyOffset = fieldsOffset++;
       }

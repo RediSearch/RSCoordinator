@@ -9,22 +9,24 @@
 typedef redisReply MRReply;
 
 void MRReply_Free(MRReply *reply) {
-  freeReplyObject(reply);
+  if (reply) freeReplyObject(reply);
 }
 
 int MRReply_Type(MRReply *reply) {
-  return reply->type;
+  return reply ? reply->type : MR_REPLY_NIL;
 }
 
 long long MRReply_Integer(MRReply *reply) {
-  return reply->integer;
+  return reply ? reply->integer : 0;
 }
 
 size_t MRReply_Length(MRReply *reply) {
-  return reply->elements;
+  return reply ? reply->elements : 0;
 }
 
 char *MRReply_String(MRReply *reply, size_t *len) {
+  if (!reply) return NULL;
+
   if (len) {
     *len = reply->len;
   }
@@ -33,6 +35,7 @@ char *MRReply_String(MRReply *reply, size_t *len) {
 }
 
 MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx) {
+  if (!reply || reply->type != MR_REPLY_ARRAY || idx >= reply->elements) return NULL;
   return reply->element[idx];
 }
 

@@ -274,9 +274,13 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   res->sortKeyNum = HUGE_VAL;
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
   // if the id contains curly braces, get rid of them now
-  char *brace = strchr(res->id, '{');
-  if (brace && strchr(brace, '}')) {
-    *brace = '\0';
+  if (res->id) {
+    char *brace = strchr(res->id, '{');
+    if (brace && strchr(brace, '}')) {
+      *brace = '\0';
+    }
+  } else {  // this usually means an invalid result
+    return res;
   }
   // parse socre
   MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score);
@@ -348,7 +352,14 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
       for (int j = 1; j < len; j += step) {
         searchResult *res =
             newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
-        cached = NULL;
+        if (!res || !res->id) {
+          // invalid result - usually means something is off with the response, and we should just
+          // quit this response
+          cached = res;
+          break;
+        } else {
+          cached = NULL;
+        }
         // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
         //         res->id, res->score, res->sortKeyNum);
 

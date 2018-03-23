@@ -343,10 +343,9 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
         step--;
         fieldsOffset = -1;
       }
-      int jj = 0;
       // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
       //         scoreOffset, fieldsOffset, sortKeyOffset);
-      for (int j = 1; j < len; j += step, jj++) {
+      for (int j = 1; j < len; j += step) {
         searchResult *res =
             newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
         cached = NULL;

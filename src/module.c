@@ -22,7 +22,7 @@
 #include <sys/param.h>
 
 SearchCluster __searchCluster;
-#define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
+#define CLUSTERDOWN_ERR "ERRCLUSTER Uninitialized cluster state, could not perform command"
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {

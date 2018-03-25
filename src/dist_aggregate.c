@@ -51,13 +51,13 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
 RSValue *MRReply_ToValue(MRReply *r) {
   RSValue *v = RS_NullVal();
   switch (MRReply_Type(r)) {
-    case MR_REPLY_STRING:
-    case MR_REPLY_STATUS: {
+    case MR_REPLY_STATUS:
+    case MR_REPLY_STRING: {
       size_t l;
       char *s = MRReply_String(r, &l);
-      v = RS_StringVal(s, l);
+      v = RS_StringValT(s, l, RSString_Const);
       break;
-    };
+    }
     case MR_REPLY_INTEGER:
       v = RS_NumVal((double)MRReply_Integer(r));
       break;
@@ -71,6 +71,7 @@ RSValue *MRReply_ToValue(MRReply *r) {
     }
     case MR_REPLY_NIL:
     default:
+      v = RS_NullVal();
       break;
   }
   return v;
@@ -88,15 +89,21 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
     }
   } while (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY);
   fprintf(stderr, "Got response!\n");
-  if (r->fields) {
-    RSFieldMap_Reset(r->fields);
-  } else {
-    r->fields = RS_NewFieldMap(8);
-  }
+  // if (r->fields) {
+  //   RSFieldMap_Reset(r->fields);
+  // } else {
+  r->fields = RS_NewFieldMap(8);
+  //
+  //}
 
   for (int i = 0; i < MRReply_Length(rep); i += 2) {
+    MRReply_Print(stderr, r);
     RSValue *v = MRReply_ToValue(MRReply_ArrayElement(rep, i + 1));
-    RSFieldMap_Add(&r->fields, MRReply_String(MRReply_ArrayElement(rep, i), NULL), v);
+    const char *c = MRReply_String(MRReply_ArrayElement(rep, i), NULL);
+    printf("%s => ", c);
+    RSValue_Print(v);
+    printf("\n");
+    RSFieldMap_Set(&r->fields, c, v);
   }
   return RS_RESULT_OK;
 }

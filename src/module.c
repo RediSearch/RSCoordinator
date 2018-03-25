@@ -613,21 +613,32 @@ int AggregateCursor(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
                                           RedisModuleString **argv, int argc, const char **err);
 
-void _DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                           struct ConcurrentCmdCtx *foo) {
+struct distAggCtx {
+  RedisModuleBlockedClient *bc;
+  RedisModuleString **argv;
+  int argc;
+};
 
-  AggregateRequest req_s = {NULL}, *req = &req_s;
+void *_DistAggregateCommand(void *arg) {
+
+  struct distAggCtx *x = arg;
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(x->bc);
   RedisSearchCtx sctx = {.redisCtx = ctx};
+  AggregateRequest req_s = {NULL};
   const char *err;
-  if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, argv, argc, &err) != REDISMODULE_OK) {
+  if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, x->argv, x->argc, &err) !=
+      REDISMODULE_OK) {
     RedisModule_Log(ctx, "warning", "Error building dist plan: %s", err);
     RedisModule_ReplyWithError(ctx, err ? err : "Error building plan");
     goto done;
   }
-  AggregateRequest_Run(req, ctx);
+  AggregateRequest_Run(&req_s, ctx);
   fprintf(stderr, "Finished!\n");
 done:
-  AggregateRequest_Free(req);
+  AggregateRequest_Free(&req_s);
+  RedisModule_UnblockClient(x->bc, NULL);
+  // RedisModule_FreeThreadSafeContext(ctx);
+  return NULL;
 }
 
 int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -635,9 +646,19 @@ int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
+  pthread_t tid;
+  RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
+  struct distAggCtx *x = malloc(sizeof(*x));
+  x->bc = bc;
+  x->argc = argc;
+  x->argv = argv;
 
-  ConcurrentSearch_HandleRedisCommand(CONCURRENT_POOL_SEARCH, _DistAggregateCommand, ctx, argv,
-                                      argc);
+  if (pthread_create(&tid, NULL, _DistAggregateCommand, x) != 0) {
+    RedisModule_AbortBlock(bc);
+    RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
+  }
+  // ConcurrentSearch_HandleRedisCommand(CONCURRENT_POOL_SEARCH, _DistAggregateCommand, ctx, argv,
+  //                                     argc);
   fprintf(stderr, "blocked client\n");
   return REDISMODULE_OK;
 }

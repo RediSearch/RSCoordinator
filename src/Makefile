@@ -6,6 +6,7 @@ endif
 ifndef S3_CONFIG
 	S3_CONFIG=~/.s3cfg
 endif
+SOURCEDIR=$(shell pwd -P)
 
 # Setting the DEBUG env variable to 1 will cause us to build with -O0
 ifndef DEBUG
@@ -18,11 +19,11 @@ endif
 LIBUV_DIR = $(RM_INCLUDE_DIR)/dep/libuv
 LIBUV_LIBDIR = $(LIBUV_DIR)/.libs
 LIBUV_INCLUDE_DIR = $(LIBUV_DIR)/include
-
+REDISEARCH_DIR = $(SOURCEDIR)/dep/RediSearch/src
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" \
+CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" -I"$(REDISEARCH_DIR)" \
 		-Wall -Wno-unused-function $(DEBUGFLAGS) -fPIC -std=gnu99 \
 		-D_GNU_SOURCE -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API 
 
@@ -42,7 +43,6 @@ export CFLAGS
 export DEBUGFLAGS
 export LIBUV_INCLUDE_DIR
 
-SOURCEDIR=$(shell pwd -P)
 CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/triemap/libtriemap.a \

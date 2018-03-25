@@ -13,11 +13,13 @@ typedef struct {
 
 } SearchCluster;
 
+SearchCluster *GetSearchCluster();
+
 /* Create a search cluster with a given number of partitions (size) and a partitioner.
  * TODO: This whole object is a bit redundant and adds nothing on top of the partitioner. Consider
  * consolidating the two  */
 SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize);
-
+void InitGlobalSearchCluster(size_t size, const char **table, size_t tableSize);
 /* A command generator that multiplexes a command across multiple partitions by tagging it */
 typedef struct {
   MRCommand *cmd;

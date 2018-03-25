@@ -10,6 +10,16 @@ SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize
   return ret;
 }
 
+SearchCluster __searchCluster;
+
+SearchCluster *GetSearchCluster() {
+  return &__searchCluster;
+}
+
+void InitGlobalSearchCluster(size_t size, const char **table, size_t tableSize) {
+  __searchCluster = NewSearchCluster(size, table, tableSize);
+}
+
 inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }

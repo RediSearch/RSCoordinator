@@ -16,6 +16,37 @@ int MRReply_Type(MRReply *reply) {
   return reply->type;
 }
 
+void MRReply_Print(FILE *fp, MRReply *r) {
+  if (!r) {
+    fprintf(fp, "NULL");
+    return;
+  }
+
+  switch (r->type) {
+    case MR_REPLY_INTEGER:
+      fprintf(fp, "INT(%lld)", r->integer);
+      break;
+    case MR_REPLY_STRING:
+    case MR_REPLY_STATUS:
+      fprintf(fp, "STR(%s)", r->str);
+      break;
+    case MR_REPLY_ERROR:
+      fprintf(fp, "ERR(%s)", r->str);
+      break;
+    case MR_REPLY_NIL:
+      fprintf(fp, "(nil)");
+      break;
+    case MR_REPLY_ARRAY:
+      fprintf(fp, "ARR(%zd):[ ", r->elements);
+      for (size_t i = 0; i < r->elements; i++) {
+        MRReply_Print(fp, r->element[i]);
+        fprintf(fp, ", ");
+      }
+      fprintf(fp, "]");
+      break;
+  }
+}
+
 long long MRReply_Integer(MRReply *reply) {
   return reply->integer;
 }

@@ -25,7 +25,7 @@ MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx);
 
 /* Get the array element from an array and detach it from the array */
 MRReply *MRReply_StealArrayElement(MRReply *r, size_t idx);
-
+void MRReply_Print(FILE *fp, MRReply *r);
 int MRReply_ToInteger(MRReply *reply, long long *i);
 int MRReply_ToDouble(MRReply *reply, double *d);
 int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep);

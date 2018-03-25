@@ -410,8 +410,13 @@ int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
 void iterStartCb(void *p) {
   MRIterator *it = p;
   for (size_t i = 0; i < it->len; i++) {
-    MRCluster_SendCommand(it->ctx.cluster, MRCluster_MastersOnly, &it->cbxs[i].cmd,
-                          mrIteratorRedisCB, &it->cbxs[i]);
+    fprintf(stderr, "Starting command %zd/%zd\n", i, it->len);
+    MRCommand_FPrint(stderr, &it->cbxs[i].cmd);
+    if (MRCluster_SendCommand(it->ctx.cluster, MRCluster_MastersOnly, &it->cbxs[i].cmd,
+                              mrIteratorRedisCB, &it->cbxs[i]) == REDIS_ERR) {
+      fprintf(stderr, "Could not send command!\n");
+      MRIteratorCallback_Done(&it->cbxs[i], 1);
+    }
   }
 }
 

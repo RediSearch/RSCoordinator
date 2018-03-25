@@ -6,9 +6,11 @@
 #include <commands.h>
 #include <aggregate/aggregate.h>
 
+#define RESULTS_PER_ITERATION "350"
+
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-  fprintf(stderr, "Got reply for ");
-  MRCommand_FPrint(stderr, cmd);
+  // fprintf(stderr, "Got reply for ");
+  // MRCommand_FPrint(stderr, cmd);
   // MRReply_Print(stderr, rep);
   // putc('\n', stderr);
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
@@ -18,17 +20,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
     return REDIS_ERR;
   }
 
-  MRReply *arr = MRReply_ArrayElement(rep, 0);
-  if (arr && MRReply_Type(arr) == MR_REPLY_ARRAY) {
-
-    size_t len = MRReply_Length(arr);
-    for (size_t i = 0; i < len; i++) {
-      MRIteratorCallback_AddReply(ctx, MRReply_StealArrayElement(arr, i));
-    }
-    fprintf(stderr, "Pushed %d responses to channeln\n", len);
-  } else {
-    MRIteratorCallback_Done(ctx, 1);
-  }
+  int isDone = 0;
   long long curs = 0;
   if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
     if (strcasecmp(cmd->args[0], "_FT.CURREAD")) {
@@ -36,20 +28,36 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
       char buf[128];
       sprintf(buf, "%lld", curs);
       const char *idx = cmd->args[1];
-      MRCommand newCmd = MR_NewCommand(4, "_FT.CURREAD", idx, buf, "5000");
+      MRCommand newCmd = MR_NewCommand(4, "_FT.CURREAD", idx, buf, RESULTS_PER_ITERATION);
       MRCommand_Free(cmd);
       *cmd = newCmd;
     }
-    MRCommand_FPrint(stderr, cmd);
+    // MRCommand_FPrint(stderr, cmd);
     MRIteratorCallback_ResendCommand(ctx, cmd);
   } else {
+    isDone = 1;
+  }
+
+  MRReply *arr = MRReply_ArrayElement(rep, 0);
+  if (arr && MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 1) {
+
+    MRIteratorCallback_AddReply(ctx, arr);
+
+    // fprintf(stderr, "Pushed %d responses to channeln\n", len);
+  } else {
+    isDone = 1;
+  }
+
+  if (isDone) {
     MRIteratorCallback_Done(ctx, 0);
   }
+
   return REDIS_OK;
 }
 
 RSValue *MRReply_ToValue(MRReply *r) {
-  RSValue *v = RS_NullVal();
+  if (!r) return RS_NullVal();
+  RSValue *v = NULL;
   switch (MRReply_Type(r)) {
     case MR_REPLY_STATUS:
     case MR_REPLY_STRING: {
@@ -77,33 +85,42 @@ RSValue *MRReply_ToValue(MRReply *r) {
   return v;
 }
 
+static MRReply *current = NULL;
+static size_t curIdx = 0;
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 
   MRIterator *it = ctx->privdata;
   MRReply *rep;
-  do {
-    rep = MRIterator_Next(it);
-    if (rep == MRITERATOR_DONE) {
-      fprintf(stderr, "WE ARE DONE!\n");
-      return RS_RESULT_EOF;
-    }
-  } while (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY);
-  fprintf(stderr, "Got response!\n");
-  // if (r->fields) {
-  //   RSFieldMap_Reset(r->fields);
-  // } else {
-  r->fields = RS_NewFieldMap(8);
-  //
-  //}
+  if (!current) {
+    do {
+      current = MRIterator_Next(it);
+      if (current == MRITERATOR_DONE) {
+        current = NULL;
+        return RS_RESULT_EOF;
+      }
+    } while (!current || MRReply_Type(current) != MR_REPLY_ARRAY);
+
+    curIdx = 1;
+  }
+  rep = MRReply_StealArrayElement(current, curIdx++);
+  if (curIdx == MRReply_Length(current)) {
+    MRReply_Free(current);
+    current = NULL;
+  }
+
+  // fprintf(stderr, "Got response!\n");
+  if (r->fields) {
+    RSFieldMap_Reset(r->fields);
+  } else {
+    r->fields = RS_NewFieldMap(8);
+  }
 
   for (int i = 0; i < MRReply_Length(rep); i += 2) {
-    MRReply_Print(stderr, r);
-    RSValue *v = MRReply_ToValue(MRReply_ArrayElement(rep, i + 1));
+    // MRReply_Print(stderr, rep);
     const char *c = MRReply_String(MRReply_ArrayElement(rep, i), NULL);
-    printf("%s => ", c);
-    RSValue_Print(v);
-    printf("\n");
-    RSFieldMap_Set(&r->fields, c, v);
+    RSValue *v = MRReply_ToValue(MRReply_ArrayElement(rep, i + 1));
+
+    RSFieldMap_Add(&r->fields, c, v);
   }
   return RS_RESULT_OK;
 }
@@ -138,17 +155,21 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
   CmdArg *cmd = ctx;
 
   MRCommand xcmd = MR_NewCommand(5, "_FT.AGGREGATE", CMDARG_STRPTR(CmdArg_FirstOf(cmd, "idx")),
-                                 CMDARG_STRPTR(CmdArg_FirstOf(cmd, "query")), "WITHCURSOR", "100");
+                                 CMDARG_STRPTR(CmdArg_FirstOf(cmd, "query")), "WITHCURSOR",
+                                 RESULTS_PER_ITERATION);
   if (getAggregateFields(&plan->opts.fields, plan->ctx->redisCtx, cmd)) {
-    MRCommand_AppendArgs(&xcmd, 3, "LOAD", "1", "@actor");
 
-    // for (int i = 0; i < plan->opts.fields.numFields; i++) {
-    //   MRCommand_AppendArgs(&xcmd, 1, plan->opts.fields.fields->name);
-    //}
+    char buf[1024];
+
+    for (int i = 0; i < plan->opts.fields.numFields; i++) {
+      snprintf(buf, sizeof(buf), "@%s", plan->opts.fields.fields[i].name);
+      MRCommand_AppendArgs(&xcmd, 4, "APPLY", buf, "AS", buf);
+    }
   }  // The base processor translates index results into search results
   MRCommand_FPrint(stderr, &xcmd);
   ResultProcessor *next = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
   ResultProcessor *prev = NULL;
+  next->ctx.qxc = &plan->execCtx;
   // Walk the children and evaluate them
   CmdArgIterator it = CmdArg_Children(cmd);
   CmdArg *child;
@@ -192,7 +213,7 @@ int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx 
   RSSearchOptions opts = RS_DEFAULT_SEARCHOPTS;
   // mark the query as an aggregation query
   opts.flags |= Search_AggregationQuery;
-
+  opts.concurrentMode = 0;
   req->plan =
       Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, req->args, (char **)&err);
   if (!req->plan) {

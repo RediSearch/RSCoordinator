@@ -68,6 +68,17 @@ int _parseFloat(char *str, size_t len, double *d) {
   return 1;
 }
 
+/* Get the array element from an array and detach it from the array */
+MRReply *MRReply_StealArrayElement(MRReply *r, size_t idx) {
+  if (!r || r->type != MR_REPLY_ARRAY || idx >= r->elements) {
+    return NULL;
+  }
+
+  MRReply *ret = r->element[idx];
+  r->element[idx] = NULL;
+  return ret;
+}
+
 MRReply *MRReply_Duplicate(redisReply *src) {
   MRReply *ret = malloc(sizeof(MRReply));
   *ret = *src;

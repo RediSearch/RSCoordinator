@@ -9,17 +9,13 @@
 #define RESULTS_PER_ITERATION "350"
 
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-  // fprintf(stderr, "Got reply for ");
-  // MRCommand_FPrint(stderr, cmd);
-  // MRReply_Print(stderr, rep);
-  // putc('\n', stderr);
-  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
-    int rc = MRIteratorCallback_Done(ctx, 1);
-    fprintf(stderr, "Invalid response %d!\n", rc);
 
+  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
+    MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
 
+  // rewrite and resend the cursor command if needed
   int isDone = 0;
   long long curs = 0;
   if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
@@ -32,18 +28,15 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
       MRCommand_Free(cmd);
       *cmd = newCmd;
     }
-    // MRCommand_FPrint(stderr, cmd);
     MRIteratorCallback_ResendCommand(ctx, cmd);
   } else {
     isDone = 1;
   }
 
+  // Push the reply down the chain
   MRReply *arr = MRReply_ArrayElement(rep, 0);
   if (arr && MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 1) {
-
     MRIteratorCallback_AddReply(ctx, arr);
-
-    // fprintf(stderr, "Pushed %d responses to channeln\n", len);
   } else {
     isDone = 1;
   }
@@ -108,7 +101,6 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
     current = NULL;
   }
 
-  // fprintf(stderr, "Got response!\n");
   if (r->fields) {
     RSFieldMap_Reset(r->fields);
   } else {

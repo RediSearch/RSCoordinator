@@ -219,6 +219,7 @@ void _MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
     fprintf(stderr, "Error sending auth. Reconnecting...");
     conn->state = MRConn_Disconnected;
     _MRConn_StartReconnectLoop(conn);
+    return;
   }
 
   redisReply *rep = r;

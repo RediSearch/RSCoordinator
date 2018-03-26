@@ -130,7 +130,10 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
   return TrieMap_Add(m->map, (char *)id, strlen(id), pool, _replaceConnPool);
 }
 
-int MRConn_Connect(MRConn *conn) {
+/**
+ * Start a new connection. Returns REDISMODULE_ERR if not a new connection
+ */
+int MRConn_StartNewConnection(MRConn *conn) {
   if (conn && conn->state == MRConn_Disconnected) {
     if (_MRConn_Connect(conn) == REDIS_ERR) {
       _MRConn_StartReconnectLoop(conn);
@@ -154,7 +157,7 @@ int MRConnManager_ConnectAll(MRConnManager *m) {
     MRConnPool *pool = p;
     if (!pool) continue;
     for (size_t i = 0; i < pool->num; i++) {
-      if (MRConn_Connect(pool->conns[i]) == REDIS_OK) {
+      if (MRConn_StartNewConnection(pool->conns[i]) == REDIS_OK) {
         n++;
       }
     }

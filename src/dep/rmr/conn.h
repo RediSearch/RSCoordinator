@@ -56,7 +56,7 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
 MRConn *MR_NewConn(MREndpoint *ep);
 
 /* Connect the connection and start a reconnect loop if it failed */
-int MRConn_Connect(MRConn *conn);
+int MRConn_StartNewConnection(MRConn *conn);
 
 void MRConn_Stop(MRConn *conn);
 /* Add a node to the connection manager */

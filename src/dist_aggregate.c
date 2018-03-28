@@ -8,6 +8,20 @@
 
 #define RESULTS_PER_ITERATION "350"
 
+/* Get cursor command using a cursor id and an existing aggregate command */
+int getCursorCommand(MRCommand *cmd, long long cursorId) {
+  if (cmd->num < 2 || !cursorId) return 0;
+
+  char buf[128];
+  sprintf(buf, "%lld", cursorId);
+  const char *idx = cmd->args[1];
+  MRCommand newCmd =
+      MR_NewCommand(6, "_" RS_CURSOR_CMD, "READ", idx, buf, "COUNT", RESULTS_PER_ITERATION);
+  MRCommand_Free(cmd);
+  *cmd = newCmd;
+  return 1;
+}
+
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
 
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
@@ -19,16 +33,12 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   int isDone = 0;
   long long curs = 0;
   if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
-    if (strcasecmp(cmd->args[0], "_FT.CURREAD")) {
-
-      char buf[128];
-      sprintf(buf, "%lld", curs);
-      const char *idx = cmd->args[1];
-      MRCommand newCmd = MR_NewCommand(4, "_FT.CURREAD", idx, buf, RESULTS_PER_ITERATION);
-      MRCommand_Free(cmd);
-      *cmd = newCmd;
+    if (strcasecmp(cmd->args[0], "_" RS_CURSOR_CMD)) {
+      if (!getCursorCommand(cmd, curs)) {
+        isDone = 1;
+      }
     }
-    MRIteratorCallback_ResendCommand(ctx, cmd);
+    if (!isDone) MRIteratorCallback_ResendCommand(ctx, cmd);
   } else {
     isDone = 1;
   }
@@ -40,7 +50,6 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   } else {
     isDone = 1;
   }
-
   if (isDone) {
     MRIteratorCallback_Done(ctx, 0);
   }
@@ -56,7 +65,7 @@ RSValue *MRReply_ToValue(MRReply *r) {
     case MR_REPLY_STRING: {
       size_t l;
       char *s = MRReply_String(r, &l);
-      v = RS_StringValT(s, l, RSString_Const);
+      v = RS_StringValT(s, l, RSString_Volatile);
       break;
     }
     case MR_REPLY_INTEGER:
@@ -78,28 +87,35 @@ RSValue *MRReply_ToValue(MRReply *r) {
   return v;
 }
 
-static MRReply *current = NULL;
-static size_t curIdx = 0;
+struct netCtx {
+  MRReply *current;
+  size_t curIdx;
+  MRIterator *it;
+};
+
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 
-  MRIterator *it = ctx->privdata;
-  MRReply *rep;
-  if (!current) {
+  struct netCtx *nc = ctx->privdata;
+  // if we've consumed the last reply - free it
+  if (nc->current && nc->curIdx == MRReply_Length(nc->current)) {
+    MRReply_Free(nc->current);
+    nc->current = NULL;
+  }
+
+  // get the next reply from the channel
+  if (!nc->current) {
     do {
-      current = MRIterator_Next(it);
-      if (current == MRITERATOR_DONE) {
-        current = NULL;
+      nc->current = MRIterator_Next(nc->it);
+      if (nc->current == MRITERATOR_DONE) {
+        nc->current = NULL;
         return RS_RESULT_EOF;
       }
-    } while (!current || MRReply_Type(current) != MR_REPLY_ARRAY);
+    } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY);
 
-    curIdx = 1;
+    nc->curIdx = 1;
   }
-  rep = MRReply_StealArrayElement(current, curIdx++);
-  if (curIdx == MRReply_Length(current)) {
-    MRReply_Free(current);
-    current = NULL;
-  }
+
+  MRReply *rep = MRReply_StealArrayElement(nc->current, nc->curIdx++);
 
   if (r->fields) {
     RSFieldMap_Reset(r->fields);
@@ -118,6 +134,11 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 }
 
 void net_Free(ResultProcessor *rp) {
+  struct netCtx *nc = rp->ctx.privdata;
+  if (nc->current) {
+    MRReply_Free(nc->current);
+  }
+  free(nc);
   // MRIterator *it = rp->ctx.privdata;
   // TODO: FREE
   // MRIterator_Free(it);
@@ -128,8 +149,11 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
   MRCommand_FPrint(stderr, &cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(sc, &cmd);
 
-  MRIterator *it = MR_Iterate(cg, netCursorCallback, NULL);
-  ResultProcessor *proc = NewResultProcessor(NULL, it);
+  struct netCtx *nc = malloc(sizeof(*nc));
+  nc->curIdx = 0;
+  nc->current = NULL;
+  nc->it = MR_Iterate(cg, netCursorCallback, NULL);
+  ResultProcessor *proc = NewResultProcessor(NULL, nc);
   proc->Free = net_Free;
   proc->Next = net_Next;
   return proc;
@@ -146,8 +170,8 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
 
   CmdArg *cmd = ctx;
 
-  MRCommand xcmd = MR_NewCommand(5, "_FT.AGGREGATE", CMDARG_STRPTR(CmdArg_FirstOf(cmd, "idx")),
-                                 CMDARG_STRPTR(CmdArg_FirstOf(cmd, "query")), "WITHCURSOR",
+  MRCommand xcmd = MR_NewCommand(6, "_FT.AGGREGATE", CMDARG_STRPTR(CmdArg_FirstOf(cmd, "idx")),
+                                 CMDARG_STRPTR(CmdArg_FirstOf(cmd, "query")), "WITHCURSOR", "COUNT",
                                  RESULTS_PER_ITERATION);
   if (getAggregateFields(&plan->opts.fields, plan->ctx->redisCtx, cmd)) {
 

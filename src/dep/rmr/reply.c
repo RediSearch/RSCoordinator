@@ -8,12 +8,25 @@
 
 typedef redisReply MRReply;
 
+const int MRReply_UseV2 = 1;
+const int MRReply_UseBlockAlloc = 1;
+
+/* Determine the function accessors */
+static redisReplyAccessors* getAcc() {
+  if (MRReply_UseV2) {
+    return &redisReplyV2Accessors;
+  } else {
+    return &redisReplyLegacyAccessors;
+  }
+}
+#define acc_g getAcc()
+
 void MRReply_Free(MRReply *reply) {
   freeReplyObject(reply);
 }
 
 int MRReply_Type(MRReply *reply) {
-  return reply->type;
+  return acc_g->getType(reply);
 }
 
 void MRReply_Print(FILE *fp, MRReply *r) {
@@ -22,24 +35,24 @@ void MRReply_Print(FILE *fp, MRReply *r) {
     return;
   }
 
-  switch (r->type) {
+  switch (acc_g->getType(r)) {
     case MR_REPLY_INTEGER:
-      fprintf(fp, "INT(%lld)", r->integer);
+      fprintf(fp, "INT(%lld)", acc_g->getInteger(r));
       break;
     case MR_REPLY_STRING:
     case MR_REPLY_STATUS:
-      fprintf(fp, "STR(%s)", r->str);
+      fprintf(fp, "STR(%s)", acc_g->getString(r, NULL));
       break;
     case MR_REPLY_ERROR:
-      fprintf(fp, "ERR(%s)", r->str);
+      fprintf(fp, "ERR(%s)", acc_g->getString(r, NULL));
       break;
     case MR_REPLY_NIL:
       fprintf(fp, "(nil)");
       break;
     case MR_REPLY_ARRAY:
-      fprintf(fp, "ARR(%zd):[ ", r->elements);
-      for (size_t i = 0; i < r->elements; i++) {
-        MRReply_Print(fp, r->element[i]);
+      fprintf(fp, "ARR(%zd):[ ", acc_g->getArrayLength(r));
+      for (size_t i = 0; i < acc_g->getArrayLength(r); i++) {
+        MRReply_Print(fp, acc_g->getArrayElement(r, i));
         fprintf(fp, ", ");
       }
       fprintf(fp, "]");
@@ -48,23 +61,19 @@ void MRReply_Print(FILE *fp, MRReply *r) {
 }
 
 long long MRReply_Integer(MRReply *reply) {
-  return reply->integer;
+  return acc_g->getInteger(reply);
 }
 
 size_t MRReply_Length(MRReply *reply) {
-  return reply->elements;
+  return acc_g->getArrayLength(reply);
 }
 
 char *MRReply_String(MRReply *reply, size_t *len) {
-  if (len) {
-    *len = reply->len;
-  }
-
-  return reply->str;
+  return acc_g->getString(reply, len);
 }
 
 MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx) {
-  return reply->element[idx];
+  return acc_g->getArrayElement(reply, idx);
 }
 
 int _parseInt(char *str, size_t len, long long *i) {
@@ -99,45 +108,21 @@ int _parseFloat(char *str, size_t len, double *d) {
   return 1;
 }
 
-/* Get the array element from an array and detach it from the array */
-MRReply *MRReply_StealArrayElement(MRReply *r, size_t idx) {
-  if (!r || r->type != MR_REPLY_ARRAY || idx >= r->elements) {
-    return NULL;
-  }
-
-  MRReply *ret = r->element[idx];
-  r->element[idx] = NULL;
-  return ret;
-}
-
-MRReply *MRReply_Duplicate(redisReply *src) {
-  MRReply *ret = malloc(sizeof(MRReply));
-  *ret = *src;
-
-  if (src->str) {
-    src->str = NULL;
-    src->len = 0;
-  }
-  if (src->element && src->elements) {
-    src->element = NULL;
-    src->elements = 0;
-  }
-  src->type = REDIS_REPLY_NIL;
-  // memset(rep, 0, sizeof(*rep));
-  return ret;
-}
 
 int MRReply_ToInteger(MRReply *reply, long long *i) {
 
   if (reply == NULL) return 0;
 
-  switch (reply->type) {
+  switch (acc_g->getType(reply)) {
     case MR_REPLY_INTEGER:
-      *i = reply->integer;
+      *i = acc_g->getInteger(reply);
       return 1;
     case MR_REPLY_STRING:
-    case MR_REPLY_STATUS:
-      return _parseInt(reply->str, reply->len, i);
+    case MR_REPLY_STATUS: {
+      size_t n;
+      const char *s = acc_g->getString(reply, &n);
+      return _parseInt(s, n, i);
+    }
     default:
       return 0;
   }
@@ -146,14 +131,17 @@ int MRReply_ToInteger(MRReply *reply, long long *i) {
 int MRReply_ToDouble(MRReply *reply, double *d) {
   if (reply == NULL) return 0;
 
-  switch (reply->type) {
+  switch (acc_g->getType(reply)) {
     case MR_REPLY_INTEGER:
-      *d = (double)reply->integer;
+      *d = (double)acc_g->getInteger(reply);
       return 1;
 
     case MR_REPLY_STRING:
-    case MR_REPLY_STATUS:
-      return _parseFloat(reply->str, reply->len, d);
+    case MR_REPLY_STATUS: {
+      size_t n;
+      const char *s = acc_g->getString(reply, &n);
+      return _parseFloat(s, n, d);
+    }
 
     default:
       return 0;

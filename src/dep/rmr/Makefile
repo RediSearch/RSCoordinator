@@ -40,4 +40,5 @@ clean:
 	rm -rf *.o *.a
 
 distclean: clean
+	$(MAKE) -C ./hiredis clean
 	find ./ -name "*.[oa]" -print -exec rm -f {} \;

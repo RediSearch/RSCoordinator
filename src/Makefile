@@ -55,16 +55,17 @@ LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/triemap/libtriemap.a \
 
 all: module.so 
 
-libuv.a: 
-	cd $(LIBUV_DIR) &&\
-	sh autogen.sh &&\
-	./configure &&\
-	$(MAKE) -j 4
+libuv.a:  $(LIBUV_DIR)/Makefile
+	$(MAKE) -C $(LIBUV_DIR) && cp "$(LIBUV_LIBDIR)/libuv.a" ./
 
-	cp "$(LIBUV_LIBDIR)/libuv.a" ./
+$(LIBUV_DIR)/Makefile: $(LIBUV_DIR)/configure
+	cd $(LIBUV_DIR) && ./configure
+
+$(LIBUV_DIR)/configure:
+	cd $(LIBUV_DIR) && sh autogen.sh
 
 libredisearch.a:
-	make -C dep/RediSearch/src libredisearch.a -j 8
+	make -C dep/RediSearch/src libredisearch.a
 
 # Remove the module base file so we always recompile it with the correct build flags
 module.so: $(shell rm -f module.o)
@@ -82,15 +83,13 @@ oss: module-oss.so
 
 
 rmr:
-	$(MAKE) -j 4 -C dep/rmr hiredis all
+	$(MAKE) -C dep/rmr hiredis all
 .PHONY: rmr
 
 rmutil:
-	$(MAKE) -j 4 -C dep/rmutil all
+	$(MAKE) -C dep/rmutil all
 .PHONY: rmutil
 
-clean:
-	rm -rvf *.xo *.so *.o *.a
 
 # Format the version printing utility
 print_version: version.h print_version.c
@@ -120,7 +119,14 @@ package: module.so
 upload:
 	s3cmd -c $(S3_CONFIG) put $(BUILD_DIR)/*.zip --acl-public s3://redismodules/$(PACKAGE_NAME)/
 
-deepclean:
+clean:
+	rm -rvf *.xo *.so *.o *.a
+
+deepclean: clean
+	$(MAKE) -C dep/RediSearch distclean || true
+	$(MAKE) -C dep/libuv distclean || true
+	$(MAKE) -C dep/rmr distclean || true
+	$(MAKE) -C dep/triemap distclean || true
 	rm -f print_version
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.l[oa]" -exec rm {} \; -print

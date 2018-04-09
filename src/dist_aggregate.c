@@ -5,6 +5,7 @@
 #include <query_plan.h>
 #include <commands.h>
 #include <aggregate/aggregate.h>
+#include <util/arr.h>
 
 #define RESULTS_PER_ITERATION "350"
 
@@ -160,62 +161,32 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
 }
 
 int getAggregateFields(FieldList *l, RedisModuleCtx *ctx, CmdArg *cmd);
-ResultProcessor *buildGroupBy(CmdArg *grp, RedisSearchCtx *sctx, ResultProcessor *upstream,
-                              char **err);
-ResultProcessor *buildSortBY(CmdArg *srt, ResultProcessor *upstream, char **err);
-ResultProcessor *buildProjection(CmdArg *arg, ResultProcessor *upstream, RedisSearchCtx *sctx,
-                                 char **err);
-ResultProcessor *addLimit(CmdArg *arg, ResultProcessor *upstream, char **err);
+
+ResultProcessor *AggregatePlan_BuildProcessorChain(AggregatePlan *plan, RedisSearchCtx *sctx,
+                                                   ResultProcessor *root, char **err);
+
 static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *ctx, char **err) {
 
-  CmdArg *cmd = ctx;
-
-  MRCommand xcmd = MR_NewCommand(6, "_FT.AGGREGATE", CMDARG_STRPTR(CmdArg_FirstOf(cmd, "idx")),
-                                 CMDARG_STRPTR(CmdArg_FirstOf(cmd, "query")), "WITHCURSOR", "COUNT",
-                                 RESULTS_PER_ITERATION);
-  if (getAggregateFields(&plan->opts.fields, plan->ctx->redisCtx, cmd)) {
-
-    char buf[1024];
-
-    for (int i = 0; i < plan->opts.fields.numFields; i++) {
-      snprintf(buf, sizeof(buf), "@%s", plan->opts.fields.fields[i].name);
-      MRCommand_AppendArgs(&xcmd, 4, "APPLY", buf, "AS", buf);
-    }
-  }  // The base processor translates index results into search results
-  MRCommand_FPrint(stderr, &xcmd);
-  ResultProcessor *next = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
-  ResultProcessor *prev = NULL;
-  next->ctx.qxc = &plan->execCtx;
-  // Walk the children and evaluate them
-  CmdArgIterator it = CmdArg_Children(cmd);
-  CmdArg *child;
-  const char *key;
-  while (NULL != (child = CmdArgIterator_Next(&it, &key))) {
-    prev = next;
-    if (!strcasecmp(key, "GROUPBY")) {
-      next = buildGroupBy(child, plan->ctx, next, err);
-    } else if (!strcasecmp(key, "SORTBY")) {
-      next = buildSortBY(child, next, err);
-    } else if (!strcasecmp(key, "APPLY")) {
-      next = buildProjection(child, next, plan->ctx, err);
-    } else if (!strcasecmp(key, "LIMIT")) {
-      next = addLimit(child, next, err);
-    }
-    if (!next) {
-      goto fail;
-    }
+  AggregatePlan *ap = ctx;
+  AggregatePlan *remote = AggregatePlan_MakeDistributed(ap);
+  if (!remote) {
+    *err = strdup("Could not process plan for distribution");
+    return NULL;
   }
 
-  return next;
+  AggregatePlan_Print(remote);
+  AggregatePlan_Print(ap);
 
-fail:
-  if (prev) {
-    ResultProcessor_Free(prev);
-  }
+  char **args = AggregatePlan_Serialize(remote);
+  MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);
+  MRCommand_SetPrefix(&xcmd, "_FT");
+  array_free_ex(args, free(*(void **)ptr));
 
-  RedisModule_Log(plan->ctx->redisCtx, "warning", "Could not parse aggregate reuqest: %s", *err);
-  return NULL;
+  ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
+  root->ctx.qxc = &plan->execCtx;
+  return AggregatePlan_BuildProcessorChain(ap, NULL, root, err);
 }
+
 CmdArg *Aggregate_ParseRequest(RedisModuleString **argv, int argc, char **err);
 int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
                                           RedisModuleString **argv, int argc, const char **err) {
@@ -226,12 +197,18 @@ int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx 
     return REDISMODULE_ERR;
   }
 
+  req->ap = (AggregatePlan){};
+  if (!AggregatePlan_Build(&req->ap, req->args, (char **)err)) {
+    if (err && !*err) *err = strdup("Could not parse aggregate request");
+    return REDISMODULE_ERR;
+  }
+
   RSSearchOptions opts = RS_DEFAULT_SEARCHOPTS;
   // mark the query as an aggregation query
   opts.flags |= Search_AggregationQuery;
   opts.concurrentMode = 0;
   req->plan =
-      Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, req->args, (char **)&err);
+      Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)&err);
   if (!req->plan) {
     *err = strdup(QUERY_ERROR_INTERNAL_STR);
     return REDISMODULE_ERR;

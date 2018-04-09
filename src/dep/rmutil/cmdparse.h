@@ -275,6 +275,12 @@ typedef struct {
   size_t pos;
 } CmdArgIterator;
 
+/* Return the number of children for arrays and objects, 0 for all others */
+size_t CmdArg_NumChildren(CmdArg *arg);
+
+/* count the number of children of an object that correspond to a specific key */
+size_t CmdArg_Count(CmdArg *arg, const char *key);
+
 /* Create an iterator of all children of an object node, named as key. If none exist, the first call
  * to Next() will return NULL */
 CmdArgIterator CmdArg_Select(CmdArg *arg, const char *key);
@@ -301,11 +307,14 @@ int CmdArg_ParseInt(CmdArg *arg, int64_t *i);
 #define CMDARG_STR(a) (a->s)
 #define CMDARG_ORNULL(a, expr) (a ? expr(a) : NULL)
 #define CMDARG_STRLEN(a) (a->s.len)
+
 #define CMDARG_STRPTR(a) (a->s.str)
 #define CMDARG_STRLEN(a) (a->s.len)
 #define CMDARG_ARR(arr) (arr->a)
 #define CMDARG_OBJ(a) (a->obj)
-#define CMDARG_OBJLEN(a) (arg->a.obj.len)
+#define CMDARG_OBJLEN(arg) (arg->obj.len)
+#define CMDARG_OBJCHILD(arg, n) (&arg->obj.entries[n])
+
 #define CMDARG_BOOL(a) (a->b)
 #define CMDARG_ARRLEN(arg) (arg->a.len)
 #define CMDARG_ARRELEM(arg, i) (arg->a.args[i])

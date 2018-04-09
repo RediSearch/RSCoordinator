@@ -636,8 +636,11 @@ void *_DistAggregateCommand(void *arg) {
   fprintf(stderr, "Finished!\n");
 done:
   AggregateRequest_Free(&req_s);
+  fprintf(stderr, "Freed!\n");
+
   RedisModule_UnblockClient(x->bc, NULL);
-  // RedisModule_FreeThreadSafeContext(ctx);
+  fprintf(stderr, "Unblocked!\n");
+  RedisModule_FreeThreadSafeContext(ctx);
   return NULL;
 }
 

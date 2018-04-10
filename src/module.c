@@ -619,10 +619,11 @@ struct distAggCtx {
   int argc;
 };
 
-void *_DistAggregateCommand(void *arg) {
+void _DistAggregateCommand(void *arg) {
 
   struct distAggCtx *x = arg;
   RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(x->bc);
+  RedisModule_AutoMemory(ctx);
   RedisSearchCtx sctx = {.redisCtx = ctx};
   AggregateRequest req_s = {NULL};
   const char *err;
@@ -641,27 +642,23 @@ done:
   RedisModule_UnblockClient(x->bc, NULL);
   fprintf(stderr, "Unblocked!\n");
   RedisModule_FreeThreadSafeContext(ctx);
-  return NULL;
+  free(arg);
 }
+
+static int DIST_AGG_THREADPOOL = -1;
 
 int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
-  pthread_t tid;
   RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
   struct distAggCtx *x = malloc(sizeof(*x));
   x->bc = bc;
   x->argc = argc;
   x->argv = argv;
 
-  if (pthread_create(&tid, NULL, _DistAggregateCommand, x) != 0) {
-    RedisModule_AbortBlock(bc);
-    RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
-  }
-  // ConcurrentSearch_HandleRedisCommand(CONCURRENT_POOL_SEARCH, _DistAggregateCommand, ctx, argv,
-  //                                     argc);
+  ConcurrentSearch_ThreadPoolRun(_DistAggregateCommand, x, DIST_AGG_THREADPOOL);
   fprintf(stderr, "blocked client\n");
   return REDISMODULE_OK;
 }
@@ -1105,6 +1102,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     RedisModule_Log(ctx, "warning", "Could not init MR search cluster");
     return REDISMODULE_ERR;
   }
+
+  // Init the aggregation thread pool
+  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(CONCURRENT_SEARCH_POOL_SIZE);
 
   /*********************************************************
    * Single-shard simple commands

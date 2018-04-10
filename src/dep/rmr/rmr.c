@@ -396,10 +396,11 @@ int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd)
 void *MRITERATOR_DONE = "MRITERATOR_DONE";
 
 int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error) {
-  if (--ctx->ic->pending == 0) {
+  if (--ctx->ic->pending <= 0) {
     MRChannel_Close(ctx->ic->chan);
     return 0;
   }
+
   return 1;
 }
 
@@ -410,11 +411,11 @@ int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
 void iterStartCb(void *p) {
   MRIterator *it = p;
   for (size_t i = 0; i < it->len; i++) {
-    fprintf(stderr, "Starting command %zd/%zd\n", i, it->len);
+    // fprintf(stderr, "Starting command %zd/%zd\n", i, it->len);
     MRCommand_FPrint(stderr, &it->cbxs[i].cmd);
     if (MRCluster_SendCommand(it->ctx.cluster, MRCluster_MastersOnly, &it->cbxs[i].cmd,
                               mrIteratorRedisCB, &it->cbxs[i]) == REDIS_ERR) {
-      fprintf(stderr, "Could not send command!\n");
+      // fprintf(stderr, "Could not send command!\n");
       MRIteratorCallback_Done(&it->cbxs[i], 1);
     }
   }
@@ -455,6 +456,7 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
 MRReply *MRIterator_Next(MRIterator *it) {
 
   void *p = MRChannel_Pop(it->ctx.chan);
+  // fprintf(stderr, "POP: %s\n", p == MRCHANNEL_CLOSED ? "CLOSED" : "ITER");
   if (p == MRCHANNEL_CLOSED) {
     return MRITERATOR_DONE;
   }

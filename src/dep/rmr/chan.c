@@ -92,6 +92,7 @@ end:
 void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
   struct timeval tv;
   struct timespec ts;
+  void *ret = NULL;
   // calculate sleep time
   if (waitMS > 0) {
     gettimeofday(&tv, NULL);
@@ -131,19 +132,23 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
   chan->size--;
   pthread_mutex_unlock(&chan->lock);
   // discard the item (TODO: recycle items)
-  void *ret = item->ptr;
+  ret = item->ptr;
   free(item);
   return ret;
 
 return_null:
+  // return CLOSED if we need to return NULL and the channel is closed
+  if (!chan->open) ret = MRCHANNEL_CLOSED;
   pthread_mutex_unlock(&chan->lock);
-  return NULL;
+  return ret;
 }
 
 void MRChannel_Close(MRChannel *chan) {
   pthread_mutex_lock(&chan->lock);
   chan->open = 0;
   pthread_mutex_unlock(&chan->lock);
+  // notify any waiting readers
+  pthread_cond_broadcast(&chan->cond);
 }
 
 void *MRChannel_Pop(MRChannel *chan) {

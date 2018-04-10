@@ -26,6 +26,7 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
 
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
+    MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
@@ -42,6 +43,8 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
     // try to resend
     if (!isDone) {
       if (REDIS_ERR == MRIteratorCallback_ResendCommand(ctx, cmd)) {
+        MRReply_Free(rep);
+
         MRIteratorCallback_Done(ctx, 1);
         return REDIS_ERR;
       }
@@ -51,15 +54,18 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   }
 
   // Push the reply down the chain
-  MRReply *arr = MRReply_ArrayElement(rep, 0);
+  MRReply *arr = MRReply_StealArrayElement(rep, 0);
   if (arr && MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 1) {
     MRIteratorCallback_AddReply(ctx, arr);
   } else {
+    MRReply_Free(arr);
     isDone = 1;
   }
   if (isDone) {
     MRIteratorCallback_Done(ctx, 0);
   }
+  MRReply_Free(rep);
+
 
   return REDIS_OK;
 }
@@ -122,7 +128,7 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
     nc->curIdx = 1;
   }
 
-  MRReply *rep = MRReply_StealArrayElement(nc->current, nc->curIdx++);
+  MRReply *rep = MRReply_ArrayElement(nc->current, nc->curIdx++);
 
   if (r->fields) {
     RSFieldMap_Reset(r->fields);

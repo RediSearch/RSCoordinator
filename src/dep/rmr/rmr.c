@@ -452,7 +452,7 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
   ret->ctx.pending = ret->len;
 
   RQ_Push(rq_g, iterStartCb, ret);
-
+  cg.Free(cg.ctx);
   return ret;
 }
 

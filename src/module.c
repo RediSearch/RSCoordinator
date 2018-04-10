@@ -619,30 +619,19 @@ struct distAggCtx {
   int argc;
 };
 
-void _DistAggregateCommand(void *arg) {
-
-  struct distAggCtx *x = arg;
-  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(x->bc);
-  RedisModule_AutoMemory(ctx);
+void _DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                           struct ConcurrentCmdCtx *ccx) {
   RedisSearchCtx sctx = {.redisCtx = ctx};
   AggregateRequest req_s = {NULL};
   const char *err;
-  if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, x->argv, x->argc, &err) !=
-      REDISMODULE_OK) {
+  if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, argv, argc, &err) != REDISMODULE_OK) {
     RedisModule_Log(ctx, "warning", "Error building dist plan: %s", err);
     RedisModule_ReplyWithError(ctx, err ? err : "Error building plan");
     goto done;
   }
   AggregateRequest_Run(&req_s, ctx);
-  fprintf(stderr, "Finished!\n");
 done:
   AggregateRequest_Free(&req_s);
-  fprintf(stderr, "Freed!\n");
-
-  RedisModule_UnblockClient(x->bc, NULL);
-  fprintf(stderr, "Unblocked!\n");
-  RedisModule_FreeThreadSafeContext(ctx);
-  free(arg);
 }
 
 static int DIST_AGG_THREADPOOL = -1;
@@ -652,15 +641,8 @@ int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
-  RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
-  struct distAggCtx *x = malloc(sizeof(*x));
-  x->bc = bc;
-  x->argc = argc;
-  x->argv = argv;
-
-  ConcurrentSearch_ThreadPoolRun(_DistAggregateCommand, x, DIST_AGG_THREADPOOL);
-  fprintf(stderr, "blocked client\n");
-  return REDISMODULE_OK;
+  return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
+                                               _DistAggregateCommand, ctx, argv, argc);
 }
 
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {

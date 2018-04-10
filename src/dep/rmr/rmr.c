@@ -397,9 +397,13 @@ void *MRITERATOR_DONE = "MRITERATOR_DONE";
 
 int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error) {
   if (--ctx->ic->pending <= 0) {
+    // fprintf(stderr, "FINISHED iterator, error? %d pending %d\n", error, ctx->ic->pending);
+    RQ_Done(rq_g);
+
     MRChannel_Close(ctx->ic->chan);
     return 0;
   }
+  // fprintf(stderr, "Done iterator, error? %d pending %d\n", error, ctx->ic->pending);
 
   return 1;
 }

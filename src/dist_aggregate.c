@@ -39,7 +39,13 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
         isDone = 1;
       }
     }
-    if (!isDone) MRIteratorCallback_ResendCommand(ctx, cmd);
+    // try to resend
+    if (!isDone) {
+      if (REDIS_ERR == MRIteratorCallback_ResendCommand(ctx, cmd)) {
+        MRIteratorCallback_Done(ctx, 1);
+        return REDIS_ERR;
+      }
+    }
   } else {
     isDone = 1;
   }

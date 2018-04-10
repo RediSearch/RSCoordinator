@@ -145,10 +145,9 @@ void net_Free(ResultProcessor *rp) {
   if (nc->current) {
     MRReply_Free(nc->current);
   }
+  MRIterator *it = nc->it;
+  MRIterator_Free(it);
   free(nc);
-  // MRIterator *it = rp->ctx.privdata;
-  // TODO: FREE
-  // MRIterator_Free(it);
   free(rp);
 }
 ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCluster *sc) {

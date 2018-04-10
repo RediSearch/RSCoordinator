@@ -66,6 +66,9 @@ int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep);
 int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error);
 
 int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd);
+
+void MRIterator_Free(MRIterator *it);
+
 #endif
 
 size_t MR_NumHosts();

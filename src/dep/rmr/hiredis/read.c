@@ -330,9 +330,9 @@ static int processMultiBulkItem(redisReader *r) {
 
             moveToNextTask(r);
         } else {
-            if (r->fn && r->fn->createArray)
-                obj = r->fn->createArray(cur,elements);
-            else
+            if (r->fn && r->fn->createArray) {
+                obj = r->fn->createArray(cur, elements);
+            } else
                 obj = (void*)REDIS_REPLY_ARRAY;
 
             if (obj == NULL) {

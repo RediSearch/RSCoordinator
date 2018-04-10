@@ -34,10 +34,11 @@
 #ifndef __HIREDIS_H
 #define __HIREDIS_H
 #include "read.h"
-#include <stdarg.h>   /* for va_list */
+#include "reply.h"
+#include <stdarg.h> /* for va_list */
 #include <sys/time.h> /* for struct timeval */
-#include <stdint.h>   /* uintXX_t, etc */
-#include "sds.h"      /* for sds */
+#include <stdint.h> /* uintXX_t, etc */
+#include "sds.h" /* for sds */
 
 #define HIREDIS_MAJOR 0
 #define HIREDIS_MINOR 13
@@ -74,49 +75,47 @@
 /* Flag that is set when we should set SO_REUSEADDR before calling bind() */
 #define REDIS_REUSEADDR 0x80
 
+/* Has a user-defined reader */
+#define REDIS_USER_READER 0x100
+
+/* Don't automatically free replies */
+#define REDIS_ASYNC_NOFREEREPLIES 0x200
+
 #define REDIS_KEEPALIVE_INTERVAL 15 /* seconds */
 
 /* number of times we retry to connect in the case of EADDRNOTAVAIL and
  * SO_REUSEADDR is being used. */
-#define REDIS_CONNECT_RETRIES 10
+#define REDIS_CONNECT_RETRIES  10
 
 /* strerror_r has two completely different prototypes and behaviors
  * depending on system issues, so we need to operate on the error buffer
  * differently depending on which strerror_r we're using. */
-#if !(defined(_GNU_SOURCE) && \
-      defined(__GLIBC__)) /* "regular" POSIX strerror_r that does the right thing. */
-#define __redis_strerror_r(errno, buf, len) \
-  do {                                      \
-    strerror_r((errno), (buf), (len));      \
-  } while (0)
+#if ! (defined(_GNU_SOURCE) && defined(__GLIBC__))
+/* "regular" POSIX strerror_r that does the right thing. */
+#define __redis_strerror_r(errno, buf, len)                                    \
+    do {                                                                       \
+        strerror_r((errno), (buf), (len));                                     \
+    } while (0)
 #else
 /* "bad" GNU strerror_r we need to clean up after. */
-#define __redis_strerror_r(errno, buf, len)                          \
-  do {                                                               \
-    char *err_str = strerror_r((errno), (buf), (len));               \
-    /* If return value _isn't_ the start of the buffer we passed in, \
-     * then GNU strerror_r returned an internal static buffer and we \
-     * need to copy the result into our private buffer. */           \
-    if (err_str != (buf)) {                                          \
-      strncpy((buf), err_str, ((len)-1));                            \
-      (buf)[(len)-1] = '\0';                                         \
-    }                                                                \
-  } while (0)
+#define __redis_strerror_r(errno, buf, len)                                    \
+    do {                                                                       \
+        char *err_str = strerror_r((errno), (buf), (len));                     \
+        /* If return value _isn't_ the start of the buffer we passed in,       \
+         * then GNU strerror_r returned an internal static buffer and we       \
+         * need to copy the result into our private buffer. */                 \
+        if (err_str != (buf)) {                                                \
+            strncpy((buf), err_str, ((len) - 1));                              \
+            (buf)[(len)-1] = '\0';                                               \
+        }                                                                      \
+    } while (0)
 #endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* This is the reply object returned by redisCommand() */
-typedef struct redisReply {
-  int type;                    /* REDIS_REPLY_* */
-  long long integer;           /* The integer when type is REDIS_REPLY_INTEGER */
-  size_t len;                  /* Length of string */
-  char *str;                   /* Used for both REDIS_REPLY_ERROR and REDIS_REPLY_STRING */
-  size_t elements;             /* number of elements, for REDIS_REPLY_ARRAY */
-  struct redisReply **element; /* elements vector for REDIS_REPLY_ARRAY */
-} redisReply;
+typedef void redisReply;
 
 redisReader *redisReaderCreate(void);
 
@@ -127,44 +126,73 @@ void freeReplyObject(void *reply);
 int redisvFormatCommand(char **target, const char *format, va_list ap);
 int redisFormatCommand(char **target, const char *format, ...);
 int redisFormatCommandArgv(char **target, int argc, const char **argv, const size_t *argvlen);
-int redisFormatSdsCommandArgv(sds *target, int argc, const char **argv, const size_t *argvlen);
+int redisFormatSdsCommandArgv(sds *target, int argc, const char ** argv, const size_t *argvlen);
 void redisFreeCommand(char *cmd);
 void redisFreeSdsCommand(sds cmd);
 
-enum redisConnectionType { REDIS_CONN_TCP, REDIS_CONN_UNIX };
+enum redisConnectionType {
+    REDIS_CONN_TCP,
+    REDIS_CONN_UNIX,
+    REDIS_CONN_USERFD
+};
 
 /* Context for a connection to Redis */
 typedef struct redisContext {
-  int err;          /* Error flags, 0 when there is no error */
-  char errstr[128]; /* String representation of error when applicable */
-  int fd;
-  int flags;
-  char *obuf;          /* Write buffer */
-  redisReader *reader; /* Protocol reader */
+    int err; /* Error flags, 0 when there is no error */
+    char errstr[128]; /* String representation of error when applicable */
+    int fd;
+    int flags;
+    char *obuf; /* Write buffer */
+    redisReader *reader; /* Protocol reader */
+    redisReplyAccessors accessors; /* For accessing replies */
+    enum redisConnectionType connection_type;
+    struct timeval *timeout;
 
-  enum redisConnectionType connection_type;
-  struct timeval *timeout;
+    struct {
+        char *host;
+        char *source_addr;
+        int port;
+    } tcp;
 
-  struct {
-    char *host;
-    char *source_addr;
-    int port;
-  } tcp;
+    struct {
+        char *path;
+    } unix_sock;
 
-  struct {
-    char *path;
-  } unix_sock;
-
-  /* For non-blocking connect */
-  struct sockadr *saddr;
-  size_t addrlen;
+    /* For non-blocking connect */
+    struct sockadr *saddr;
+    size_t addrlen;
 } redisContext;
 
+
+#define REDIS_OPT_NONBLOCK 0x01
+#define REDIS_OPT_REUSEADDR 0x02
+#define REDIS_OPT_NOFREEREPLIES 0x04 /* Do not free replies in async mode */
+
+typedef struct {
+    int type;
+    int options;
+    const struct timeval *timeout;
+    redisReader *reader;
+    redisReplyAccessors *accessors;
+    union {
+        struct {
+            const char *source_addr;
+            const char *ip;
+            int port;
+        } tcp;
+        const char *unix_socket;
+        int fd;
+    } endpoint;
+} redisOptions;
+
+redisContext *redisConnectWithOptions(const redisOptions *options);
 redisContext *redisConnect(const char *ip, int port);
 redisContext *redisConnectWithTimeout(const char *ip, int port, const struct timeval tv);
 redisContext *redisConnectNonBlock(const char *ip, int port);
-redisContext *redisConnectBindNonBlock(const char *ip, int port, const char *source_addr);
-redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port, const char *source_addr);
+redisContext *redisConnectBindNonBlock(const char *ip, int port,
+                                       const char *source_addr);
+redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port,
+                                                const char *source_addr);
 redisContext *redisConnectUnix(const char *path);
 redisContext *redisConnectUnixWithTimeout(const char *path, const struct timeval tv);
 redisContext *redisConnectUnixNonBlock(const char *path);
@@ -213,6 +241,19 @@ int redisAppendCommandArgv(redisContext *c, int argc, const char **argv, const s
 void *redisvCommand(redisContext *c, const char *format, va_list ap);
 void *redisCommand(redisContext *c, const char *format, ...);
 void *redisCommandArgv(redisContext *c, int argc, const char **argv, const size_t *argvlen);
+
+#define REDIS_REPLY_GETTYPE(ctx, r) (ctx)->accessors.getType(r)
+#define REDIS_REPLY_GETARRLEN(ctx, r) (ctx)->accessors.getArrayLength(r)
+#define REDIS_REPLY_GETARRELEM(ctx, r, i) (ctx)->accessors.getArrayElement(r, i)
+#define REDIS_REPLY_GETSTR(ctx, r, n) (ctx)->accessors.getString(r, n)
+#define REDIS_REPLY_GETSTRZ(ctx, r) (ctx)->accessors.getString(r, NULL)
+#define REDIS_REPLY_GETSTRLEN(ctx, r)      \
+    ({                                     \
+        size_t n;                          \
+        (ctx)->accessors.getString(r, &n); \
+        n;                                 \
+    })
+#define REDIS_REPLY_GETINT(ctx, r) (ctx)->accessors.getInteger(r)
 
 #ifdef __cplusplus
 }

@@ -8,8 +8,6 @@
 #include <util/arr.h>
 #include "dist_plan.h"
 
-#define RESULTS_PER_ITERATION "350"
-
 /* Get cursor command using a cursor id and an existing aggregate command */
 int getCursorCommand(MRCommand *cmd, long long cursorId) {
   if (cmd->num < 2 || !cursorId) return 0;
@@ -17,8 +15,7 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
   char buf[128];
   sprintf(buf, "%lld", cursorId);
   const char *idx = cmd->args[1];
-  MRCommand newCmd =
-      MR_NewCommand(6, "_" RS_CURSOR_CMD, "READ", idx, buf, "COUNT", RESULTS_PER_ITERATION);
+  MRCommand newCmd = MR_NewCommand(6, "_" RS_CURSOR_CMD, "READ", idx, buf);
   MRCommand_Free(cmd);
   *cmd = newCmd;
   return 1;

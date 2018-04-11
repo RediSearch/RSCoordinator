@@ -15,7 +15,7 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
   char buf[128];
   sprintf(buf, "%lld", cursorId);
   const char *idx = cmd->args[1];
-  MRCommand newCmd = MR_NewCommand(6, "_" RS_CURSOR_CMD, "READ", idx, buf);
+  MRCommand newCmd = MR_NewCommand(4, "_" RS_CURSOR_CMD, "READ", idx, buf);
   MRCommand_Free(cmd);
   *cmd = newCmd;
   return 1;

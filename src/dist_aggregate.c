@@ -24,12 +24,17 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
 }
 
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-
+  // printf("Hello! Got cursor reply!!!!\n");
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
+    // printf("We think the reply is done (r=%p), (t=%d)!\n", rep, MRReply_Type(rep));
+    if (MRReply_Type(rep) == MR_REPLY_ERROR) {
+      // printf("Error is '%s'\n", MRReply_String(rep, NULL));
+    }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
+  // printf("Continuing processing...\n");
 
   // rewrite and resend the cursor command if needed
   int isDone = 0;
@@ -101,27 +106,33 @@ RSValue *MRReply_ToValue(MRReply *r) {
 }
 
 struct netCtx {
+  MRReply **replies;
   MRReply *current;
   size_t curIdx;
+  size_t numReplies;
   MRIterator *it;
 };
 
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
-
+  // printf("Hello!\n");
   struct netCtx *nc = ctx->privdata;
   // if we've consumed the last reply - free it
   if (nc->current && nc->curIdx == MRReply_Length(nc->current)) {
-    MRReply_Free(nc->current);
     nc->current = NULL;
   }
 
   // get the next reply from the channel
   if (!nc->current) {
     do {
+      // printf("Starting parent iterator..\n");
       nc->current = MRIterator_Next(nc->it);
+      // printf("Got new current: %p\n", nc->current);
       if (nc->current == MRITERATOR_DONE) {
         nc->current = NULL;
         return RS_RESULT_EOF;
+      } else {
+        nc->replies = realloc(nc->replies, sizeof(*nc->replies) * nc->numReplies + 1);
+        nc->replies[nc->numReplies++] = nc->current;
       }
     } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY);
 
@@ -148,9 +159,10 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 
 void net_Free(ResultProcessor *rp) {
   struct netCtx *nc = rp->ctx.privdata;
-  if (nc->current) {
-    MRReply_Free(nc->current);
+  for (size_t ii = 0; ii < nc->numReplies; ++ii) {
+    MRReply_Free(nc->replies[ii]);
   }
+  free(nc->replies);
   MRIterator *it = nc->it;
   MRIterator_Free(it);
   free(nc);
@@ -164,6 +176,8 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
   struct netCtx *nc = malloc(sizeof(*nc));
   nc->curIdx = 0;
   nc->current = NULL;
+  nc->replies = NULL;
+  nc->numReplies = 0;
   nc->it = MR_Iterate(cg, netCursorCallback, NULL);
   ResultProcessor *proc = NewResultProcessor(NULL, nc);
   proc->Free = net_Free;

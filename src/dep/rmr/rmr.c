@@ -18,8 +18,6 @@
 #include "cluster.h"
 #include "chan.h"
 #include "rq.h"
-/* Copy a redisReply object. Defined in reply.c */
-MRReply *MRReply_Duplicate(redisReply *rep);
 
 /* Currently a single cluster is supported */
 static MRCluster *cluster_g = NULL;
@@ -127,7 +125,6 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 /* The callback called from each fanout request to aggregate their replies */
 static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   MRCtx *ctx = privdata;
-
   struct timespec now;
   clock_gettime(CLOCK_REALTIME, &now);
 
@@ -138,14 +135,12 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
     ctx->numErrored++;
 
   } else {
-    redisReply *rp = (redisReply *)MRReply_Duplicate(r);
-
     /* If needed - double the capacity for replies */
     if (ctx->numReplied == ctx->repliesCap) {
       ctx->repliesCap *= 2;
       ctx->replies = realloc(ctx->replies, ctx->repliesCap * sizeof(MRReply *));
     }
-    ctx->replies[ctx->numReplied++] = (MRReply *)rp;
+    ctx->replies[ctx->numReplied++] = r;
   }
 
   // printf("Unblocking, replied %d, errored %d out of %d\n", ctx->numReplied, ctx->numErrored,
@@ -381,8 +376,7 @@ static void mrIteratorRedisCB(redisAsyncContext *c, void *r, void *privdata) {
     // ctx->numErrored++;
     // TODO: report error
   } else {
-    MRReply *rp = MRReply_Duplicate(r);
-    ctx->ic->cb(ctx, rp, &ctx->cmd);
+    ctx->ic->cb(ctx, r, &ctx->cmd);
   }
 }
 

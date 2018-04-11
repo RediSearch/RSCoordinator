@@ -6,15 +6,18 @@
 #include <limits.h>
 #include <redismodule.h>
 
-typedef redisReply MRReply;
+const int MRReply_UseV2 = 1;
+const int MRReply_UseBlockAlloc = 1;
+redisReplyAccessors MRReply__Accessors;
 
-void MRReply_Free(MRReply *reply) {
-  freeReplyObject(reply);
+static void __attribute__((constructor)) initAccs(void) {
+  if (MRReply_UseV2) {
+    MRReply__Accessors = redisReplyV2Accessors;
+  } else {
+    MRReply__Accessors = redisReplyLegacyAccessors;
+  }
 }
 
-int MRReply_Type(MRReply *reply) {
-  return reply->type;
-}
 
 void MRReply_Print(FILE *fp, MRReply *r) {
   if (!r) {
@@ -22,24 +25,24 @@ void MRReply_Print(FILE *fp, MRReply *r) {
     return;
   }
 
-  switch (r->type) {
+  switch (MRReply__Accessors.getType(r)) {
     case MR_REPLY_INTEGER:
-      fprintf(fp, "INT(%lld)", r->integer);
+      fprintf(fp, "INT(%lld)", MRReply__Accessors.getInteger(r));
       break;
     case MR_REPLY_STRING:
     case MR_REPLY_STATUS:
-      fprintf(fp, "STR(%s)", r->str);
+      fprintf(fp, "STR(%s)", MRReply__Accessors.getString(r, NULL));
       break;
     case MR_REPLY_ERROR:
-      fprintf(fp, "ERR(%s)", r->str);
+      fprintf(fp, "ERR(%s)", MRReply__Accessors.getString(r, NULL));
       break;
     case MR_REPLY_NIL:
       fprintf(fp, "(nil)");
       break;
     case MR_REPLY_ARRAY:
-      fprintf(fp, "ARR(%zd):[ ", r->elements);
-      for (size_t i = 0; i < r->elements; i++) {
-        MRReply_Print(fp, r->element[i]);
+      fprintf(fp, "ARR(%zd):[ ", MRReply__Accessors.getArrayLength(r));
+      for (size_t i = 0; i < MRReply__Accessors.getArrayLength(r); i++) {
+        MRReply_Print(fp, MRReply__Accessors.getArrayElement(r, i));
         fprintf(fp, ", ");
       }
       fprintf(fp, "]");
@@ -47,25 +50,8 @@ void MRReply_Print(FILE *fp, MRReply *r) {
   }
 }
 
-long long MRReply_Integer(MRReply *reply) {
-  return reply->integer;
-}
 
-size_t MRReply_Length(MRReply *reply) {
-  return reply->elements;
-}
 
-char *MRReply_String(MRReply *reply, size_t *len) {
-  if (len) {
-    *len = reply->len;
-  }
-
-  return reply->str;
-}
-
-MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx) {
-  return reply->element[idx];
-}
 
 int _parseInt(char *str, size_t len, long long *i) {
   errno = 0; /* To distinguish success/failure after call */
@@ -99,45 +85,21 @@ int _parseFloat(char *str, size_t len, double *d) {
   return 1;
 }
 
-/* Get the array element from an array and detach it from the array */
-MRReply *MRReply_StealArrayElement(MRReply *r, size_t idx) {
-  if (!r || r->type != MR_REPLY_ARRAY || idx >= r->elements) {
-    return NULL;
-  }
-
-  MRReply *ret = r->element[idx];
-  r->element[idx] = NULL;
-  return ret;
-}
-
-MRReply *MRReply_Duplicate(redisReply *src) {
-  MRReply *ret = malloc(sizeof(MRReply));
-  *ret = *src;
-
-  if (src->str) {
-    src->str = NULL;
-    src->len = 0;
-  }
-  if (src->element && src->elements) {
-    src->element = NULL;
-    src->elements = 0;
-  }
-  src->type = REDIS_REPLY_NIL;
-  // memset(rep, 0, sizeof(*rep));
-  return ret;
-}
 
 int MRReply_ToInteger(MRReply *reply, long long *i) {
 
   if (reply == NULL) return 0;
 
-  switch (reply->type) {
+  switch (MRReply__Accessors.getType(reply)) {
     case MR_REPLY_INTEGER:
-      *i = reply->integer;
+      *i = MRReply__Accessors.getInteger(reply);
       return 1;
     case MR_REPLY_STRING:
-    case MR_REPLY_STATUS:
-      return _parseInt(reply->str, reply->len, i);
+    case MR_REPLY_STATUS: {
+      size_t n;
+      const char *s = MRReply__Accessors.getString(reply, &n);
+      return _parseInt(s, n, i);
+    }
     default:
       return 0;
   }
@@ -146,14 +108,17 @@ int MRReply_ToInteger(MRReply *reply, long long *i) {
 int MRReply_ToDouble(MRReply *reply, double *d) {
   if (reply == NULL) return 0;
 
-  switch (reply->type) {
+  switch (MRReply__Accessors.getType(reply)) {
     case MR_REPLY_INTEGER:
-      *d = (double)reply->integer;
+      *d = (double)MRReply__Accessors.getInteger(reply);
       return 1;
 
     case MR_REPLY_STRING:
-    case MR_REPLY_STATUS:
-      return _parseFloat(reply->str, reply->len, d);
+    case MR_REPLY_STATUS: {
+      size_t n;
+      const char *s = MRReply__Accessors.getString(reply, &n);
+      return _parseFloat(s, n, d);
+    }
 
     default:
       return 0;

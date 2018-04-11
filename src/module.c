@@ -1068,6 +1068,13 @@ static RedisModuleCmdFunc SafeCmd(RedisModuleCmdFunc f) {
   }
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  /**
+  
+  FT.AGGREGATE gh * LOAD 1 @type GROUPBY 1 @type REDUCE COUNT 0 AS num REDUCE SUM 1 @date SORTBY 2 @num DESC MAX 10
+  
+   */
+
+  printf("RSValue size: %lu\n", sizeof(RSValue));
 
   if (RedisModule_Init(ctx, "ft", RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;

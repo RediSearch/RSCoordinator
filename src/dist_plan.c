@@ -93,7 +93,7 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
   AggregatePlan *dist = malloc(sizeof(*dist));
   AggregateStep *current = src->head;
   AggregatePlan_Init(dist);
-  dist->cursor.count = 450;
+  dist->cursor.count = 1000;
   dist->hasCursor = 1;
   // zero the stuff we don't care about in src
   dist->index = src->index;
@@ -145,55 +145,48 @@ int distributeCount(AggregateGroupReduce *src, AggregateStep *local, AggregateSt
   return 1;
 }
 
-/* Distribute SUM into remote SUM and local SUM */
-int distributeSum(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
-  if (array_len(src->args) != 1) {
-    return 0;
-  }
-  AggregateGroupStep_AddReducer(&remote->group, "SUM", RSKEY(src->alias), 1, src->args[0]);
-  AggregateGroupStep_AddReducer(&local->group, "SUM", RSKEY(src->alias), 1, PROPVAL(src->alias));
-
-  return 1;
-}
-
-/* Distribute MIN into remote MIN and local MIN */
-int distributeMin(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
-  // MIN must have a single argument
-  if (array_len(src->args) != 1) {
-    return 0;
-  }
-  AggregateGroupStep_AddReducer(&remote->group, "MIN", RSKEY(src->alias), 1, src->args[0]);
-  AggregateGroupStep_AddReducer(&local->group, "MIN", RSKEY(src->alias), 1, PROPVAL(src->alias));
-
-  return 1;
-}
-
-/* Distribute MAX into remote MAX and local MAX */
-int distributeMax(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+/* Generic function to distribute an aggregator with a single argument as itself. This is the most
+ * common case */
+int distributeSingleArgSelf(AggregateGroupReduce *src, AggregateStep *local,
+                            AggregateStep *remote) {
   // MAX must have a single argument
   if (array_len(src->args) != 1) {
     return 0;
   }
-  AggregateGroupStep_AddReducer(&remote->group, "MAX", RSKEY(src->alias), 1, src->args[0]);
+  AggregateGroupStep_AddReducer(&remote->group, src->reducer, RSKEY(src->alias), 1, src->args[0]);
 
-  AggregateGroupStep_AddReducer(&local->group, "MAX", RSKEY(src->alias), 1, PROPVAL(src->alias));
+  AggregateGroupStep_AddReducer(&local->group, src->reducer, RSKEY(src->alias), 1,
+                                PROPVAL(src->alias));
 
   return 1;
 }
 
-/* Distribute TOLIST into remote TOLIST and local TOLIST */
-int distributeToList(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
-  // MAX must have a single argument
+/* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
+int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+  if (array_len(src->args) != 2) {
+    return 0;
+  }
+  AggregateGroupStep_AddReducer(&remote->group, "RANDOM_SAMPLE", RSKEY(src->alias), 2, src->args[0],
+                                RS_NumVal(1000));
+
+  AggregateGroupStep_AddReducer(&local->group, "QUANTILE", RSKEY(src->alias), 2,
+                                PROPVAL(src->alias), src->args[1]);
+
+  return 1;
+}
+
+/* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
+int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   if (array_len(src->args) != 1) {
     return 0;
   }
-  AggregateGroupStep_AddReducer(&remote->group, "TOLIST", RSKEY(src->alias), 1, src->args[0]);
+  AggregateGroupStep_AddReducer(&remote->group, "RANDOM_SAMPLE", RSKEY(src->alias), 2, src->args[0],
+                                RS_NumVal(200));
 
-  AggregateGroupStep_AddReducer(&local->group, "TOLIST", RSKEY(src->alias), 1, PROPVAL(src->alias));
+  AggregateGroupStep_AddReducer(&local->group, "STDDEV", RSKEY(src->alias), 1, PROPVAL(src->alias));
 
   return 1;
 }
-
 /* Distribute AVG into remote SUM and COUNT, local SUM and SUM + apply SUM/SUM */
 int distributeAvg(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   // AVG must have a single argument
@@ -224,11 +217,15 @@ static struct {
   reducerDistributionFunc func;
 } reducerDistributors_g[] = {
     {"COUNT", distributeCount},
-    {"SUM", distributeSum},
-    {"MAX", distributeMax},
-    {"MIN", distributeMin},
+    {"SUM", distributeSingleArgSelf},
+    {"MAX", distributeSingleArgSelf},
+    {"MIN", distributeSingleArgSelf},
     {"AVG", distributeAvg},
-    {"TOLIST", distributeToList},
+    {"TOLIST", distributeSingleArgSelf},
+    {"STDDEV", distributeStdDev},
+
+    {"QUANTILE", distributeQuantile},
+
     {NULL, NULL}  // sentinel value
 
 };

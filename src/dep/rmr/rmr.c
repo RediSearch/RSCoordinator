@@ -359,7 +359,6 @@ typedef struct MRIteratorCtx {
 typedef struct MRIteratorCallbackCtx {
   MRIteratorCtx *ic;
   MRCommand cmd;
-  redisAsyncContext *c;
 } MRIteratorCallbackCtx;
 
 typedef struct MRIterator {
@@ -447,7 +446,7 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
   ret->ctx.pending = ret->len;
 
   RQ_Push(rq_g, iterStartCb, ret);
-
+  cg.Free(cg.ctx);
   return ret;
 }
 
@@ -459,4 +458,13 @@ MRReply *MRIterator_Next(MRIterator *it) {
     return MRITERATOR_DONE;
   }
   return p;
+}
+
+void MRIterator_Free(MRIterator *it) {
+  for (size_t i = 0; i < it->len; i++) {
+    MRCommand_Free(&it->cbxs[i].cmd);
+  }
+  MRChannel_Free(it->ctx.chan);
+  free(it->cbxs);
+  free(it);
 }

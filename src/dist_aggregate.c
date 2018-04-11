@@ -89,7 +89,7 @@ RSValue *MRReply_ToValue(MRReply *r) {
     case MR_REPLY_ARRAY: {
       RSValue **arr = calloc(MRReply_Length(r), sizeof(*arr));
       for (size_t i = 0; i < MRReply_Length(r); i++) {
-        arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i));
+        arr[i] = RSValue_IncrRef(MRReply_ToValue(MRReply_ArrayElement(r, i)));
       }
       v = RS_ArrVal(arr, MRReply_Length(r));
       break;

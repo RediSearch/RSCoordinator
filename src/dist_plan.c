@@ -181,6 +181,19 @@ int distributeMax(AggregateGroupReduce *src, AggregateStep *local, AggregateStep
   return 1;
 }
 
+/* Distribute TOLIST into remote TOLIST and local TOLIST */
+int distributeToList(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+  // MAX must have a single argument
+  if (array_len(src->args) != 1) {
+    return 0;
+  }
+  AggregateGroupStep_AddReducer(&remote->group, "TOLIST", RSKEY(src->alias), 1, src->args[0]);
+
+  AggregateGroupStep_AddReducer(&local->group, "TOLIST", RSKEY(src->alias), 1, PROPVAL(src->alias));
+
+  return 1;
+}
+
 /* Distribute AVG into remote SUM and COUNT, local SUM and SUM + apply SUM/SUM */
 int distributeAvg(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   // AVG must have a single argument
@@ -210,8 +223,13 @@ static struct {
   const char *key;
   reducerDistributionFunc func;
 } reducerDistributors_g[] = {
-    {"COUNT", distributeCount}, {"SUM", distributeSum}, {"MAX", distributeMax},
-    {"MIN", distributeMin},     {"AVG", distributeAvg}, {NULL, NULL}  // sentinel value
+    {"COUNT", distributeCount},
+    {"SUM", distributeSum},
+    {"MAX", distributeMax},
+    {"MIN", distributeMin},
+    {"AVG", distributeAvg},
+    {"TOLIST", distributeToList},
+    {NULL, NULL}  // sentinel value
 
 };
 

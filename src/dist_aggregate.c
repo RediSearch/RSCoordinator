@@ -6,6 +6,7 @@
 #include <commands.h>
 #include <aggregate/aggregate.h>
 #include <util/arr.h>
+#include "dist_plan.h"
 
 #define RESULTS_PER_ITERATION "350"
 

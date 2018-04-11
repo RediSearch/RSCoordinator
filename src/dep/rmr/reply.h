@@ -35,9 +35,8 @@ static inline size_t MRReply_Length(MRReply *reply) {
 }
 
 static inline char *MRReply_String(MRReply *reply, size_t *len) {
-  return MRReply__Accessors.getString(reply, len);
+  return (char *)MRReply__Accessors.getString(reply, len);
 }
-
 
 static inline MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx) {
   return MRReply__Accessors.getArrayElement(reply, idx);

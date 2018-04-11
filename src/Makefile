@@ -65,7 +65,7 @@ $(LIBUV_DIR)/configure:
 	cd $(LIBUV_DIR) && sh autogen.sh
 
 libredisearch.a:
-	make -C dep/RediSearch/src libredisearch.a
+	make -j 8 -C dep/RediSearch/src libredisearch.a
 
 # Remove the module base file so we always recompile it with the correct build flags
 module.so: $(shell rm -f module.o)
@@ -83,11 +83,11 @@ oss: module-oss.so
 
 
 rmr:
-	$(MAKE) -C dep/rmr hiredis all
+	$(MAKE) -j 4 -C dep/rmr hiredis all
 .PHONY: rmr
 
 rmutil:
-	$(MAKE) -C dep/rmutil all
+	$(MAKE) -j 4 -C dep/rmutil all
 .PHONY: rmutil
 
 

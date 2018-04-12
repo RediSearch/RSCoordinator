@@ -109,6 +109,7 @@ struct netCtx {
   size_t curIdx;
   size_t numReplies;
   MRIterator *it;
+  MRCommand cmd;
   MRCommandGenerator cg;
 };
 
@@ -175,7 +176,8 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
   nc->current = NULL;
   nc->numReplies = 0;
   nc->it = NULL;
-  nc->cg = SearchCluster_MultiplexCommand(sc, &cmd);
+  nc->cmd = cmd;
+  nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
 
   ResultProcessor *proc = NewResultProcessor(NULL, nc);
   proc->Free = net_Free;

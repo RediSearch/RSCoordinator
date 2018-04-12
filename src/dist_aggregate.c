@@ -170,9 +170,13 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
 
   MRCommand_FPrint(stderr, &cmd);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(sc, &cmd);
-
+  MRIterator *it = MR_Iterate(cg, netCursorCallback, NULL);
+  if (!it) {
+    return NULL;
+  }
   struct netCtx *nc = malloc(sizeof(*nc));
   nc->curIdx = 0;
+  nc->it = it;
   nc->current = NULL;
   nc->numReplies = 0;
   nc->it = MR_Iterate(cg, netCursorCallback, NULL);
@@ -206,7 +210,7 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
 
   ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
   root->ctx.qxc = &plan->execCtx;
-  return AggregatePlan_BuildProcessorChain(ap, NULL, root, err);
+  return AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, err);
 }
 
 CmdArg *Aggregate_ParseRequest(RedisModuleString **argv, int argc, char **err);
@@ -230,7 +234,7 @@ int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx 
   opts.flags |= Search_AggregationQuery;
   opts.concurrentMode = 0;
   req->plan =
-      Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)&err);
+      Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)err);
   if (!req->plan) {
     *err = strdup(QUERY_ERROR_INTERNAL_STR);
     return REDISMODULE_ERR;

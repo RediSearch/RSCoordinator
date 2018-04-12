@@ -641,6 +641,9 @@ int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
   }
+  if (!SearchCluster_Ready(GetSearchCluster())) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
   return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
                                                _DistAggregateCommand, ctx, argv, argc);
 }
@@ -1069,9 +1072,10 @@ static RedisModuleCmdFunc SafeCmd(RedisModuleCmdFunc f) {
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   /**
-  
-  FT.AGGREGATE gh * LOAD 1 @type GROUPBY 1 @type REDUCE COUNT 0 AS num REDUCE SUM 1 @date SORTBY 2 @num DESC MAX 10
-  
+
+  FT.AGGREGATE gh * LOAD 1 @type GROUPBY 1 @type REDUCE COUNT 0 AS num REDUCE SUM 1 @date SORTBY 2
+  @num DESC MAX 10
+
    */
 
   printf("RSValue size: %lu\n", sizeof(RSValue));

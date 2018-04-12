@@ -143,7 +143,7 @@ MRClusterNode *_MRClusterShard_SelectNode(MRClusterShard *sh, MRClusterNode *myN
 int MRCluster_SendCommand(MRCluster *cl, MRCoordinationStrategy strategy, MRCommand *cmd,
                           redisCallbackFn *fn, void *privdata) {
 
-  if (!cl->topo) {
+  if (!cl || !cl->topo) {
     return REDIS_ERR;
   }
 

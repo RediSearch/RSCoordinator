@@ -368,6 +368,7 @@ typedef struct MRIterator {
 } MRIterator;
 
 int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error);
+void MRIterator_Free(MRIterator *it);
 
 static void mrIteratorRedisCB(redisAsyncContext *c, void *r, void *privdata) {
   MRIteratorCallbackCtx *ctx = privdata;
@@ -442,6 +443,12 @@ MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privd
       ret->len = i;
       break;
     }
+  }
+
+  // Could not create command, probably invalid cluster
+  if (ret->len == 0) {
+    MRIterator_Free(ret);
+    return NULL;
   }
   ret->ctx.pending = ret->len;
 

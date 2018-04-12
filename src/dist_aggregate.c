@@ -7,6 +7,7 @@
 #include <aggregate/aggregate.h>
 #include <util/arr.h>
 #include "dist_plan.h"
+#include <err.h>
 
 /* Get cursor command using a cursor id and an existing aggregate command */
 int getCursorCommand(MRCommand *cmd, long long cursorId) {
@@ -200,7 +201,7 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
   AggregatePlan *ap = ctx;
   AggregatePlan *remote = AggregatePlan_MakeDistributed(ap);
   if (!remote) {
-    *err = strdup("Could not process plan for distribution");
+    SET_ERR(err, "Could not process plan for distribution");
     return NULL;
   }
 
@@ -225,17 +226,17 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
 
 CmdArg *Aggregate_ParseRequest(RedisModuleString **argv, int argc, char **err);
 int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
-                                          RedisModuleString **argv, int argc, const char **err) {
+                                          RedisModuleString **argv, int argc, char **err) {
 
   req->args = Aggregate_ParseRequest(argv, argc, (char **)err);
   if (!req->args) {
-    *err = strdup("Could not parse aggregate request");
+    SET_ERR(err, "Could not parse aggregate request");
     return REDISMODULE_ERR;
   }
 
   req->ap = (AggregatePlan){};
   if (!AggregatePlan_Build(&req->ap, req->args, (char **)err)) {
-    if (err && !*err) *err = strdup("Could not parse aggregate request");
+    SET_ERR(err, "Could not parse aggregate request");
     return REDISMODULE_ERR;
   }
 
@@ -246,7 +247,7 @@ int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx 
   req->plan =
       Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)err);
   if (!req->plan) {
-    if (!*err) *err = strdup(QUERY_ERROR_INTERNAL_STR);
+    SET_ERR(err, QUERY_ERROR_INTERNAL_STR);
     return REDISMODULE_ERR;
   }
 

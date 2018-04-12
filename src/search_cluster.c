@@ -100,7 +100,8 @@ size_t SCCommandMuxIterator_Len(void *ctx) {
 
 void SCCommandMuxIterator_Free(void *ctx) {
   SCCommandMuxIterator *it = ctx;
-  MRCommand_Free(it->cmd);
+  if (it->cmd) MRCommand_Free(it->cmd);
+  it->cmd = NULL;
   free(it);
 }
 

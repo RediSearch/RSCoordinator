@@ -540,78 +540,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-int cursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-
-  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
-    MRIteratorCallback_Done(ctx, 1);
-    return REDIS_ERR;
-  }
-
-  MRIteratorCallback_AddReply(ctx, MRReply_ArrayElement(rep, 0));
-
-  long long curs = 0;
-  if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
-    if (strcasecmp(cmd->args[0], "_FT.CURREAD")) {
-
-      char buf[128];
-      sprintf(buf, "%lld", curs);
-      const char *idx = cmd->args[1];
-      MRCommand newCmd = MR_NewCommand(4, "_FT.CURREAD", idx, buf, "5000");
-      MRCommand_Free(cmd);
-      *cmd = newCmd;
-    }
-    // MRCommand_FPrint(stderr, cmd);
-    MRIteratorCallback_ResendCommand(ctx, cmd);
-  } else {
-    MRIteratorCallback_Done(ctx, 0);
-  }
-  return REDIS_OK;
-}
-
-void *consumeIterator(void *arg) {
-  void **targ = arg;
-  RedisModuleBlockedClient *bc = targ[0];
-  MRIterator *it = targ[1];
-
-  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(bc);
-  RedisModule_AutoMemory(ctx);
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-  MRReply *r = NULL;
-  int count = 0;
-
-  while (MRITERATOR_DONE != (r = MRIterator_Next(it))) {
-    for (size_t n = 1; n < MRReply_Length(r); n++) {
-      // MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(r, n));
-      count++;
-    }
-  }
-  RedisModule_ReplyWithLongLong(ctx, count);
-  RedisModule_ReplySetArrayLength(ctx, 1);
-  RedisModule_UnblockClient(bc, NULL);
-  return NULL;
-}
-int AggregateCursor(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  MRCommand cmd = MR_NewCommand(9, "_FT.AGGREGATE", "gh", RedisModule_StringPtrLen(argv[1], NULL),
-                                "apply", "@actor", "as", "@actor", "WITHCURSOR", "5000");
-  MRCommand_FPrint(stderr, &cmd);
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
-
-  MRIterator *it = MR_Iterate(cg, cursorCallback, NULL);
-
-  pthread_t tid;
-  RedisModuleBlockedClient *bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
-  void **targ = malloc(sizeof(void *) * 2);
-  targ[0] = bc;
-  targ[1] = it;
-  if (pthread_create(&tid, NULL, consumeIterator, targ) != 0) {
-    RedisModule_AbortBlock(bc);
-    RedisModule_ReplyWithError(ctx, "-ERR Can't start thread");
-  }
-  return REDISMODULE_OK;
-}
-
 int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
-                                          RedisModuleString **argv, int argc, const char **err);
+                                          RedisModuleString **argv, int argc, char **err);
 
 struct distAggCtx {
   RedisModuleBlockedClient *bc;
@@ -623,10 +553,11 @@ void _DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
                            struct ConcurrentCmdCtx *ccx) {
   RedisSearchCtx sctx = {.redisCtx = ctx};
   AggregateRequest req_s = {NULL};
-  const char *err;
+  char *err;
   if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, argv, argc, &err) != REDISMODULE_OK) {
     RedisModule_Log(ctx, "warning", "Error building dist plan: %s", err);
     RedisModule_ReplyWithError(ctx, err ? err : "Error building plan");
+    ERR_FREE(err);
     goto done;
   }
   AggregateRequest_Run(&req_s, ctx);

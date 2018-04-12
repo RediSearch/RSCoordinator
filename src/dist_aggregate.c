@@ -108,6 +108,7 @@ struct netCtx {
   size_t curIdx;
   size_t numReplies;
   MRIterator *it;
+  MRCommandGenerator cg;
 };
 
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
@@ -154,38 +155,41 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 
 void net_Free(ResultProcessor *rp) {
   struct netCtx *nc = rp->ctx.privdata;
-  // for (size_t ii = 0; ii < nc->numReplies; ++ii) {
-  //   MRReply_Free(nc->replies[ii]);
-  // }
+
+  nc->cg.Free(nc->cg.ctx);
+
   if (nc->current) {
     MRReply_Free(nc->current);
   }
   // free(nc->replies);
-  MRIterator *it = nc->it;
-  MRIterator_Free(it);
+  if (nc->it) MRIterator_Free(nc->it);
   free(nc);
   free(rp);
 }
 ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCluster *sc) {
 
   MRCommand_FPrint(stderr, &cmd);
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(sc, &cmd);
-  MRIterator *it = MR_Iterate(cg, netCursorCallback, NULL);
-  if (!it) {
-    return NULL;
-  }
   struct netCtx *nc = malloc(sizeof(*nc));
   nc->curIdx = 0;
-  nc->it = it;
   nc->current = NULL;
   nc->numReplies = 0;
-  nc->it = MR_Iterate(cg, netCursorCallback, NULL);
+  nc->it = NULL;
+  nc->cg = SearchCluster_MultiplexCommand(sc, &cmd);
+
   ResultProcessor *proc = NewResultProcessor(NULL, nc);
   proc->Free = net_Free;
   proc->Next = net_Next;
   return proc;
 }
 
+int NetworkFetcher_Start(struct netCtx *nc) {
+  MRIterator *it = MR_Iterate(nc->cg, netCursorCallback, NULL);
+  if (!it) {
+    return 0;
+  }
+  nc->it = it;
+  return 1;
+}
 int getAggregateFields(FieldList *l, RedisModuleCtx *ctx, CmdArg *cmd);
 
 ResultProcessor *AggregatePlan_BuildProcessorChain(AggregatePlan *plan, RedisSearchCtx *sctx,
@@ -210,7 +214,13 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
 
   ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
   root->ctx.qxc = &plan->execCtx;
-  return AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, err);
+  ResultProcessor *ret = AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, err);
+  // err is null if there was a problem building the chain.
+  // If it's not NULL we need to start the network fetcher now
+  if (ret) {
+    NetworkFetcher_Start(root->ctx.privdata);
+  }
+  return ret;
 }
 
 CmdArg *Aggregate_ParseRequest(RedisModuleString **argv, int argc, char **err);
@@ -236,7 +246,7 @@ int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx 
   req->plan =
       Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)err);
   if (!req->plan) {
-    *err = strdup(QUERY_ERROR_INTERNAL_STR);
+    if (!*err) *err = strdup(QUERY_ERROR_INTERNAL_STR);
     return REDISMODULE_ERR;
   }
 

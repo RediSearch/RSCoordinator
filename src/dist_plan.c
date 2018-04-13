@@ -200,6 +200,20 @@ static int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local,
 
   return 1;
 }
+
+/* Distribute COUNT_DISTINCTISH into HLL and MERGE_HLL */
+static int distributeCountDistinctish(AggregateGroupReduce *src, AggregateStep *local,
+                                      AggregateStep *remote) {
+  if (array_len(src->args) != 1) {
+    return 0;
+  }
+
+  AggregateGroupStep_AddReducer(&remote->group, "HLL", RSKEY(src->alias), 1, src->args[0]);
+  AggregateGroupStep_AddReducer(&local->group, "HLL_SUM", RSKEY(src->alias), 1,
+                                PROPVAL(src->alias));
+  return 1;
+}
+
 /* Distribute AVG into remote SUM and COUNT, local SUM and SUM + apply SUM/SUM */
 static int distributeAvg(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   // AVG must have a single argument
@@ -236,7 +250,7 @@ static struct {
     {"AVG", distributeAvg},
     {"TOLIST", distributeSingleArgSelf},
     {"STDDEV", distributeStdDev},
-
+    {"COUNT_DISTINCTISH", distributeCountDistinctish},
     {"QUANTILE", distributeQuantile},
 
     {NULL, NULL}  // sentinel value

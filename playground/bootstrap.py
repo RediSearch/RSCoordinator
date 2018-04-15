@@ -6,10 +6,8 @@ num = int(sys.argv[1])
 with open('Procfile.%d' % num, "w+") as f:
     for i in range(num):
         port = 7000 + i
-        f.write("redis-%d: redis-server ./common.conf --port %d --cluster-config-file %d.conf \
-                --dbfilename %d.rdb \
-                --loadmodule ../src/module-oss.so PARTITIONS AUTO\n"
-                % (port, port, port, port))
+        f.write("redis-%d: redis-server ./common.conf --port %d --cluster-config-file %d.conf"
+                " --dbfilename %d.rdb\n" % (port, port, port, port))
 
 print("bootstrap command:")
 print ("./bin/redis-trib.rb create --replicas 0 %s" %

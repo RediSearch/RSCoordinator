@@ -207,8 +207,16 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
     return NULL;
   }
 
-  AggregatePlan_Print(remote);
-  AggregatePlan_Print(ap);
+  // Set hook to write the extracted schema if needed
+  if (ap->withSchema) {
+    AggregateSchema sc = AggregatePlan_GetSchema(ap, NULL);
+    if (sc) {
+      QueryPlan_SetHook(plan, QueryPlanHook_Pre, AggregatePlan_DumpSchema, sc, array_free);
+    }
+  }
+
+  // AggregatePlan_Print(remote);
+  // AggregatePlan_Print(ap);
 
   char **args = AggregatePlan_Serialize(remote);
   MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);

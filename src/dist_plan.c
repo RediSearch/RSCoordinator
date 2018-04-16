@@ -95,6 +95,8 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
   AggregatePlan_Init(dist);
   dist->cursor.count = 1000;
   dist->hasCursor = 1;
+  dist->verbatim = src->verbatim;
+
   // zero the stuff we don't care about in src
   dist->index = src->index;
   src->index = NULL;

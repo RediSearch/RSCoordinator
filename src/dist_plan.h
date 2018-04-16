@@ -14,7 +14,8 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src);
 char *AggregateGroupStep_AddReducer(AggregateGroupStep *g, const char *func, char *alias, int argc,
                                     ...);
 size_t AggregateGroupStep_NumReducers(AggregateGroupStep *g);
-char *AggregatePlan_GetReducerAlias(AggregateGroupStep *g, const char *func);
+char *AggregatePlan_GetReducerAlias(AggregateGroupStep *g, const char *func, RSValue **argv,
+                                    int argc);
 AggregateStep *AggregatePlan_NewApplyStepFmt(const char *alias, char **err, const char *fmt, ...);
 AggregateStep *AggregatePlan_NewApplyStep(const char *alias, const char *expr, char **err);
 AggregateStep *AggregatePlan_NewStep(AggregateStepType t);

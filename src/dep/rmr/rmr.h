@@ -69,6 +69,9 @@ int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd)
 
 void MRIterator_Free(MRIterator *it);
 
+/* Wait until the iterators producers are all  done */
+void MRIterator_WaitDone(MRIterator *it);
+
 #endif
 
 size_t MR_NumHosts();

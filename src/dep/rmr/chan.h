@@ -10,8 +10,16 @@ extern void *MRCHANNEL_CLOSED;
 
 MRChannel *MR_NewChannel(size_t max);
 int MRChannel_Push(MRChannel *chan, void *ptr);
+/* Pop an item, wait indefinitely or until the channel is closed for an item */
 void *MRChannel_Pop(MRChannel *chan);
+
+/* Pop an item, waiting for waitMS milliseconds max.
+ * Return MRCHANNEL_CLOSED if the channel is closed*/
 void *MRChannel_PopWait(MRChannel *chan, int waitMS);
+
+/* Safely wait until the channel is closed */
+void MRChannel_WaitClose(MRChannel *chan);
+
 void MRChannel_Close(MRChannel *chan);
 size_t MRChannel_Size(MRChannel *chan);
 size_t MRChannel_MaxSize(MRChannel *chan);

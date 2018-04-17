@@ -19,6 +19,8 @@ typedef struct MRChannel {
   int open;
   pthread_mutex_t lock;
   pthread_cond_t cond;
+  // condition used to wait for closing
+  pthread_cond_t closeCond;
 } MRChannel;
 
 #include "chan.h"
@@ -33,10 +35,20 @@ MRChannel *MR_NewChannel(size_t max) {
       .open = 1,
   };
   pthread_cond_init(&chan->cond, NULL);
+  pthread_cond_init(&chan->closeCond, NULL);
+
   pthread_mutex_init(&chan->lock, NULL);
   return chan;
 }
 
+/* Safely wait until the channel is closed */
+void MRChannel_WaitClose(MRChannel *chan) {
+  pthread_mutex_lock(&chan->lock);
+  if (chan->open) {
+    pthread_cond_wait(&chan->closeCond, &chan->lock);
+  }
+  pthread_mutex_unlock(&chan->lock);
+}
 void MRChannel_Free(MRChannel *chan) {
 
   // TODO: proper drain and stop routine
@@ -149,6 +161,7 @@ void MRChannel_Close(MRChannel *chan) {
   pthread_mutex_unlock(&chan->lock);
   // notify any waiting readers
   pthread_cond_broadcast(&chan->cond);
+  pthread_cond_broadcast(&chan->closeCond);
 }
 
 void *MRChannel_Pop(MRChannel *chan) {

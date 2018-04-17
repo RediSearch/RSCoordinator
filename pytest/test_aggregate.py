@@ -308,7 +308,6 @@ class AggregateTestCase(BaseSearchTestCase):
 
     #@unittest.expectedFailure
     def _testFirstValue(self):
-        return
         res = self.cmd('ft.aggregate', 'games', '@brand:(sony|matias|beyerdynamic|(mad catz))',
                        'GROUPBY', 1, '@brand',
                        'REDUCE', 'FIRST_VALUE', 4, '@title', 'BY', '@price', 'DESC', 'AS', 'top_item',

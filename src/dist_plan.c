@@ -103,7 +103,7 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
   dist->cursor.count = 1000;
   dist->hasCursor = 1;
   dist->verbatim = src->verbatim;
-
+  dist->withSchema = 1;
   // zero the stuff we don't care about in src
   dist->index = src->index;
   src->index = NULL;

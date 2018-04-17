@@ -22,10 +22,39 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
   return 1;
 }
 
+/* Exctract the schema from WITHSCHEMA */
+AggregateSchema net_extractSchema(MRReply *rep) {
+  fprintf(stderr, "EXTRACTING SCHEMA!\n");
+  if (rep == NULL || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {
+    return NULL;
+  }
+
+  AggregateSchema sc = array_new(AggregateProperty, MRReply_Length(rep));
+  for (size_t i = 0; i < MRReply_Length(rep); i++) {
+    MRReply *e = MRReply_ArrayElement(rep, i);
+    if (e && MRReply_Type(e) == MR_REPLY_ARRAY && MRReply_Length(e) == 2) {
+      RSValueType t = RSValue_String;
+      size_t nlen;
+      const char *name = MRReply_String(MRReply_ArrayElement(e, 0), &nlen);
+      if (MRReply_StringEquals(MRReply_ArrayElement(e, 1), "number", 0)) {
+        t = RSValue_Number;
+      } else if (MRReply_StringEquals(MRReply_ArrayElement(e, 1), "array", 0)) {
+        t = RSValue_Array;
+      }
+      sc = array_append(sc, ((AggregateProperty){
+                                .property = strndup(name, nlen),
+                                .kind = Property_Field,
+                                .type = t,
+                            }));
+    }
+    // fprintf(stderr, "%s %s\n", array_tail(sc).property, RSValue_TypeName(array_tail(sc).type));
+  }
+
+  return sc;
+}
+
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-  // printf("Hello! Got cursor reply!!!!\n");
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
-    // printf("We think the reply is done (r=%p), (t=%d)!\n", rep, MRReply_Type(rep));
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
       // printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
@@ -38,6 +67,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   // rewrite and resend the cursor command if needed
   int isDone = 0;
   long long curs = 0;
+
   if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
     if (strcasecmp(cmd->args[0], "_" RS_CURSOR_CMD)) {
       if (!getCursorCommand(cmd, curs)) {
@@ -73,7 +103,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   return REDIS_OK;
 }
 
-RSValue *MRReply_ToValue(MRReply *r) {
+RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
   if (!r) return RS_NullVal();
   RSValue *v = NULL;
   switch (MRReply_Type(r)) {
@@ -81,7 +111,14 @@ RSValue *MRReply_ToValue(MRReply *r) {
     case MR_REPLY_STRING: {
       size_t l;
       char *s = MRReply_String(r, &l);
-      v = RS_StringValT(s, l, RSString_Volatile);
+      // If we need to convert the value to number - do it now...
+      if (convertType == RSValue_Number) {
+        v = RSValue_ParseNumber(s, l);
+
+        if (!v) v = RS_NullVal();
+      } else {
+        v = RS_StringValT(s, l, RSString_Volatile);
+      }
       break;
     }
     case MR_REPLY_INTEGER:
@@ -90,7 +127,7 @@ RSValue *MRReply_ToValue(MRReply *r) {
     case MR_REPLY_ARRAY: {
       RSValue **arr = calloc(MRReply_Length(r), sizeof(*arr));
       for (size_t i = 0; i < MRReply_Length(r); i++) {
-        arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i));
+        arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i), RSValue_String);
       }
       v = RS_ArrVal(arr, MRReply_Length(r));
       break;
@@ -109,6 +146,7 @@ struct netCtx {
   size_t curIdx;
   size_t numReplies;
   uint64_t totalCount;
+  AggregateSchema schema;
   MRIterator *it;
   MRCommand cmd;
   MRCommandGenerator cg;
@@ -134,10 +172,21 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
       }
     } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY ||
              MRReply_Length(nc->current) == 0);
+
+    int totalIdx = 0;
     if (nc->current) {
-      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current, 0));
+      // the first reply returns the schema as the first element, the others the number of results
+      if (MRReply_Type(MRReply_ArrayElement(nc->current, 0)) ==
+          MR_REPLY_ARRAY) {  // <--- this is a schema response
+                             // the total will be at the second element in this case
+        totalIdx++;
+        if (!nc->schema) {
+          nc->schema = net_extractSchema(MRReply_ArrayElement(nc->current, 0));
+        }
+      }
+      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current, totalIdx));
     }
-    nc->curIdx = 1;
+    nc->curIdx = totalIdx + 1;
   }
 
   MRReply *rep = MRReply_ArrayElement(nc->current, nc->curIdx++);
@@ -149,9 +198,19 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
   }
 
   for (int i = 0; i < MRReply_Length(rep); i += 2) {
-    // MRReply_Print(stderr, rep);
     const char *c = MRReply_String(MRReply_ArrayElement(rep, i), NULL);
-    RSValue *v = MRReply_ToValue(MRReply_ArrayElement(rep, i + 1));
+
+    RSValueType t = RSValue_String;  // *p = NULL;
+    MRReply *val = MRReply_ArrayElement(rep, i + 1);
+
+    // If this is a string it might actually be a number, we need to extract the type from the
+    // schema and convert to a number
+    if (MRReply_Type(val) == MR_REPLY_STRING) {
+      AggregateProperty *p = AggregateSchema_Get(nc->schema, c);
+      if (p) t = p->type;
+    }
+    //}
+    RSValue *v = MRReply_ToValue(val, t);
 
     RSFieldMap_Add(&r->fields, c, v);
   }
@@ -166,6 +225,10 @@ void net_Free(ResultProcessor *rp) {
   MRIterator_WaitDone(nc->it);
 
   nc->cg.Free(nc->cg.ctx);
+
+  if (nc->schema) {
+    array_free_ex(nc->schema, free((char *)((AggregateProperty *)ptr)->property));
+  }
 
   if (nc->current) {
     MRReply_Free(nc->current);
@@ -185,6 +248,7 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
   nc->it = NULL;
   nc->cmd = cmd;
   nc->totalCount = 0;
+  nc->schema = NULL;
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
 
   ResultProcessor *proc = NewResultProcessor(NULL, nc);
@@ -223,8 +287,8 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
     }
   }
 
-  // AggregatePlan_Print(remote);
-  // AggregatePlan_Print(ap);
+  AggregatePlan_Print(remote);
+  AggregatePlan_Print(ap);
 
   char **args = AggregatePlan_Serialize(remote);
   MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);

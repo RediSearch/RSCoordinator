@@ -18,7 +18,18 @@ static void __attribute__((constructor)) initAccs(void) {
   }
 }
 
-
+int MRReply_StringEquals(MRReply *r, const char *s, int caseSensitive) {
+  if (!r || MRReply_Type(r) != MR_REPLY_STRING) return 0;
+  size_t len;
+  const char *rs = MRReply_String(r, &len);
+  size_t slen = strlen(s);
+  if (len != slen) return 0;
+  if (caseSensitive) {
+    return !strncmp(s, rs, slen);
+  } else {
+    return !strncasecmp(s, rs, slen);
+  }
+}
 void MRReply_Print(FILE *fp, MRReply *r) {
   if (!r) {
     fprintf(fp, "NULL");
@@ -50,12 +61,9 @@ void MRReply_Print(FILE *fp, MRReply *r) {
   }
 }
 
-
-
-
-int _parseInt(char *str, size_t len, long long *i) {
+int _parseInt(const char *str, size_t len, long long *i) {
   errno = 0; /* To distinguish success/failure after call */
-  char *endptr = str + len;
+  char *endptr = (char *)str + len;
   long long int val = strtoll(str, &endptr, 10);
 
   if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) || (errno != 0 && val == 0)) {
@@ -72,9 +80,9 @@ int _parseInt(char *str, size_t len, long long *i) {
   return 1;
 }
 
-int _parseFloat(char *str, size_t len, double *d) {
+int _parseFloat(const char *str, size_t len, double *d) {
   errno = 0; /* To distinguish success/failure after call */
-  char *endptr = str + len;
+  char *endptr = (char *)str + len;
   double val = strtod(str, &endptr);
 
   /* Check for various possible errors */
@@ -84,7 +92,6 @@ int _parseFloat(char *str, size_t len, double *d) {
   *d = val;
   return 1;
 }
-
 
 int MRReply_ToInteger(MRReply *reply, long long *i) {
 

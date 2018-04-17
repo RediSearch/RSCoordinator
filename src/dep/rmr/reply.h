@@ -34,6 +34,9 @@ static inline size_t MRReply_Length(MRReply *reply) {
   return MRReply__Accessors.getArrayLength(reply);
 }
 
+/* Compare a string reply with a string, optionally case sensitive */
+int MRReply_StringEquals(MRReply *r, const char *s, int caseSensitive);
+
 static inline char *MRReply_String(MRReply *reply, size_t *len) {
   return (char *)MRReply__Accessors.getString(reply, len);
 }

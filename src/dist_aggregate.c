@@ -108,6 +108,7 @@ struct netCtx {
   MRReply *current;
   size_t curIdx;
   size_t numReplies;
+  uint64_t totalCount;
   MRIterator *it;
   MRCommand cmd;
   MRCommandGenerator cg;
@@ -125,15 +126,17 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
   // get the next reply from the channel
   if (!nc->current) {
     do {
-      // printf("Starting parent iterator..\n");
       nc->current = MRIterator_Next(nc->it);
-      // printf("Got new current: %p\n", nc->current);
       if (nc->current == MRITERATOR_DONE) {
         nc->current = NULL;
+
         return RS_RESULT_EOF;
       }
-    } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY);
-
+    } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY ||
+             MRReply_Length(nc->current) == 0);
+    if (nc->current) {
+      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current, 0));
+    }
     nc->curIdx = 1;
   }
 
@@ -158,6 +161,10 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
 void net_Free(ResultProcessor *rp) {
   struct netCtx *nc = rp->ctx.privdata;
 
+  // the iterator might not be done - some producers might still be sending data, let's wait for
+  // them...
+  MRIterator_WaitDone(nc->it);
+
   nc->cg.Free(nc->cg.ctx);
 
   if (nc->current) {
@@ -170,13 +177,14 @@ void net_Free(ResultProcessor *rp) {
 }
 ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCluster *sc) {
 
-  MRCommand_FPrint(stderr, &cmd);
+  //  MRCommand_FPrint(stderr, &cmd);
   struct netCtx *nc = malloc(sizeof(*nc));
   nc->curIdx = 0;
   nc->current = NULL;
   nc->numReplies = 0;
   nc->it = NULL;
   nc->cmd = cmd;
+  nc->totalCount = 0;
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
 
   ResultProcessor *proc = NewResultProcessor(NULL, nc);

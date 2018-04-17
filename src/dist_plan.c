@@ -44,8 +44,8 @@ void AggregatePlan_ExtractImplicitLoad(AggregatePlan *src, AggregatePlan *dist) 
   array_free(dis);
 }
 
-AggregateStep *distributeGroupStep(AggregatePlan *src, AggregatePlan *dist, AggregateStep *step,
-                                   int *cont) {
+static AggregateStep *distributeGroupStep(AggregatePlan *src, AggregatePlan *dist,
+                                          AggregateStep *step, int *cont) {
   AggregateGroupStep *gr = &step->group;
 
   AggregateStep *remoteStep = AggregatePlan_NewStep(AggregateStep_Group);
@@ -89,6 +89,13 @@ AggregateStep *distributeGroupStep(AggregatePlan *src, AggregatePlan *dist, Aggr
   return localStep->next;
 }
 
+static AggregateStep *distributeLimitStep(AggregateStep *step, AggregatePlan *dist) {
+  AggregateStep *l = AggregatePlan_NewStep(AggregateStep_Limit);
+  l->limit = step->limit;
+  AggregatePlan_AddStep(dist, l);
+  return step->next;
+}
+
 AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
   AggregatePlan *dist = malloc(sizeof(*dist));
   AggregateStep *current = src->head;
@@ -107,18 +114,20 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
     switch (current->type) {
       case AggregateStep_Query:
       case AggregateStep_Apply:
-      case AggregateStep_Limit:
       case AggregateStep_Load:
-      case AggregateStep_Sort:
 
         current = AggregatePlan_MoveStep(src, dist, current);
         break;
-
+      case AggregateStep_Limit:
+        current = distributeLimitStep(current, dist);
+        break;
       case AggregateStep_Group:
 
         current = distributeGroupStep(src, dist, current, &cont);
         break;
-
+      case AggregateStep_Sort:
+        cont = 0;
+        current = NULL;
       case AggregateStep_Distribute:
         break;
       case AggregateStep_Dummy:
@@ -139,7 +148,7 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
 }
 
 /* Distribute COUNT into remote count and local SUM */
-int distributeCount(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+static int distributeCount(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   AggregateGroupStep_AddReducer(&remote->group, "COUNT", RSKEY(src->alias), 0);
 
   AggregateGroupStep_AddReducer(&local->group, "SUM", RSKEY(src->alias), 1, PROPVAL(src->alias));
@@ -149,8 +158,8 @@ int distributeCount(AggregateGroupReduce *src, AggregateStep *local, AggregateSt
 
 /* Generic function to distribute an aggregator with a single argument as itself. This is the most
  * common case */
-int distributeSingleArgSelf(AggregateGroupReduce *src, AggregateStep *local,
-                            AggregateStep *remote) {
+static int distributeSingleArgSelf(AggregateGroupReduce *src, AggregateStep *local,
+                                   AggregateStep *remote) {
   // MAX must have a single argument
   if (array_len(src->args) != 1) {
     return 0;
@@ -164,12 +173,13 @@ int distributeSingleArgSelf(AggregateGroupReduce *src, AggregateStep *local,
 }
 
 /* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
-int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+static int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local,
+                              AggregateStep *remote) {
   if (array_len(src->args) != 2) {
     return 0;
   }
   AggregateGroupStep_AddReducer(&remote->group, "RANDOM_SAMPLE", RSKEY(src->alias), 2, src->args[0],
-                                RS_NumVal(1000));
+                                RS_NumVal(200));
 
   AggregateGroupStep_AddReducer(&local->group, "QUANTILE", RSKEY(src->alias), 2,
                                 PROPVAL(src->alias), src->args[1]);
@@ -178,7 +188,8 @@ int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local, Aggregat
 }
 
 /* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
-int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+static int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local,
+                            AggregateStep *remote) {
   if (array_len(src->args) != 1) {
     return 0;
   }
@@ -190,7 +201,7 @@ int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local, AggregateS
   return 1;
 }
 /* Distribute AVG into remote SUM and COUNT, local SUM and SUM + apply SUM/SUM */
-int distributeAvg(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
+static int distributeAvg(AggregateGroupReduce *src, AggregateStep *local, AggregateStep *remote) {
   // AVG must have a single argument
   if (array_len(src->args) != 1) {
     return 0;

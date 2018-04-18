@@ -25,6 +25,10 @@ static int MRConn_SendAuth(MRConn *conn);
 
 /** Detatches from our redis context */
 static redisAsyncContext *detatchFromConn(MRConn *conn, int shouldFree) {
+  if (!conn->conn) {
+    return NULL;
+  }
+
   redisAsyncContext *ac = conn->conn;
   ac->data = NULL;
   conn->conn = NULL;
@@ -356,9 +360,9 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
 
   // fprintf(stderr, "Connect callback! status :%d\n", status);
   // if the connection is not stopped - try to reconnect
-  if (status) {
+  if (status != REDIS_OK) {
     fprintf(stderr, "Error on connect: %s\n", c->errstr);
-    detatchFromConn(conn, 1);  // Free the connection as well - we have an error
+    detatchFromConn(conn, 0);  // Free the connection as well - we have an error
     MRConn_SwitchState(conn, MRConn_Connecting);
     return;
   }
@@ -400,7 +404,7 @@ static MRConn *MR_NewConn(MREndpoint *ep) {
 
 /* Connect to a cluster node. Return REDIS_OK if either connected, or if  */
 static int MRConn_Connect(MRConn *conn) {
-  assert(conn->state == MRConn_Disconnected);
+  assert(!conn->conn);
   // fprintf(stderr, "Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
 
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);

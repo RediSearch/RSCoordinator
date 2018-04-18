@@ -18,6 +18,9 @@ typedef enum {
   /* Connection is trying to connect */
   MRConn_Connecting,
 
+  /* Reconnecting from failed connection attempt */
+  MRConn_Reconnecting,
+
   /* Connected but still needs authentication */
   MRConn_Authenticating,
 
@@ -27,17 +30,36 @@ typedef enum {
   /* Connected, authenticated and active */
   MRConn_Connected,
 
-  /* Stopping due to user request */
-  MRConn_Stopping,
-
-  /* Stopped due to user request */
-  MRConn_Stopped,
+  /* Connection should be freed */
+  MRConn_Freeing
 } MRConnState;
+
+static inline const char *MRConnState_Str(MRConnState state) {
+  switch (state) {
+    case MRConn_Disconnected:
+      return "Disconnected";
+    case MRConn_Connecting:
+      return "Connecting";
+    case MRConn_Reconnecting:
+      return "Reconnecting";
+    case MRConn_Authenticating:
+      return "Authenticating";
+    case MRConn_AuthDenied:
+      return "Auth Denied";
+    case MRConn_Connected:
+      return "Connected";
+    case MRConn_Freeing:
+      return "Freeing";
+    default:
+      return "<UNKNOWN STATE (CRASHES AHEAD!!!!)";
+  }
+}
 
 typedef struct {
   MREndpoint ep;
   redisAsyncContext *conn;
   MRConnState state;
+  void *timer;
 } MRConn;
 
 /* A pool indexes connections by the node id */

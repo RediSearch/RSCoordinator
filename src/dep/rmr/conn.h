@@ -10,7 +10,10 @@
 
 #define MR_CONN_POOL_SIZE 4
 
-/* The state of the connection */
+/*
+ * The state of the connection.
+ * TODO: Not all of these are "real" states
+ */
 typedef enum {
   /* initial state - new connection or disconnected connection due to error */
   MRConn_Disconnected,
@@ -18,14 +21,7 @@ typedef enum {
   /* Connection is trying to connect */
   MRConn_Connecting,
 
-  /* Reconnecting from failed connection attempt */
-  MRConn_Reconnecting,
-
-  /* Connected but still needs authentication */
-  MRConn_Authenticating,
-
-  /* Auth failed state */
-  MRConn_AuthDenied,
+  MRConn_ReAuth,
 
   /* Connected, authenticated and active */
   MRConn_Connected,
@@ -40,12 +36,8 @@ static inline const char *MRConnState_Str(MRConnState state) {
       return "Disconnected";
     case MRConn_Connecting:
       return "Connecting";
-    case MRConn_Reconnecting:
-      return "Reconnecting";
-    case MRConn_Authenticating:
-      return "Authenticating";
-    case MRConn_AuthDenied:
-      return "Auth Denied";
+    case MRConn_ReAuth:
+      return "Re-Authenticating";
     case MRConn_Connected:
       return "Connected";
     case MRConn_Freeing:

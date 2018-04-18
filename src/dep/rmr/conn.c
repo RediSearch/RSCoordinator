@@ -158,7 +158,7 @@ int MRConnManager_Add(MRConnManager *m, const char *id, MREndpoint *ep, int conn
 static int MRConn_StartNewConnection(MRConn *conn) {
   if (conn && conn->state == MRConn_Disconnected) {
     if (MRConn_Connect(conn) == REDIS_ERR) {
-      MRConn_SwitchState(conn, MRConn_Reconnecting);
+      MRConn_SwitchState(conn, MRConn_Connecting);
     }
     return REDIS_OK;
   }
@@ -211,6 +211,10 @@ static void freeConn(MRConn *conn) {
 
 static void signalCallback(uv_timer_t *tm) {
   MRConn *conn = tm->data;
+  if (conn->state == MRConn_Connected) {
+    return;  // Nothing to do here!
+  }
+
   if (conn->state == MRConn_Freeing) {
     if (conn->conn) {
       redisAsyncContext *ac = conn->conn;
@@ -222,15 +226,15 @@ static void signalCallback(uv_timer_t *tm) {
     freeConn(conn);
   }
 
-  if (conn->state == MRConn_AuthDenied) {
+  if (conn->state == MRConn_ReAuth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
       detatchFromConn(conn, 1);
-      MRConn_SwitchState(conn, MRConn_Reconnecting);
+      MRConn_SwitchState(conn, MRConn_Connecting);
     }
-  } else if (conn->state == MRConn_Reconnecting) {
+  } else if (conn->state == MRConn_Connecting) {
     if (MRConn_Connect(conn) == REDIS_ERR) {
       detatchFromConn(conn, 1);
-      MRConn_SwitchState(conn, MRConn_Reconnecting);
+      MRConn_SwitchState(conn, MRConn_Connecting);
     }
   } else {
     abort();  // Unknown state! - Can't transition
@@ -258,21 +262,19 @@ static void MRConn_SwitchState(MRConn *conn, MRConnState nextState) {
 
   switch (nextState) {
     case MRConn_Disconnected:
-    case MRConn_Connecting:
       // We should never *switch* to this state
       abort();
 
-    case MRConn_Reconnecting:
+    case MRConn_Connecting:
       nextTimeout = RSCONN_RECONNECT_TIMEOUT;
       conn->state = nextState;
       break;
 
-    case MRConn_AuthDenied:
+    case MRConn_ReAuth:
       nextTimeout = RSCONN_REAUTH_TIMEOUT;
       conn->state = nextState;
       goto activate_timer;
 
-    case MRConn_Authenticating:
     case MRConn_Connected:
       // "Dummy" states:
       conn->state = nextState;
@@ -300,7 +302,7 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   if (c->err || !r) {
     detatchFromConn(conn, !!r);
-    MRConn_SwitchState(conn, MRConn_Reconnecting);
+    MRConn_SwitchState(conn, MRConn_Connecting);
     return;
   }
 
@@ -308,7 +310,7 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
   /* AUTH error */
   if (rep->type == REDIS_REPLY_ERROR) {
     fprintf(stderr, "Error authenticating: %s\n", rep->str);
-    MRConn_SwitchState(conn, MRConn_AuthDenied);
+    MRConn_SwitchState(conn, MRConn_ReAuth);
     /*we don't try to reconnect to failed connections */
     return;
   }
@@ -324,9 +326,9 @@ static int MRConn_SendAuth(MRConn *conn) {
   // if we failed to send the auth command, start a reconnect loop
   if (redisAsyncCommand(conn->conn, MRConn_AuthCallback, conn, "AUTH %s", conn->ep.auth) ==
       REDIS_ERR) {
+    MRConn_SwitchState(conn, MRConn_ReAuth);
     return REDIS_ERR;
   } else {
-    MRConn_SwitchState(conn, MRConn_Authenticating);
     return REDIS_OK;
   }
 }
@@ -357,7 +359,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   if (status) {
     fprintf(stderr, "Error on connect: %s\n", c->errstr);
     detatchFromConn(conn, 1);  // Free the connection as well - we have an error
-    MRConn_SwitchState(conn, MRConn_Reconnecting);
+    MRConn_SwitchState(conn, MRConn_Connecting);
     return;
   }
 
@@ -365,7 +367,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   if (conn->ep.auth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
       detatchFromConn(conn, 1);
-      MRConn_SwitchState(conn, MRConn_Reconnecting);
+      MRConn_SwitchState(conn, MRConn_Connecting);
     }
   } else {
     MRConn_SwitchState(conn, MRConn_Connected);
@@ -383,7 +385,7 @@ static void MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
   // fprintf(stderr, "Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
   if (conn->state != MRConn_Freeing) {
     detatchFromConn(conn, 0);
-    MRConn_SwitchState(conn, MRConn_Reconnecting);
+    MRConn_SwitchState(conn, MRConn_Connecting);
   } else {
     freeConn(conn);
   }

@@ -20,8 +20,9 @@ static int MRConn_SendAuth(MRConn *conn);
 #define RSCONN_RECONNECT_TIMEOUT 250
 #define RSCONN_REAUTH_TIMEOUT 1000
 
-#define CONN_LOG(conn, fmt, ...) \
-  fprintf(stderr, "[%p,%s]" fmt "\n", conn, MRConnState_Str((conn)->state), __VA_ARGS__)
+#define CONN_LOG(conn, fmt, ...)                                                \
+  fprintf(stderr, "[%p %s:%d %s]" fmt "\n", conn, conn->ep.host, conn->ep.port, \
+          MRConnState_Str((conn)->state), ##__VA_ARGS__)
 
 /** Detatches from our redis context */
 static redisAsyncContext *detatchFromConn(MRConn *conn, int shouldFree) {
@@ -201,8 +202,8 @@ int MRConnManager_Disconnect(MRConnManager *m, const char *id) {
 }
 
 static void MRConn_Stop(MRConn *conn) {
+  CONN_LOG(conn, "Requesting to stop");
   MRConn_SwitchState(conn, MRConn_Freeing);
-  fprintf(stderr, "Stopping conn to %s:%d\n", conn->ep.host, conn->ep.port);
 }
 
 static void freeConn(MRConn *conn) {
@@ -313,7 +314,7 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
   redisReply *rep = r;
   /* AUTH error */
   if (rep->type == REDIS_REPLY_ERROR) {
-    fprintf(stderr, "Error authenticating: %s\n", rep->str);
+    CONN_LOG(conn, "Error authenticating: %s", rep->str);
     MRConn_SwitchState(conn, MRConn_ReAuth);
     /*we don't try to reconnect to failed connections */
     return;
@@ -325,7 +326,7 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 }
 
 static int MRConn_SendAuth(MRConn *conn) {
-  fprintf(stderr, "Authenticating %s:%d\n", conn->ep.host, conn->ep.port);
+  CONN_LOG(conn, "Authenticating...");
 
   // if we failed to send the auth command, start a reconnect loop
   if (redisAsyncCommand(conn->conn, MRConn_AuthCallback, conn, "AUTH %s", conn->ep.auth) ==
@@ -361,7 +362,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   // fprintf(stderr, "Connect callback! status :%d\n", status);
   // if the connection is not stopped - try to reconnect
   if (status != REDIS_OK) {
-    fprintf(stderr, "Error on connect: %s\n", c->errstr);
+    CONN_LOG(conn, "Error on connect: %s", c->errstr);
     detatchFromConn(conn, 0);  // Free the connection as well - we have an error
     MRConn_SwitchState(conn, MRConn_Connecting);
     return;
@@ -409,8 +410,7 @@ static int MRConn_Connect(MRConn *conn) {
 
   redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
   if (c->err) {
-    fprintf(stderr, "Could not connect to node %s:%d: %s\n", conn->ep.host, conn->ep.port,
-            c->errstr);
+    CONN_LOG(conn, "Could not connect to node: %s", c->errstr);
     redisAsyncFree(c);
     return REDIS_ERR;
   }

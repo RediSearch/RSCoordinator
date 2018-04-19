@@ -24,8 +24,8 @@ static int MRConn_SendAuth(MRConn *conn);
   fprintf(stderr, "[%p %s:%d %s]" fmt "\n", conn, conn->ep.host, conn->ep.port, \
           MRConnState_Str((conn)->state), ##__VA_ARGS__)
 
-/** Detatches from our redis context */
-static redisAsyncContext *detatchFromConn(MRConn *conn, int shouldFree) {
+/** detaches from our redis context */
+static redisAsyncContext *detachFromConn(MRConn *conn, int shouldFree) {
   if (!conn->conn) {
     return NULL;
   }
@@ -223,7 +223,7 @@ static void signalCallback(uv_timer_t *tm) {
   if (conn->state == MRConn_Freeing) {
     if (conn->conn) {
       redisAsyncContext *ac = conn->conn;
-      // Detatch the connection
+      // detach the connection
       ac->data = NULL;
       conn->conn = NULL;
       redisAsyncDisconnect(conn->conn);
@@ -233,12 +233,12 @@ static void signalCallback(uv_timer_t *tm) {
 
   if (conn->state == MRConn_ReAuth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
-      detatchFromConn(conn, 1);
+      detachFromConn(conn, 1);
       MRConn_SwitchState(conn, MRConn_Connecting);
     }
   } else if (conn->state == MRConn_Connecting) {
     if (MRConn_Connect(conn) == REDIS_ERR) {
-      detatchFromConn(conn, 1);
+      detachFromConn(conn, 1);
       MRConn_SwitchState(conn, MRConn_Connecting);
     }
   } else {
@@ -306,7 +306,7 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
   }
 
   if (c->err || !r) {
-    detatchFromConn(conn, !!r);
+    detachFromConn(conn, !!r);
     MRConn_SwitchState(conn, MRConn_Connecting);
     return;
   }
@@ -354,7 +354,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
 
   if (conn->state == MRConn_Freeing) {
     // Free the object if successful
-    detatchFromConn(conn, status == REDIS_OK);
+    detachFromConn(conn, status == REDIS_OK);
     freeConn(conn);
     return;
   }
@@ -363,7 +363,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   // if the connection is not stopped - try to reconnect
   if (status != REDIS_OK) {
     CONN_LOG(conn, "Error on connect: %s", c->errstr);
-    detatchFromConn(conn, 0);  // Free the connection as well - we have an error
+    detachFromConn(conn, 0);  // Free the connection as well - we have an error
     MRConn_SwitchState(conn, MRConn_Connecting);
     return;
   }
@@ -371,7 +371,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   // If this is an authenticated connection, we need to atu
   if (conn->ep.auth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
-      detatchFromConn(conn, 1);
+      detachFromConn(conn, 1);
       MRConn_SwitchState(conn, MRConn_Connecting);
     }
   } else {
@@ -389,7 +389,7 @@ static void MRConn_DisconnectCallback(const redisAsyncContext *c, int status) {
 
   // fprintf(stderr, "Disconnected from %s:%d\n", conn->ep.host, conn->ep.port);
   if (conn->state != MRConn_Freeing) {
-    detatchFromConn(conn, 0);
+    detachFromConn(conn, 0);
     MRConn_SwitchState(conn, MRConn_Connecting);
   } else {
     freeConn(conn);

@@ -226,9 +226,10 @@ static void signalCallback(uv_timer_t *tm) {
       // detach the connection
       ac->data = NULL;
       conn->conn = NULL;
-      redisAsyncDisconnect(conn->conn);
+      redisAsyncDisconnect(ac);
     }
     freeConn(conn);
+    return;
   }
 
   if (conn->state == MRConn_ReAuth) {
@@ -345,7 +346,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     if (status == REDIS_OK) {
       // We need to free it here because we will not be getting a disconnect
       // callback.
-      redisAsyncDisconnect(c);
+      redisAsyncFree(c);
     } else {
       // Will be freed anyway
     }

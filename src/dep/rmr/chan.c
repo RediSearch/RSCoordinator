@@ -158,10 +158,11 @@ return_null:
 void MRChannel_Close(MRChannel *chan) {
   pthread_mutex_lock(&chan->lock);
   chan->open = 0;
-  pthread_mutex_unlock(&chan->lock);
   // notify any waiting readers
   pthread_cond_broadcast(&chan->cond);
   pthread_cond_broadcast(&chan->closeCond);
+
+  pthread_mutex_unlock(&chan->lock);
 }
 
 void *MRChannel_Pop(MRChannel *chan) {

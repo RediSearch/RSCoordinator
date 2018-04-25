@@ -288,8 +288,8 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
     }
   }
 
-  AggregatePlan_Print(remote);
-  AggregatePlan_Print(ap);
+  // AggregatePlan_Print(remote);
+  // AggregatePlan_Print(ap);
 
   char **args = AggregatePlan_Serialize(remote);
   MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);

@@ -24,7 +24,6 @@ int getCursorCommand(MRCommand *cmd, long long cursorId) {
 
 /* Exctract the schema from WITHSCHEMA */
 AggregateSchema net_extractSchema(MRReply *rep) {
-  fprintf(stderr, "EXTRACTING SCHEMA!\n");
   if (rep == NULL || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {
     return NULL;
   }
@@ -74,15 +73,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
         isDone = 1;
       }
     }
-    // try to resend
-    if (!isDone) {
-      if (REDIS_ERR == MRIteratorCallback_ResendCommand(ctx, cmd)) {
-        // MRReply_Free(rep);
 
-        MRIteratorCallback_Done(ctx, 1);
-        return REDIS_ERR;
-      }
-    }
   } else {
     isDone = 1;
   }
@@ -95,8 +86,17 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
     // MRReply_Free(arr);
     isDone = 1;
   }
+
   if (isDone) {
     MRIteratorCallback_Done(ctx, 0);
+  } else {
+    // resend command
+    if (REDIS_ERR == MRIteratorCallback_ResendCommand(ctx, cmd)) {
+      // MRReply_Free(rep);
+
+      MRIteratorCallback_Done(ctx, 1);
+      return REDIS_ERR;
+    }
   }
   /// MRReply_Free(rep);
 
@@ -233,6 +233,7 @@ void net_Free(ResultProcessor *rp) {
   if (nc->current) {
     MRReply_Free(nc->current);
   }
+
   // free(nc->replies);
   if (nc->it) MRIterator_Free(nc->it);
   free(nc);

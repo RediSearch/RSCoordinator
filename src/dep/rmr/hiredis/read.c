@@ -439,6 +439,8 @@ void redisReaderFree(redisReader *r) {
         r->fn->freeObject(r->reply);
     if (r->buf != NULL)
         sdsfree(r->buf);
+    if (r->freePrivdata != NULL)
+        r->freePrivdata(r->privdata);
     free(r);
 }
 

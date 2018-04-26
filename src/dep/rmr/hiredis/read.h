@@ -107,6 +107,8 @@ typedef struct redisReader {
 
     redisReplyObjectFunctions *fn;
     void *privdata;
+    /* Function to free the privdata pointer */
+    void (*freePrivdata)(void *);
 } redisReader;
 
 /* Public API for the protocol parser. */

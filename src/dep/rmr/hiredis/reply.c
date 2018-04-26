@@ -59,6 +59,7 @@ static void initBlockAllocator(rootBlockReply *alloc) {
 void redisReaderEnableBlockAllocator(redisReader *r) {
     assert(r->privdata == NULL);
     r->privdata = calloc(1, sizeof(v2Privdata));
+    r->freePrivdata = free;
 }
 
 static rootBlockReply *getRootBlkalloc(const redisReadTask *task, int type) {
@@ -118,11 +119,11 @@ static redisReplyV2 *assignParentChild(const redisReadTask *task, redisReplyV2 *
 
 static void *createStringV2(const redisReadTask *task, char *str, size_t len) {
     redisReplyV2 *r;
-    rootBlockReply *root = getRootBlkalloc(task, REDIS_REPLY_STRING);
     if (len == 0 && task->type == REDIS_REPLY_STRING) {
         return assignParentChild(task, &emptyStringReply_g);
     }
 
+    rootBlockReply *root = getRootBlkalloc(task, REDIS_REPLY_STRING);
     r = createV2Reply(root, task);
     r->type |= task->type;
 
@@ -156,7 +157,6 @@ static void *createArrayV2(const redisReadTask *task, int size) {
     redisReplyV2 *resp;
     if (root && task->parent == NULL) {
         resp = &root->head;
-        resp->type |= REDIS_REPLY_ARRAY;
     } else {
         resp = createV2Reply(root, task);
     }
@@ -230,6 +230,9 @@ static void freeV2Reply(void *p) {
                 BlkAlloc_FreeAll(&root->allocs[ii], NULL, NULL, 0);
             }
             free(root);
+        } else {
+            printf("wtf tried to free non-root blkalloc reply %p. flags: 0x%x\n", p, resp->type);
+            abort();
         }
         /* Part of a block-allocated tree. Should not be freed */
         return;
@@ -252,7 +255,7 @@ static void freeV2Reply(void *p) {
             }
             free(resp->value.array.element);
         }
-    } else if (type == REDIS_REPLY_STRING) {
+    } else if (type == REDIS_REPLY_STRING || type == REDIS_REPLY_STATUS || type == REDIS_REPLY_ERROR) {
         if (!(resp->type & REDIS_REPLY_FLAG_TINY)) {
             free(resp->value.str.str);
         }

@@ -232,7 +232,7 @@ static void freeV2Reply(void *p) {
             free(root);
         } else {
             printf("wtf tried to free non-root blkalloc reply %p. flags: 0x%x\n", p, resp->type);
-            abort();
+            // abort();
         }
         /* Part of a block-allocated tree. Should not be freed */
         return;

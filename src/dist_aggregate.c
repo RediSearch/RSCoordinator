@@ -9,18 +9,10 @@
 #include "dist_plan.h"
 #include <err.h>
 
-/* Get cursor command using a cursor id and an existing aggregate command */
-int getCursorCommand(MRCommand *cmd, long long cursorId) {
-  if (cmd->num < 2 || !cursorId) return 0;
-
-  char buf[128];
-  sprintf(buf, "%lld", cursorId);
-  const char *idx = cmd->args[1];
-  MRCommand newCmd = MR_NewCommand(4, "_" RS_CURSOR_CMD, "READ", idx, buf);
-  MRCommand_Free(cmd);
-  *cmd = newCmd;
-  return 1;
-}
+// Defined as a macro to determine if we're having issues in replies being used
+// after free. Simply set the macro to a noop, and if the problem goes away, we
+// know it's a use-after-free issue
+#define FREE_REPLY(r) MRReply_Free(r)
 
 /* Exctract the schema from WITHSCHEMA */
 AggregateSchema net_extractSchema(MRReply *rep) {
@@ -52,38 +44,53 @@ AggregateSchema net_extractSchema(MRReply *rep) {
   return sc;
 }
 
+/* Get cursor command using a cursor id and an existing aggregate command */
+static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
+  long long cursorId;
+  if (!MRReply_ToInteger(MRReply_ArrayElement(prev, 1), &cursorId)) {
+    // Invalid format?!
+    return 0;
+  }
+  if (cursorId == 0) {
+    // Cursor was set to 0, end of reply chain.
+    return 0;
+  }
+  if (cmd->num < 2) {
+    return 0;  // Invalid command!??
+  }
+
+  char buf[128];
+  sprintf(buf, "%lld", cursorId);
+  const char *idx = cmd->args[1];
+  MRCommand newCmd = MR_NewCommand(4, "_" RS_CURSOR_CMD, "READ", idx, buf);
+  MRCommand_Free(cmd);
+  *cmd = newCmd;
+  return 1;
+}
+
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
       // printf("Error is '%s'\n", MRReply_String(rep, NULL));
+    } else {
+      printf("Unknown reply format!\n");
     }
-    MRReply_Free(rep);
+    FREE_REPLY(rep);
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
-  // printf("Continuing processing...\n");
 
   // rewrite and resend the cursor command if needed
-  int isDone = 0;
-  long long curs = 0;
-
-  if (MRReply_ToInteger(MRReply_ArrayElement(rep, 1), &curs) && curs > 0) {
-    if (strcasecmp(cmd->args[0], "_" RS_CURSOR_CMD)) {
-      if (!getCursorCommand(cmd, curs)) {
-        isDone = 1;
-      }
-    }
-
-  } else {
-    isDone = 1;
-  }
+  int rc = REDIS_OK;
+  int isDone = !getCursorCommand(rep, cmd);
 
   // Push the reply down the chain
   MRReply *arr = MRReply_ArrayElement(rep, 0);
   if (arr && MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 1) {
-    MRIteratorCallback_AddReply(ctx, arr);
+    MRIteratorCallback_AddReply(ctx, rep);
+    // User code now owns the reply, so we can't free it here ourselves!
+    rep = NULL;
   } else {
-    // MRReply_Free(arr);
     isDone = 1;
   }
 
@@ -92,15 +99,16 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   } else {
     // resend command
     if (REDIS_ERR == MRIteratorCallback_ResendCommand(ctx, cmd)) {
-      // MRReply_Free(rep);
-
       MRIteratorCallback_Done(ctx, 1);
-      return REDIS_ERR;
+      rc = REDIS_ERR;
     }
   }
-  /// MRReply_Free(rep);
 
-  return REDIS_OK;
+  if (rep != NULL) {
+    // If rep has been set to NULL, it means the callback has been invoked
+    FREE_REPLY(rep);
+  }
+  return rc;
 }
 
 RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
@@ -141,8 +149,12 @@ RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
 }
 
 struct netCtx {
-  // MRReply **replies;
-  MRReply *current;
+  struct {
+    MRReply *root;  // Root reply. We need to free this when done with the rows
+    MRReply *rows;  // Array containing reply rows for quick access
+  } current;
+
+  MRReply *currentRoot;
   size_t curIdx;
   size_t numReplies;
   uint64_t totalCount;
@@ -152,44 +164,61 @@ struct netCtx {
   MRCommandGenerator cg;
 };
 
+static int getNextReply(struct netCtx *nc) {
+  while (1) {
+    MRReply *root = MRIterator_Next(nc->it);
+    if (root == MRITERATOR_DONE) {
+      // No more replies
+      nc->current.root = NULL;
+      nc->current.rows = NULL;
+      return 0;
+    }
+
+    MRReply *rows = MRReply_ArrayElement(root, 0);
+    if (rows == NULL || MRReply_Type(rows) != MR_REPLY_ARRAY || MRReply_Length(rows) == 0) {
+      // printf("Have reply (%p), but something is wrong..\n", rows);
+      // printf("Type: %d\n", MRReply_Type(rows));
+      // printf("Length: %d\n", MRReply_Length(rows));
+      FREE_REPLY(root);
+      continue;
+    }
+    nc->current.root = root;
+    nc->current.rows = rows;
+    return 1;
+  }
+}
+
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
   // printf("Hello!\n");
   struct netCtx *nc = ctx->privdata;
   // if we've consumed the last reply - free it
-  if (nc->current && nc->curIdx == MRReply_Length(nc->current)) {
-    MRReply_Free(nc->current);
-    nc->current = NULL;
+  if (nc->current.rows && nc->curIdx == MRReply_Length(nc->current.rows)) {
+    FREE_REPLY(nc->current.root);
+    nc->current.root = nc->current.rows = NULL;
   }
 
   // get the next reply from the channel
-  if (!nc->current) {
-    do {
-      nc->current = MRIterator_Next(nc->it);
-      if (nc->current == MRITERATOR_DONE) {
-        nc->current = NULL;
-
-        return RS_RESULT_EOF;
-      }
-    } while (!nc->current || MRReply_Type(nc->current) != MR_REPLY_ARRAY ||
-             MRReply_Length(nc->current) == 0);
-
+  if (!nc->current.root) {
+    if (!getNextReply(nc)) {
+      return RS_RESULT_EOF;
+    }
     int totalIdx = 0;
-    if (nc->current) {
-      // the first reply returns the schema as the first element, the others the number of results
-      if (MRReply_Type(MRReply_ArrayElement(nc->current, 0)) ==
-          MR_REPLY_ARRAY) {  // <--- this is a schema response
-                             // the total will be at the second element in this case
-        totalIdx++;
-        if (!nc->schema) {
-          nc->schema = net_extractSchema(MRReply_ArrayElement(nc->current, 0));
-        }
-      }
-      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current, totalIdx));
+    // the first reply returns the schema as the first element, the others the number of results
+    if (MRReply_Type(MRReply_ArrayElement(nc->current.rows, 0)) ==
+        MR_REPLY_ARRAY) {  // <--- this is a schema response
+                           // the total will be at the second element in this case
+      totalIdx++;
+      if (!nc->schema) {
+        // This seems to work
+        nc->schema = net_extractSchema(MRReply_ArrayElement(nc->current.rows, 0));
+      }  // Otherwise another node probably gave us a schema already.
+
+      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current.rows, totalIdx));
     }
     nc->curIdx = totalIdx + 1;
   }
 
-  MRReply *rep = MRReply_ArrayElement(nc->current, nc->curIdx++);
+  MRReply *rep = MRReply_ArrayElement(nc->current.rows, nc->curIdx++);
 
   if (r->fields) {
     RSFieldMap_Reset(r->fields);
@@ -230,8 +259,8 @@ void net_Free(ResultProcessor *rp) {
     array_free_ex(nc->schema, free((char *)((AggregateProperty *)ptr)->property));
   }
 
-  if (nc->current) {
-    MRReply_Free(nc->current);
+  if (nc->current.root) {
+    FREE_REPLY(nc->current.root);
   }
 
   // free(nc->replies);
@@ -244,7 +273,8 @@ ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCl
   //  MRCommand_FPrint(stderr, &cmd);
   struct netCtx *nc = malloc(sizeof(*nc));
   nc->curIdx = 0;
-  nc->current = NULL;
+  nc->current.root = NULL;
+  nc->current.rows = NULL;
   nc->numReplies = 0;
   nc->it = NULL;
   nc->cmd = cmd;

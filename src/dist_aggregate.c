@@ -12,7 +12,7 @@
 // Defined as a macro to determine if we're having issues in replies being used
 // after free. Simply set the macro to a noop, and if the problem goes away, we
 // know it's a use-after-free issue
-#define FREE_REPLY(r) MRReply_Free(r)
+#define MRReply_Free(r) MRReply_Free(r)
 
 /* Exctract the schema from WITHSCHEMA */
 AggregateSchema net_extractSchema(MRReply *rep) {
@@ -72,10 +72,8 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
       // printf("Error is '%s'\n", MRReply_String(rep, NULL));
-    } else {
-      printf("Unknown reply format!\n");
     }
-    FREE_REPLY(rep);
+    MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
     return REDIS_ERR;
   }
@@ -106,7 +104,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
 
   if (rep != NULL) {
     // If rep has been set to NULL, it means the callback has been invoked
-    FREE_REPLY(rep);
+    MRReply_Free(rep);
   }
   return rc;
 }
@@ -176,10 +174,7 @@ static int getNextReply(struct netCtx *nc) {
 
     MRReply *rows = MRReply_ArrayElement(root, 0);
     if (rows == NULL || MRReply_Type(rows) != MR_REPLY_ARRAY || MRReply_Length(rows) == 0) {
-      // printf("Have reply (%p), but something is wrong..\n", rows);
-      // printf("Type: %d\n", MRReply_Type(rows));
-      // printf("Length: %d\n", MRReply_Length(rows));
-      FREE_REPLY(root);
+      MRReply_Free(root);
       continue;
     }
     nc->current.root = root;
@@ -189,11 +184,10 @@ static int getNextReply(struct netCtx *nc) {
 }
 
 static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
-  // printf("Hello!\n");
   struct netCtx *nc = ctx->privdata;
   // if we've consumed the last reply - free it
   if (nc->current.rows && nc->curIdx == MRReply_Length(nc->current.rows)) {
-    FREE_REPLY(nc->current.root);
+    MRReply_Free(nc->current.root);
     nc->current.root = nc->current.rows = NULL;
   }
 
@@ -260,10 +254,9 @@ void net_Free(ResultProcessor *rp) {
   }
 
   if (nc->current.root) {
-    FREE_REPLY(nc->current.root);
+    MRReply_Free(nc->current.root);
   }
 
-  // free(nc->replies);
   if (nc->it) MRIterator_Free(nc->it);
   free(nc);
   free(rp);

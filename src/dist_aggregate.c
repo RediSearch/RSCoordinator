@@ -9,11 +9,6 @@
 #include "dist_plan.h"
 #include <err.h>
 
-// Defined as a macro to determine if we're having issues in replies being used
-// after free. Simply set the macro to a noop, and if the problem goes away, we
-// know it's a use-after-free issue
-#define MRReply_Free(r) MRReply_Free(r)
-
 /* Exctract the schema from WITHSCHEMA */
 AggregateSchema net_extractSchema(MRReply *rep) {
   if (rep == NULL || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {

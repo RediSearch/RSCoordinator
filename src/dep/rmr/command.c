@@ -23,6 +23,7 @@ struct mrCommandConf __commandConfig[] = {
 
     // index commands
     {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.ALTER", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1, 1},

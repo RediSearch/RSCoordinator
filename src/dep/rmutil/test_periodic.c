@@ -12,14 +12,15 @@ void timerCb(RedisModuleCtx *ctx, void *p) {
 
 int testPeriodic() {
   int x = 0;
-  struct RMUtilTimer *tm = RMUtil_NewPeriodicTimer(
-      timerCb, NULL, &x, (struct timespec){.tv_sec = 0, .tv_nsec = 10000000});
+  struct RMUtilTimer *tm =
+      RMUtil_NewPeriodicTimer(timerCb, &x, (struct timespec){.tv_sec = 0, .tv_nsec = 10000000});
 
   sleep(1);
 
-  ASSERT_EQUAL(0, RMUtilTimer_Terminate(tm));
+  ASSERT_EQUAL(0, RMUtilTimer_Stop(tm));
   ASSERT(x > 0);
   ASSERT(x <= 100);
+  RMUtilTimer_Free(tm);
   return 0;
 }
 

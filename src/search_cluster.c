@@ -10,6 +10,16 @@ SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize
   return ret;
 }
 
+SearchCluster __searchCluster;
+
+SearchCluster *GetSearchCluster() {
+  return &__searchCluster;
+}
+
+void InitGlobalSearchCluster(size_t size, const char **table, size_t tableSize) {
+  __searchCluster = NewSearchCluster(size, table, tableSize);
+}
+
 inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }
@@ -90,7 +100,8 @@ size_t SCCommandMuxIterator_Len(void *ctx) {
 
 void SCCommandMuxIterator_Free(void *ctx) {
   SCCommandMuxIterator *it = ctx;
-  MRCommand_Free(it->cmd);
+  if (it->cmd) MRCommand_Free(it->cmd);
+  it->cmd = NULL;
   free(it);
 }
 

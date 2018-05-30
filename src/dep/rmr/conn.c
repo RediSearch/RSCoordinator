@@ -1,4 +1,5 @@
 #include "conn.h"
+#include "reply.h"
 #include "hiredis/adapters/libuv.h"
 
 #include <uv.h>
@@ -314,8 +315,8 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   redisReply *rep = r;
   /* AUTH error */
-  if (rep->type == REDIS_REPLY_ERROR) {
-    CONN_LOG(conn, "Error authenticating: %s", rep->str);
+  if (REDIS_REPLY_GETTYPE(&c->c, rep) == REDIS_REPLY_ERROR) {
+    CONN_LOG(conn, "Error authenticating: %s", REDIS_REPLY_GETSTRZ(&c->c, rep));
     MRConn_SwitchState(conn, MRConn_ReAuth);
     /*we don't try to reconnect to failed connections */
     return;
@@ -409,7 +410,19 @@ static int MRConn_Connect(MRConn *conn) {
   assert(!conn->conn);
   // fprintf(stderr, "Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
 
-  redisAsyncContext *c = redisAsyncConnect(conn->ep.host, conn->ep.port);
+  redisOptions options = {.type = REDIS_CONN_TCP,
+                          .options = REDIS_OPT_NOFREEREPLIES,
+                          .endpoint.tcp = {.ip = conn->ep.host, .port = conn->ep.port}};
+
+  if (MRReply_UseV2) {
+    options.reader = redisReaderCreateWithFunctions(&redisReplyV2Functions);
+    options.accessors = &redisReplyV2Accessors;
+    if (MRReply_UseBlockAlloc) {
+      redisReaderEnableBlockAllocator(options.reader);
+    }
+  }
+
+  redisAsyncContext *c = redisAsyncConnectWithOptions(&options);
   if (c->err) {
     CONN_LOG(conn, "Could not connect to node: %s", c->errstr);
     redisAsyncFree(c);

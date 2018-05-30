@@ -1,3 +1,4 @@
+#define RMR_C__
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,14 +16,12 @@
 #include "rmr.h"
 #include "redismodule.h"
 #include "cluster.h"
-
-/* Copy a redisReply object. Defined in reply.c */
-MRReply *MRReply_Duplicate(redisReply *rep);
+#include "chan.h"
+#include "rq.h"
 
 /* Currently a single cluster is supported */
 static MRCluster *cluster_g = NULL;
-
-static int concurrentRequests_g = 0;
+static MRWorkQueue *rq_g = NULL;
 
 #define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 50)
 /* Coordination request timeout */
@@ -100,7 +99,7 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
 
 static void freePrivDataCB(void *p) {
   // printf("FreePrivData called!\n");
-  if (concurrentRequests_g > 0) concurrentRequests_g--;
+  RQ_Done(rq_g);
   if (p) {
     MRCtx *mc = p;
     MRCtx_Free(mc);
@@ -126,7 +125,6 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 /* The callback called from each fanout request to aggregate their replies */
 static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   MRCtx *ctx = privdata;
-
   struct timespec now;
   clock_gettime(CLOCK_REALTIME, &now);
 
@@ -137,14 +135,12 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
     ctx->numErrored++;
 
   } else {
-    redisReply *rp = (redisReply *)MRReply_Duplicate(r);
-
     /* If needed - double the capacity for replies */
     if (ctx->numReplied == ctx->repliesCap) {
       ctx->repliesCap *= 2;
       ctx->replies = realloc(ctx->replies, ctx->repliesCap * sizeof(MRReply *));
     }
-    ctx->replies[ctx->numReplied++] = (MRReply *)rp;
+    ctx->replies[ctx->numReplied++] = r;
   }
 
   // printf("Unblocking, replied %d, errored %d out of %d\n", ctx->numReplied, ctx->numErrored,
@@ -164,84 +160,15 @@ struct MRRequestCtx {
   MRCommand *cmds;
   int numCmds;
   void (*cb)(struct MRRequestCtx *);
-  struct MRRequestCtx *next;
 };
 
-typedef struct {
-  struct MRRequestCtx *head;
-  struct MRRequestCtx *tail;
-
-  size_t sz;
-  uv_mutex_t lock;
-  uv_async_t async;
-} MRRequestQueue;
-
-static void RQ_Push(MRRequestQueue *q, struct MRRequestCtx *req) {
-  uv_mutex_lock(&q->lock);
-  // append the request to the tail of the list
-  if (q->tail) {
-    // make it the next of the current tail
-    q->tail->next = req;
-    // set a new tail
-    q->tail = req;
-  } else {  // no tail means no head - empty queue
-    q->head = q->tail = req;
-  }
-  q->sz++;
-
-  uv_mutex_unlock(&q->lock);
-  uv_async_send(&q->async);
+void requestCb(void *p) {
+  struct MRRequestCtx *ctx = p;
+  ctx->cb(ctx);
 }
-
-static struct MRRequestCtx *RQ_Pop(MRRequestQueue *q) {
-  uv_mutex_lock(&q->lock);
-  // fprintf(stderr, "%d %zd\n", concurrentRequests_g, q->sz);
-
-  if (q->head == NULL) {
-    uv_mutex_unlock(&q->lock);
-    return NULL;
-  }
-  if (concurrentRequests_g > MAX_CONCURRENT_REQUESTS) {
-    uv_mutex_unlock(&q->lock);
-    // If the queue is full we need to wake up the drain callback
-    uv_async_send(&q->async);
-
-    return NULL;
-  }
-
-  struct MRRequestCtx *r = q->head;
-  q->head = r->next;
-  if (!q->head) q->tail = NULL;
-  q->sz--;
-
-  uv_mutex_unlock(&q->lock);
-  return r;
-}
-
-static void rqAsyncCb(uv_async_t *async) {
-  MRRequestQueue *q = async->data;
-  struct MRRequestCtx *req;
-  while (NULL != (req = RQ_Pop(q))) {
-    concurrentRequests_g++;
-    req->cb(req);
-  }
-}
-
-static void RQ_Init(MRRequestQueue *q, size_t cap) {
-  q->sz = 0;
-  q->head = NULL;
-  q->tail = NULL;
-  uv_mutex_init(&q->lock);
-  // TODO: Add close cb
-  uv_async_init(uv_default_loop(), &q->async, rqAsyncCb);
-  q->async.data = q;
-}
-
-MRRequestQueue rq_g;
 
 /* start the event loop side thread */
 static void sideThread(void *arg) {
-  RQ_Init(&rq_g, 8);
 
   // uv_loop_configure(uv_default_loop(), UV_LOOP_BLOCK_SIGNAL)
   while (1) {
@@ -259,6 +186,7 @@ void MR_Init(MRCluster *cl, long long timeoutMS) {
 
   cluster_g = cl;
   timeout_g = timeoutMS;
+  rq_g = RQ_New(8, MAX_CONCURRENT_REQUESTS);
 
   // MRCluster_ConnectAll(cluster_g);
   printf("Creating thread...\n");
@@ -345,10 +273,8 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
-  rc->next = NULL;
-
   rc->cb = uvFanoutRequest;
-  RQ_Push(&rq_g, rc);
+  RQ_Push(rq_g, requestCb, rc);
   return REDIS_OK;
 }
 
@@ -358,7 +284,6 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
   rc->f = reducer;
   rc->cmds = calloc(cmds.Len(cmds.ctx), sizeof(MRCommand));
   rc->numCmds = cmds.Len(cmds.ctx);
-  rc->next = NULL;
 
   // copy the commands from the iterator to the conext's array
   for (int i = 0; i < rc->numCmds; i++) {
@@ -372,7 +297,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds) {
                                           freePrivDataCB, timeout_g);
 
   rc->cb = uvMapRequest;
-  RQ_Push(&rq_g, rc);
+  RQ_Push(rq_g, requestCb, rc);
 
   return REDIS_OK;
 }
@@ -385,13 +310,11 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
-  rc->next = NULL;
-
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
                                           freePrivDataCB, timeout_g);
 
   rc->cb = uvMapRequest;
-  RQ_Push(&rq_g, rc);
+  RQ_Push(rq_g, requestCb, rc);
   return REDIS_OK;
 }
 
@@ -403,7 +326,7 @@ size_t MR_NumHosts() {
 /* on-loop update topology request. This can't be done from the main thread */
 static void uvUpdateTopologyRequest(struct MRRequestCtx *mc) {
   MRCLuster_UpdateTopology(cluster_g, (MRClusterTopology *)mc->ctx);
-  concurrentRequests_g--;
+  RQ_Done(rq_g);
   // fprintf(stderr, "topo update: conc requests: %d\n", concurrentRequests_g);
   free(mc);
 }
@@ -417,8 +340,141 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
   struct MRRequestCtx *rc = calloc(1, sizeof(*rc));
   rc->ctx = newTopo;
   rc->cb = uvUpdateTopologyRequest;
-  rc->next = NULL;
-
-  RQ_Push(&rq_g, rc);
+  RQ_Push(rq_g, requestCb, rc);
   return REDIS_OK;
+}
+
+struct MRIteratorCallbackCtx;
+
+typedef int (*MRIteratorCallback)(struct MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd);
+
+typedef struct MRIteratorCtx {
+  MRCluster *cluster;
+  MRChannel *chan;
+  void *privdata;
+  MRIteratorCallback cb;
+  int pending;
+} MRIteratorCtx;
+
+typedef struct MRIteratorCallbackCtx {
+  MRIteratorCtx *ic;
+  MRCommand cmd;
+} MRIteratorCallbackCtx;
+
+typedef struct MRIterator {
+  MRIteratorCtx ctx;
+  MRIteratorCallbackCtx *cbxs;
+  size_t len;
+} MRIterator;
+
+int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error);
+void MRIterator_Free(MRIterator *it);
+
+static void mrIteratorRedisCB(redisAsyncContext *c, void *r, void *privdata) {
+  MRIteratorCallbackCtx *ctx = privdata;
+  if (!r) {
+    MRIteratorCallback_Done(ctx, 1);
+    // ctx->numErrored++;
+    // TODO: report error
+  } else {
+    ctx->ic->cb(ctx, r, &ctx->cmd);
+  }
+}
+
+int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd) {
+  ctx->cmd = *cmd;
+  return MRCluster_SendCommand(ctx->ic->cluster, MRCluster_MastersOnly, cmd, mrIteratorRedisCB,
+                               ctx);
+}
+
+void *MRITERATOR_DONE = "MRITERATOR_DONE";
+
+int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error) {
+  if (--ctx->ic->pending <= 0) {
+    // fprintf(stderr, "FINISHED iterator, error? %d pending %d\n", error, ctx->ic->pending);
+    RQ_Done(rq_g);
+
+    MRChannel_Close(ctx->ic->chan);
+    return 0;
+  }
+  // fprintf(stderr, "Done iterator, error? %d pending %d\n", error, ctx->ic->pending);
+
+  return 1;
+}
+
+int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
+  return MRChannel_Push(ctx->ic->chan, rep);
+}
+
+void iterStartCb(void *p) {
+  MRIterator *it = p;
+  for (size_t i = 0; i < it->len; i++) {
+    // fprintf(stderr, "Starting command %zd/%zd\n", i, it->len);
+    MRCommand_FPrint(stderr, &it->cbxs[i].cmd);
+    if (MRCluster_SendCommand(it->ctx.cluster, MRCluster_MastersOnly, &it->cbxs[i].cmd,
+                              mrIteratorRedisCB, &it->cbxs[i]) == REDIS_ERR) {
+      // fprintf(stderr, "Could not send command!\n");
+      MRIteratorCallback_Done(&it->cbxs[i], 1);
+    }
+  }
+}
+
+MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privdata) {
+
+  MRIterator *ret = malloc(sizeof(*ret));
+  size_t len = cg.Len(cg.ctx);
+  *ret = (MRIterator){
+      .ctx =
+          {
+              .cluster = cluster_g,
+              .chan = MR_NewChannel(0),
+              .privdata = privdata,
+              .cb = cb,
+              .pending = 0,
+          },
+      .cbxs = calloc(len, sizeof(MRIteratorCallbackCtx)),
+      .len = len,
+
+  };
+  for (size_t i = 0; i < len; i++) {
+
+    ret->cbxs[i].ic = &ret->ctx;
+    if (!cg.Next(cg.ctx, &(ret->cbxs[i].cmd))) {
+      ret->len = i;
+      break;
+    }
+  }
+
+  // Could not create command, probably invalid cluster
+  if (ret->len == 0) {
+    MRIterator_Free(ret);
+    return NULL;
+  }
+  ret->ctx.pending = ret->len;
+
+  RQ_Push(rq_g, iterStartCb, ret);
+  return ret;
+}
+
+MRReply *MRIterator_Next(MRIterator *it) {
+
+  void *p = MRChannel_Pop(it->ctx.chan);
+  // fprintf(stderr, "POP: %s\n", p == MRCHANNEL_CLOSED ? "CLOSED" : "ITER");
+  if (p == MRCHANNEL_CLOSED) {
+    return MRITERATOR_DONE;
+  }
+  return p;
+}
+
+void MRIterator_WaitDone(MRIterator *it) {
+  MRChannel_WaitClose(it->ctx.chan);
+}
+void MRIterator_Free(MRIterator *it) {
+  if (!it) return;
+  for (size_t i = 0; i < it->len; i++) {
+    MRCommand_Free(&it->cbxs[i].cmd);
+  }
+  MRChannel_Free(it->ctx.chan);
+  free(it->cbxs);
+  free(it);
 }

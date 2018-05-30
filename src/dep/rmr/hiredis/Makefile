@@ -3,7 +3,7 @@
 # Copyright (C) 2010-2011 Pieter Noordhuis <pcnoordhuis at gmail dot com>
 # This file is released under the BSD license, see the COPYING file
 
-OBJ=net.o hiredis.o sds.o async.o read.o
+OBJ=net.o hiredis.o sds.o async.o read.o reply.o block_alloc.o
 EXAMPLES=hiredis-example hiredis-example-libevent hiredis-example-libev hiredis-example-glib
 TESTS=hiredis-test
 LIBNAME=libhiredis
@@ -66,9 +66,23 @@ ifeq ($(uname_S),Darwin)
   DYLIB_MAKE_CMD=$(CC) -shared -Wl,-install_name,$(DYLIB_MINOR_NAME) -o $(DYLIBNAME) $(LDFLAGS)
 endif
 
-all: $(DYLIBNAME) $(STLIBNAME) hiredis-test $(PKGCONFNAME)
+all: $(DYLIBNAME) $(STLIBNAME) hiredis-test $(PKGCONFNAME) bench
 
 # Deps (use make dep to generate this)
+
+async.o: async.c fmacros.h async.h hiredis.h read.h reply.h block_alloc.h \
+	  sds.h net.h dict.c dict.h
+block_alloc.o: block_alloc.c block_alloc.h
+dict.o: dict.c fmacros.h dict.h
+hiredis.o: hiredis.c fmacros.h hiredis.h read.h reply.h block_alloc.h \
+   	sds.h net.h
+net.o: net.c fmacros.h net.h hiredis.h read.h reply.h block_alloc.h sds.h
+read.o: read.c fmacros.h read.h sds.h
+reply.o: reply.c reply.h read.h block_alloc.h
+sds.o: sds.c sds.h sdsalloc.h
+test.o: test.c
+
+
 async.o: async.c fmacros.h async.h hiredis.h read.h sds.h net.h dict.c dict.h
 dict.o: dict.c fmacros.h dict.h
 hiredis.o: hiredis.c fmacros.h hiredis.h read.h sds.h net.h
@@ -76,6 +90,7 @@ net.o: net.c fmacros.h net.h hiredis.h read.h sds.h
 read.o: read.c fmacros.h read.h sds.h
 sds.o: sds.c sds.h
 test.o: test.c fmacros.h hiredis.h read.h sds.h
+reply.o: reply.c reply.h read.h
 
 $(DYLIBNAME): $(OBJ)
 	$(DYLIB_MAKE_CMD) $(OBJ)
@@ -101,6 +116,9 @@ hiredis-example-ivykis: examples/example-ivykis.c adapters/ivykis.h $(STLIBNAME)
 
 hiredis-example-macosx: examples/example-macosx.c adapters/macosx.h $(STLIBNAME)
 	$(CC) -o examples/$@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I. $< -framework CoreFoundation $(STLIBNAME)
+
+bench: bench.c $(STLIBNAME)
+	$(CC) -o $@ $(REAL_CFLAGS) $(REAL_LDFLAGS) -I. $< $(STLIBNAME)
 
 ifndef AE_DIR
 hiredis-example-ae:

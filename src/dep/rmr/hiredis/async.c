@@ -150,15 +150,15 @@ static void __redisAsyncCopyError(redisAsyncContext *ac) {
     ac->errstr = c->errstr;
 }
 
-redisAsyncContext *redisAsyncConnect(const char *ip, int port) {
-    redisContext *c;
-    redisAsyncContext *ac;
-
-    c = redisConnectNonBlock(ip,port);
-    if (c == NULL)
+redisAsyncContext *redisAsyncConnectWithOptions(const redisOptions *options) {
+    redisOptions myOptions = *options;
+    myOptions.options |= REDIS_OPT_NONBLOCK;
+    redisContext *c = redisConnectWithOptions(&myOptions);
+    if (c == NULL) {
         return NULL;
+    }
 
-    ac = redisAsyncInitialize(c);
+    redisAsyncContext *ac = redisAsyncInitialize(c);
     if (ac == NULL) {
         redisFree(c);
         return NULL;
@@ -166,40 +166,34 @@ redisAsyncContext *redisAsyncConnect(const char *ip, int port) {
 
     __redisAsyncCopyError(ac);
     return ac;
+}
+
+redisAsyncContext *redisAsyncConnect(const char *ip, int port) {
+    redisOptions options = {.type = REDIS_CONN_TCP,
+                            .endpoint.tcp = {.ip = ip, .port = port}};
+    return redisAsyncConnectWithOptions(&options);
 }
 
 redisAsyncContext *redisAsyncConnectBind(const char *ip, int port,
                                          const char *source_addr) {
-    redisContext *c = redisConnectBindNonBlock(ip,port,source_addr);
-    redisAsyncContext *ac = redisAsyncInitialize(c);
-    __redisAsyncCopyError(ac);
-    return ac;
+    redisOptions options = {
+        .type = REDIS_CONN_TCP,
+        .endpoint.tcp = {.ip = ip, .port = port, .source_addr = source_addr}};
+    return redisAsyncConnectWithOptions(&options);
 }
 
 redisAsyncContext *redisAsyncConnectBindWithReuse(const char *ip, int port,
                                                   const char *source_addr) {
-    redisContext *c = redisConnectBindNonBlockWithReuse(ip,port,source_addr);
-    redisAsyncContext *ac = redisAsyncInitialize(c);
-    __redisAsyncCopyError(ac);
-    return ac;
+    redisOptions options = {
+        .type = REDIS_CONN_TCP,
+        .options = REDIS_OPT_REUSEADDR,
+        .endpoint.tcp = {.ip = ip, .port = port, .source_addr = source_addr}};
+    return redisAsyncConnectWithOptions(&options);
 }
 
 redisAsyncContext *redisAsyncConnectUnix(const char *path) {
-    redisContext *c;
-    redisAsyncContext *ac;
-
-    c = redisConnectUnixNonBlock(path);
-    if (c == NULL)
-        return NULL;
-
-    ac = redisAsyncInitialize(c);
-    if (ac == NULL) {
-        redisFree(c);
-        return NULL;
-    }
-
-    __redisAsyncCopyError(ac);
-    return ac;
+    redisOptions options = {.type = REDIS_CONN_UNIX, .endpoint.unix_socket = path};
+    return redisAsyncConnectWithOptions(&options);
 }
 
 int redisAsyncSetConnectCallback(redisAsyncContext *ac, redisConnectCallback *fn) {
@@ -367,15 +361,21 @@ static int __redisGetSubscribeCallback(redisAsyncContext *ac, redisReply *reply,
     dict *callbacks;
     dictEntry *de;
     int pvariant;
-    char *stype;
+    const char *stype;
     sds sname;
+    int type;
 
+    type = ac->c.accessors.getType(reply);
     /* Custom reply functions are not supported for pub/sub. This will fail
      * very hard when they are used... */
-    if (reply->type == REDIS_REPLY_ARRAY) {
-        assert(reply->elements >= 2);
-        assert(reply->element[0]->type == REDIS_REPLY_STRING);
-        stype = reply->element[0]->str;
+    if (type == REDIS_REPLY_ARRAY) {
+        assert(REDIS_REPLY_GETARRLEN(&ac->c, reply) >= 2);
+        redisReply *sreply = REDIS_REPLY_GETARRELEM(&ac->c, reply, 0);
+        assert(REDIS_REPLY_GETTYPE(&ac->c, sreply) == REDIS_REPLY_STRING);
+        // assert(reply->elements >= 2);
+        // assert(reply->element[0]->type == REDIS_REPLY_STRING);
+
+        stype = REDIS_REPLY_GETSTRZ(&ac->c, sreply);
         pvariant = (tolower(stype[0]) == 'p') ? 1 : 0;
 
         if (pvariant)
@@ -383,9 +383,12 @@ static int __redisGetSubscribeCallback(redisAsyncContext *ac, redisReply *reply,
         else
             callbacks = ac->sub.channels;
 
+        redisReply *nreply = REDIS_REPLY_GETARRELEM(&ac->c, reply, 1);
+        assert(REDIS_REPLY_GETTYPE(&ac->c, nreply) == REDIS_REPLY_STRING);
+        size_t nlen = 0;
+        const char *nstr = REDIS_REPLY_GETSTR(&ac->c, nreply, &nlen);
         /* Locate the right callback */
-        assert(reply->element[1]->type == REDIS_REPLY_STRING);
-        sname = sdsnewlen(reply->element[1]->str,reply->element[1]->len);
+        sname = sdsnewlen(nstr, nlen);
         de = dictFind(callbacks,sname);
         if (de != NULL) {
             memcpy(dstcb,dictGetEntryVal(de),sizeof(*dstcb));
@@ -396,8 +399,9 @@ static int __redisGetSubscribeCallback(redisAsyncContext *ac, redisReply *reply,
 
                 /* If this was the last unsubscribe message, revert to
                  * non-subscribe mode. */
-                assert(reply->element[2]->type == REDIS_REPLY_INTEGER);
-                if (reply->element[2]->integer == 0)
+                redisReply *r3 = REDIS_REPLY_GETARRELEM(&ac->c, reply, 2);
+                assert(REDIS_REPLY_GETTYPE(&ac->c, r3) == REDIS_REPLY_INTEGER);
+                if (REDIS_REPLY_GETINT(&ac->c, r3) == 0)
                     c->flags &= ~REDIS_SUBSCRIBED;
             }
         }
@@ -407,6 +411,12 @@ static int __redisGetSubscribeCallback(redisAsyncContext *ac, redisReply *reply,
         __redisShiftCallback(&ac->sub.invalid,dstcb);
     }
     return REDIS_OK;
+}
+
+static void maybeFreeObject(redisAsyncContext *c, void *reply) {
+    if (!(c->c.flags & REDIS_ASYNC_NOFREEREPLIES)) {
+        c->c.reader->fn->freeObject(reply);
+    }
 }
 
 void redisProcessCallbacks(redisAsyncContext *ac) {
@@ -453,10 +463,11 @@ void redisProcessCallbacks(redisAsyncContext *ac) {
              * In this case we also want to close the connection, and have the
              * user wait until the server is ready to take our request.
              */
-            if (((redisReply*)reply)->type == REDIS_REPLY_ERROR) {
+            redisReply *replyObj = reply;
+            if (REDIS_REPLY_GETTYPE(&ac->c, replyObj) == REDIS_REPLY_ERROR) {
                 c->err = REDIS_ERR_OTHER;
-                snprintf(c->errstr,sizeof(c->errstr),"%s",((redisReply*)reply)->str);
-                c->reader->fn->freeObject(reply);
+                snprintf(c->errstr,sizeof(c->errstr),"%s",REDIS_REPLY_GETSTRZ(&ac->c, replyObj));
+                maybeFreeObject(ac, reply);
                 __redisAsyncDisconnect(ac);
                 return;
             }
@@ -468,11 +479,11 @@ void redisProcessCallbacks(redisAsyncContext *ac) {
 
         if (cb.fn != NULL) {
             __redisRunCallback(ac,&cb,reply);
-            c->reader->fn->freeObject(reply);
+            // c->reader->fn->freeObject(reply);
 
             /* Proceed with free'ing when redisAsyncFree() was called. */
             if (c->flags & REDIS_FREEING) {
-                __redisAsyncFree(ac);
+                maybeFreeObject(ac, reply);
                 return;
             }
         } else {

@@ -1,7 +1,9 @@
 all: bootstrap build
 
 bootstrap:
-	git submodule init && git submodule update
+	test -n "$(ls -A src/dep/RediSearch)" || \
+		(test -z "$(ls -A src/dep/RediSearch)" && \
+		git submodule init && git submodule update)
 
 build:
 	$(MAKE) -C ./src module.so

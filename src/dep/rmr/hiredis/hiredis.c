@@ -43,150 +43,6 @@
 #include "net.h"
 #include "sds.h"
 
-static redisReply *createReplyObject(int type);
-static void *createStringObject(const redisReadTask *task, char *str, size_t len);
-static void *createArrayObject(const redisReadTask *task, int elements);
-static void *createIntegerObject(const redisReadTask *task, long long value);
-static void *createNilObject(const redisReadTask *task);
-
-/* Default set of functions to build the reply. Keep in mind that such a
- * function returning NULL is interpreted as OOM. */
-static redisReplyObjectFunctions defaultFunctions = {
-    createStringObject,
-    createArrayObject,
-    createIntegerObject,
-    createNilObject,
-    freeReplyObject
-};
-
-/* Create a reply object */
-static redisReply *createReplyObject(int type) {
-    redisReply *r = calloc(1,sizeof(*r));
-
-    if (r == NULL)
-        return NULL;
-
-    r->type = type;
-    return r;
-}
-
-/* Free a reply object */
-void freeReplyObject(void *reply) {
-    redisReply *r = reply;
-    size_t j;
-
-    if (r == NULL)
-        return;
-
-    switch(r->type) {
-    case REDIS_REPLY_INTEGER:
-        break; /* Nothing to free */
-    case REDIS_REPLY_ARRAY:
-        if (r->element != NULL) {
-            for (j = 0; j < r->elements; j++)
-                if (r->element[j] != NULL)
-                    freeReplyObject(r->element[j]);
-            free(r->element);
-        }
-        break;
-    case REDIS_REPLY_ERROR:
-    case REDIS_REPLY_STATUS:
-    case REDIS_REPLY_STRING:
-        if (r->str != NULL)
-            free(r->str);
-        break;
-    }
-    free(r);
-}
-
-static void *createStringObject(const redisReadTask *task, char *str, size_t len) {
-    redisReply *r, *parent;
-    char *buf;
-
-    r = createReplyObject(task->type);
-    if (r == NULL)
-        return NULL;
-
-    buf = malloc(len+1);
-    if (buf == NULL) {
-        freeReplyObject(r);
-        return NULL;
-    }
-
-    assert(task->type == REDIS_REPLY_ERROR  ||
-           task->type == REDIS_REPLY_STATUS ||
-           task->type == REDIS_REPLY_STRING);
-
-    /* Copy string value */
-    memcpy(buf,str,len);
-    buf[len] = '\0';
-    r->str = buf;
-    r->len = len;
-
-    if (task->parent) {
-        parent = task->parent->obj;
-        assert(parent->type == REDIS_REPLY_ARRAY);
-        parent->element[task->idx] = r;
-    }
-    return r;
-}
-
-static void *createArrayObject(const redisReadTask *task, int elements) {
-    redisReply *r, *parent;
-
-    r = createReplyObject(REDIS_REPLY_ARRAY);
-    if (r == NULL)
-        return NULL;
-
-    if (elements > 0) {
-        r->element = calloc(elements,sizeof(redisReply*));
-        if (r->element == NULL) {
-            freeReplyObject(r);
-            return NULL;
-        }
-    }
-
-    r->elements = elements;
-
-    if (task->parent) {
-        parent = task->parent->obj;
-        assert(parent->type == REDIS_REPLY_ARRAY);
-        parent->element[task->idx] = r;
-    }
-    return r;
-}
-
-static void *createIntegerObject(const redisReadTask *task, long long value) {
-    redisReply *r, *parent;
-
-    r = createReplyObject(REDIS_REPLY_INTEGER);
-    if (r == NULL)
-        return NULL;
-
-    r->integer = value;
-
-    if (task->parent) {
-        parent = task->parent->obj;
-        assert(parent->type == REDIS_REPLY_ARRAY);
-        parent->element[task->idx] = r;
-    }
-    return r;
-}
-
-static void *createNilObject(const redisReadTask *task) {
-    redisReply *r, *parent;
-
-    r = createReplyObject(REDIS_REPLY_NIL);
-    if (r == NULL)
-        return NULL;
-
-    if (task->parent) {
-        parent = task->parent->obj;
-        assert(parent->type == REDIS_REPLY_ARRAY);
-        parent->element[task->idx] = r;
-    }
-    return r;
-}
 
 /* Return the number of digits of 'v' when converted to string in radix 10.
  * Implementation borrowed from link in redis/src/util.c:string2ll(). */
@@ -586,10 +442,10 @@ void __redisSetError(redisContext *c, int type, const char *str) {
 }
 
 redisReader *redisReaderCreate(void) {
-    return redisReaderCreateWithFunctions(&defaultFunctions);
+    return redisReaderCreateWithFunctions(&redisReplyLegacyFunctions);
 }
 
-static redisContext *redisContextInit(void) {
+static redisContext *redisContextInit(const redisOptions *options) {
     redisContext *c;
 
     c = calloc(1,sizeof(redisContext));
@@ -599,13 +455,23 @@ static redisContext *redisContextInit(void) {
     c->err = 0;
     c->errstr[0] = '\0';
     c->obuf = sdsempty();
-    c->reader = redisReaderCreate();
+    c->flags = 0;
     c->tcp.host = NULL;
     c->tcp.source_addr = NULL;
     c->unix_sock.path = NULL;
     c->timeout = NULL;
 
+    if (options && options->reader) {
+        c->reader = options->reader;
+        c->accessors = *options->accessors;
+        c->flags |= REDIS_USER_READER;
+    } else {
+        c->reader = redisReaderCreate();
+        c->accessors = redisReplyLegacyAccessors;
+    }
+
     if (c->obuf == NULL || c->reader == NULL) {
+        /* todo: free reader */
         redisFree(c);
         return NULL;
     }
@@ -670,112 +536,100 @@ int redisReconnect(redisContext *c) {
     return REDIS_ERR;
 }
 
+redisContext *redisConnectWithOptions(const redisOptions *options) {
+    redisContext *c = redisContextInit(options);
+    if (c == NULL) {
+        return NULL;
+    }
+    if (!(options->options & REDIS_OPT_NONBLOCK)) {
+        c->flags |= REDIS_BLOCK;
+    }
+    if (options->options & REDIS_OPT_REUSEADDR) {
+        c->flags |= REDIS_REUSEADDR;
+    }
+    if (options->options & REDIS_OPT_NOFREEREPLIES) {
+        c->flags |= REDIS_ASYNC_NOFREEREPLIES;
+    }
+
+    if (options->type == REDIS_CONN_TCP) {
+        redisContextConnectBindTcp(c, options->endpoint.tcp.ip,
+                                   options->endpoint.tcp.port, options->timeout,
+                                   options->endpoint.tcp.source_addr);
+    } else if (options->type == REDIS_CONN_UNIX) {
+        redisContextConnectUnix(c, options->endpoint.unix_socket, options->timeout);
+    } else if (options->type == REDIS_CONN_USERFD) {
+        c->fd = options->endpoint.fd;
+        c->flags |= REDIS_CONNECTED;
+    } else {
+        // Unknown type - FIXME - FREE
+        return NULL;
+    }
+    return c;
+}
+
 /* Connect to a Redis instance. On error the field error in the returned
  * context will be set to the return value of the error function.
  * When no set of reply functions is given, the default set will be used. */
 redisContext *redisConnect(const char *ip, int port) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags |= REDIS_BLOCK;
-    redisContextConnectTcp(c,ip,port,NULL);
-    return c;
+    redisOptions options = {.type = REDIS_CONN_TCP,
+                            .endpoint.tcp = {.ip = ip, .port = port}};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectWithTimeout(const char *ip, int port, const struct timeval tv) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags |= REDIS_BLOCK;
-    redisContextConnectTcp(c,ip,port,&tv);
-    return c;
+    redisOptions options = {.type = REDIS_CONN_TCP,
+                            .endpoint.tcp = {.ip = ip, .port = port},
+                            .timeout = &tv};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectNonBlock(const char *ip, int port) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags &= ~REDIS_BLOCK;
-    redisContextConnectTcp(c,ip,port,NULL);
-    return c;
+    redisOptions options = {
+        .type = REDIS_CONN_TCP,
+        .options = REDIS_OPT_NONBLOCK,
+        .endpoint.tcp = {.ip = ip, .port = port}};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectBindNonBlock(const char *ip, int port,
                                        const char *source_addr) {
-    redisContext *c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-    c->flags &= ~REDIS_BLOCK;
-    redisContextConnectBindTcp(c,ip,port,NULL,source_addr);
-    return c;
+    redisOptions options = {
+        .type = REDIS_CONN_TCP,
+        .options = REDIS_OPT_NONBLOCK,
+        .endpoint.tcp = {.ip = ip, .port = port, .source_addr = source_addr}};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectBindNonBlockWithReuse(const char *ip, int port,
                                                 const char *source_addr) {
-    redisContext *c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-    c->flags &= ~REDIS_BLOCK;
-    c->flags |= REDIS_REUSEADDR;
-    redisContextConnectBindTcp(c,ip,port,NULL,source_addr);
-    return c;
+    redisOptions options = {
+        .type = REDIS_CONN_TCP,
+        .options = REDIS_OPT_REUSEADDR|REDIS_OPT_NONBLOCK,
+        .endpoint.tcp = {.ip = ip, .port = port, .source_addr = source_addr}};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectUnix(const char *path) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags |= REDIS_BLOCK;
-    redisContextConnectUnix(c,path,NULL);
-    return c;
+    redisOptions options = {.type = REDIS_CONN_UNIX, .endpoint.unix_socket = path};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectUnixWithTimeout(const char *path, const struct timeval tv) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags |= REDIS_BLOCK;
-    redisContextConnectUnix(c,path,&tv);
-    return c;
+    redisOptions options = {
+        .type = REDIS_CONN_UNIX, .endpoint.unix_socket = path, .timeout = &tv};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectUnixNonBlock(const char *path) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->flags &= ~REDIS_BLOCK;
-    redisContextConnectUnix(c,path,NULL);
-    return c;
+    redisOptions options = {.type = REDIS_CONN_UNIX,
+                            .options = REDIS_OPT_NONBLOCK,
+                            .endpoint.unix_socket = path};
+    return redisConnectWithOptions(&options);
 }
 
 redisContext *redisConnectFd(int fd) {
-    redisContext *c;
-
-    c = redisContextInit();
-    if (c == NULL)
-        return NULL;
-
-    c->fd = fd;
-    c->flags |= REDIS_BLOCK | REDIS_CONNECTED;
-    return c;
+    redisOptions options = {.type = REDIS_CONN_USERFD, .endpoint.fd = fd};
+    return redisConnectWithOptions(&options);
 }
 
 /* Set read/write timeout on a blocking socket. */

@@ -9,7 +9,7 @@ export LIBUV_INCLUDE_DIR
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
 DEBUGFLAGS ?= -O0 -g -ggdb
-CFLAGS ?= -I$(RM_INCLUDE_DIR) -I$(LIBUV_INCLUDE_DIR) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  
+CFLAGS ?= -I$(RM_INCLUDE_DIR) -I$(LIBUV_INCLUDE_DIR) -Wall $(DEBUGFLAGS) -fPIC -std=gnu99  -DREDISMODULE_EXPERIMENTAL_API
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
 SOURCEDIR=$(shell pwd -P)
@@ -40,4 +40,5 @@ clean:
 	rm -rf *.o *.a
 
 distclean: clean
+	$(MAKE) -C ./hiredis clean
 	find ./ -name "*.[oa]" -print -exec rm -f {} \;

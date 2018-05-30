@@ -77,6 +77,21 @@ typedef struct redisReplyObjectFunctions {
     void (*freeObject)(void*);
 } redisReplyObjectFunctions;
 
+
+typedef struct redisReplyAccessors {
+    /* Gets the type of the object */
+    int (*getType)(void *);
+
+    /* Gets the buffer and length of a string. Length of string is set in `len` */
+    const char *(*getString)(void *reply, size_t *len);
+
+    /* Return value of numeric object */
+    long long (*getInteger)(void *reply);
+
+    size_t (*getArrayLength)(void *reply);
+    void *(*getArrayElement)(void *reply, size_t pos);
+} redisReplyAccessors;
+
 typedef struct redisReader {
     int err; /* Error flags, 0 when there is no error */
     char errstr[128]; /* String representation of error when applicable */
@@ -92,6 +107,8 @@ typedef struct redisReader {
 
     redisReplyObjectFunctions *fn;
     void *privdata;
+    /* Function to free the privdata pointer */
+    void (*freePrivdata)(void *);
 } redisReader;
 
 /* Public API for the protocol parser. */

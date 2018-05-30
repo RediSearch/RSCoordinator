@@ -34,10 +34,13 @@ struct mrCommandConf __commandConfig[] = {
     {"_FT.SUGGET", MRCommand_Read | MRCommand_SingleKey, 1, 1},
     {"_FT.SUGLEN", MRCommand_Read | MRCommand_SingleKey, 1, 1},
     {"_FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1, 1},
+    {"_FT.CURSOR", MRCommand_Read | MRCommand_SingleKey, 2, 2},
 
     // Coordination commands - they are all read commands since they can be triggered from slaves
     {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1, 2},
     {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
+    {"FT.AGGREGATE", MRCommand_Read | MRCommand_Coordination, -1, 1},
+
     {"FT.EXPLAIN", MRCommand_Read | MRCommand_Coordination, -1, 1},
 
     {"FT.FSEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
@@ -59,6 +62,7 @@ struct mrCommandConf __commandConfig[] = {
 
     {"KEYS", MRCommand_Read | MRCommand_NoKey, -1, -1},
     {"INFO", MRCommand_Read | MRCommand_NoKey, -1, -1},
+    {"SCAN", MRCommand_Read | MRCommand_NoKey, -1, -1},
 
     // sentinel
     {NULL},

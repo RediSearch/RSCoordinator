@@ -6,6 +6,7 @@ endif
 ifndef S3_CONFIG
 	S3_CONFIG=~/.s3cfg
 endif
+SOURCEDIR=$(shell pwd -P)
 
 # Setting the DEBUG env variable to 1 will cause us to build with -O0
 ifndef DEBUG
@@ -18,11 +19,11 @@ endif
 LIBUV_DIR = $(RM_INCLUDE_DIR)/dep/libuv
 LIBUV_LIBDIR = $(LIBUV_DIR)/.libs
 LIBUV_INCLUDE_DIR = $(LIBUV_DIR)/include
-
+REDISEARCH_DIR = $(SOURCEDIR)/dep/RediSearch/src
 
 # find the OS
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
-CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" \
+CFLAGS := -I"$(RM_INCLUDE_DIR)" -I"$(LIBUV_INCLUDE_DIR)" -I"$(REDISEARCH_DIR)" \
 		-Wall -Wno-unused-function $(DEBUGFLAGS) -fPIC -std=gnu99 \
 		-D_GNU_SOURCE -DREDIS_MODULE_TARGET -DREDISMODULE_EXPERIMENTAL_API 
 
@@ -42,7 +43,6 @@ export CFLAGS
 export DEBUGFLAGS
 export LIBUV_INCLUDE_DIR
 
-SOURCEDIR=$(shell pwd -P)
 CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/triemap/libtriemap.a \
@@ -55,16 +55,17 @@ LIBS = dep/rmr/librmr.a dep/rmr/hiredis/libhiredis.a dep/triemap/libtriemap.a \
 
 all: module.so 
 
-libuv.a: 
-	cd $(LIBUV_DIR) &&\
-	sh autogen.sh &&\
-	./configure &&\
-	$(MAKE) -j 4
+libuv.a:  $(LIBUV_DIR)/Makefile
+	$(MAKE) -C $(LIBUV_DIR) && cp "$(LIBUV_LIBDIR)/libuv.a" ./
 
-	cp "$(LIBUV_LIBDIR)/libuv.a" ./
+$(LIBUV_DIR)/Makefile: $(LIBUV_DIR)/configure
+	cd $(LIBUV_DIR) && ./configure
+
+$(LIBUV_DIR)/configure:
+	cd $(LIBUV_DIR) && sh autogen.sh
 
 libredisearch.a:
-	make -C dep/RediSearch/src libredisearch.a -j 8
+	make -j 8 -C dep/RediSearch/src libredisearch.a
 
 # Remove the module base file so we always recompile it with the correct build flags
 module.so: $(shell rm -f module.o)
@@ -89,8 +90,6 @@ rmutil:
 	$(MAKE) -j 4 -C dep/rmutil all
 .PHONY: rmutil
 
-clean:
-	rm -rvf *.xo *.so *.o *.a
 
 # Format the version printing utility
 print_version: version.h print_version.c
@@ -120,7 +119,14 @@ package: module.so
 upload:
 	s3cmd -c $(S3_CONFIG) put $(BUILD_DIR)/*.zip --acl-public s3://redismodules/$(PACKAGE_NAME)/
 
-deepclean:
+clean:
+	rm -rvf *.xo *.so *.o *.a
+
+deepclean: clean
+	$(MAKE) -C dep/RediSearch distclean || true
+	$(MAKE) -C dep/libuv distclean || true
+	$(MAKE) -C dep/rmr distclean || true
+	$(MAKE) -C dep/triemap distclean || true
 	rm -f print_version
 	find ./ -name "*.[oa]" -exec rm {} \; -print
 	find ./ -name "*.l[oa]" -exec rm {} \; -print

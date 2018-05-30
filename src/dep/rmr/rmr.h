@@ -48,5 +48,31 @@ void MRCtx_Free(struct MRCtx *ctx);
 /* Create a new MapReduce context with a given private data. In a redis module
  * this should be the RedisModuleCtx */
 struct MRCtx *MR_CreateCtx(struct RedisModuleCtx *ctx, void *privdata);
+
+extern void *MRITERATOR_DONE;
+
+#ifndef RMR_C__
+typedef struct MRIteratorCallbackCtx MRIteratorCallbackCtx;
+typedef struct MRIterator MRIterator;
+
+typedef int (*MRIteratorCallback)(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd);
+
+MRReply *MRIterator_Next(MRIterator *it);
+
+MRIterator *MR_Iterate(MRCommandGenerator cg, MRIteratorCallback cb, void *privdata);
+
+int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep);
+
+int MRIteratorCallback_Done(MRIteratorCallbackCtx *ctx, int error);
+
+int MRIteratorCallback_ResendCommand(MRIteratorCallbackCtx *ctx, MRCommand *cmd);
+
+void MRIterator_Free(MRIterator *it);
+
+/* Wait until the iterators producers are all  done */
+void MRIterator_WaitDone(MRIterator *it);
+
+#endif
+
 size_t MR_NumHosts();
 #endif  //__LIBRMR_H__

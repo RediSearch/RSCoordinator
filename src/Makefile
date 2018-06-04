@@ -67,15 +67,14 @@ $(LIBUV_DIR)/configure:
 libredisearch.a:
 	make -j 8 -C dep/RediSearch/src libredisearch.a
 
-# Remove the module base file so we always recompile it with the correct build flags
-module.so: $(shell rm -f module.o)
-module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
-	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
+INFOSTUB_E = build-info/info-enterprise.o
+INFOSTUB_OSS = build-info/info-oss.o
 
-module-oss.so: $(shell rm -f module.o)
-module-oss.so: CFLAGS+=-DREDISEARCH_OSS_BUILD -mpopcnt
-module-oss.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS)
-	$(LD) -o $@ $(CC_OBJECTS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
+module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS) $(INFOSTUB_E)
+	$(LD) -o $@ $(CC_OBJECTS) $(INFOSTUB_E) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
+
+module-oss.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS) $(INFOSTUB_OSS)
+	$(LD) -o $@ $(CC_OBJECTS) $(INFOSTUB_OSS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
 # OSS is a special build for internal testing on OSS clusters. 
 # Unless the module is built with "make oss" it cannot run inside OSS cluster

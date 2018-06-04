@@ -19,9 +19,11 @@
 #include <math.h>
 #include "info_command.h"
 #include "version.h"
+#include "build-info/info.h"
 #include <sys/param.h>
 #include <pthread.h>
 #include <aggregate/aggregate.h>
+
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
@@ -994,13 +996,11 @@ int DisabledCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int ar
  * All coordinator handlers must be wrapped in this decorator.
  */
 static RedisModuleCmdFunc SafeCmd(RedisModuleCmdFunc f) {
-
-#ifndef REDISEARCH_OSS_BUILD
-  /* If we are running inside OSS cluster and not built for oss, we return the dummy handler */
-  if (clusterConfig.type == ClusterType_RedisOSS) {
+  if (RSBuildType_g == RSBuildType_Enterprise && clusterConfig.type != ClusterType_RedisLabs) {
+    /* If we are running inside OSS cluster and not built for oss, we return the dummy handler */
     return DisabledCommandHandler;
   }
-#endif
+
   /* Valid - we return the original function */
   return f;
 }

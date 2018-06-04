@@ -1,5 +1,6 @@
 #ifndef RSCOORDINATOR_VERSION_H_
 #define RSCOORDINATOR_VERSION_H_
+#include "dep/RediSearch/src/version.h"
 
 #define RSCOORDINATOR_VERSION_MAJOR 1
 #define RSCOORDINATOR_VERSION_MINOR 0

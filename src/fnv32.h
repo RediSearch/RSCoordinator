@@ -1,5 +1,5 @@
-#ifndef __FT_FNV_H__
-#define __FT_FNV_H__
+#ifndef __FT_FNV32_H__
+#define __FT_FNV32_H__
 
 #include <sys/types.h>
 #define FNV_32_PRIME ((Fnv32_t)0x01000193)

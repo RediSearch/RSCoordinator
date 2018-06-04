@@ -1,5 +1,5 @@
 #include "partition.h"
-#include "fnv.h"
+#include "fnv32.h"
 #include <stdio.h>
 
 size_t PartitionForKey(PartitionCtx *ctx, const char *key, size_t len) {

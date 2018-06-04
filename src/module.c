@@ -11,7 +11,7 @@
 #include "crc12_tags.h"
 #include "dep/rmr/redis_cluster.h"
 #include "dep/rmr/redise.h"
-#include "fnv.h"
+#include "fnv32.h"
 #include "dep/heap.h"
 #include "search_cluster.h"
 #include "config.h"

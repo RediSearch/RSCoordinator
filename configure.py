@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
+import argparse
+from subprocess import Popen
+import os
+import platform
+import multiprocessing
+
+ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+ap.add_argument('--build-dir', help="Build directory to use")
+ap.add_argument('--with-libuv', help="UV install directory. Will assume build dir")
+ap.add_argument('--enable-debug', help="Build unoptimized with debug symbols")
+ap.add_argument('--concurrency', '-j', help='Concurrent make build', default=multiprocessing.cpu_count() * 2)
+ap.add_argument('--with-cmake', help='Path to cmake', default='cmake')
+
+options = ap.parse_args()
+# Determine the build directory
+BUILD_DIR = options.build_dir
+if not BUILD_DIR:
+    cwd = os.path.abspath(os.getcwd())
+    self_dir = os.path.dirname(os.path.abspath(__file__))
+    if cwd == self_dir:
+        print("Running ./configure in source root. Build will be in `build`")
+        BUILD_DIR = os.path.join(os.getcwd(), 'build')
+    else:
+        BUILD_DIR = cwd
+else:
+    BUILD_DIR = os.path.abspath(BUILD_DIR)
+
+UV_DIR = options.with_libuv if options.with_libuv else os.path.join(
+    BUILD_DIR, 'libuv-'+platform.platform().replace(' ', '_'))
+
+UV_A = os.path.join(UV_DIR, 'lib', 'libuv.a')
+UV_SRC = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'src', 'dep', 'libuv')
+CMAKE = options.with_cmake
+
+print("BUILD_DIR: {}".format(BUILD_DIR))
+print("UV_DIR: {}".format(UV_DIR))
+# sys.exit(0)
+
+if not os.path.exists(BUILD_DIR):
+    os.makedirs(BUILD_DIR)
+
+def build_uv(uv_src, uv_dst, build_dir):
+    configure = os.path.join(uv_src, 'configure')
+    if not os.path.exists(configure):
+        po = Popen(['sh', 'autogen.sh'])
+        if po.wait() != 0:
+            raise Exception("Couldn't generate configure script!")
+    os.chdir(build_dir) # Presumably the build dir
+    po = Popen([configure, '--prefix', uv_dst, '--with-pic', '--disable-shared', '--enable-static', '--disable-silent-rules'])
+    if po.wait() != 0:
+        raise Exception("Couldn't execute configure")
+
+    print("Executing 'make'")
+    po = Popen(['make', '-j', str(options.concurrency), 'install'])
+    if po.wait() != 0:
+        raise Exception("Couldn't build libuv!")
+
+
+if not os.path.exists(UV_A):
+    uv_build_dir = os.path.join(BUILD_DIR, 'UV_BUILD')
+    if not os.path.exists(uv_build_dir):
+        os.makedirs(uv_build_dir)
+    build_uv(UV_SRC, UV_DIR, uv_build_dir)
+
+os.chdir(BUILD_DIR)
+args = [CMAKE, '..', '-DLIBUV_ROOT=' + UV_DIR,
+        '-DCMAKE_BUILD_TYPE={}'.format('DEBUG' if options.enable_debug else 'RELWITHDEBINFO')]
+print("Running: " + " ".join(args))
+if Popen(args).wait() != 0:
+    raise Exception("Couldn't execute CMake!")

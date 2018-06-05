@@ -6,6 +6,7 @@
 !**/*.py
 !**/*.tpl
 !**/*.md
+!**/CMakeLists.txt
 !.gitignore
 !**/Makefile
 !**/*.yml

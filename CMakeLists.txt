@@ -10,6 +10,7 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Werror=implicit-function-declaration -pthread")
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
+SET(RS_RUN_TESTS CACHE BOOL OFF) # Don't run RS' own tests
 
 FIND_PATH(LIBUV_INCLUDE_DIR uv.h
           HINTS ${LIBUV_ROOT}

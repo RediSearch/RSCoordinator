@@ -289,8 +289,7 @@ int getAggregateFields(FieldList *l, RedisModuleCtx *ctx, CmdArg *cmd);
 ResultProcessor *AggregatePlan_BuildProcessorChain(AggregatePlan *plan, RedisSearchCtx *sctx,
                                                    ResultProcessor *root, char **err);
 
-static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *ctx, char **err) {
-
+static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ctx, char **err) {
   AggregatePlan *ap = ctx;
   AggregatePlan *remote = AggregatePlan_MakeDistributed(ap);
   if (!remote) {
@@ -325,32 +324,13 @@ static ResultProcessor *Aggregate_BuildDistributedChain(QueryPlan *plan, void *c
   return ret;
 }
 
-CmdArg *Aggregate_ParseRequest(RedisModuleString **argv, int argc, char **err);
-int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
-                                          RedisModuleString **argv, int argc, char **err) {
+void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                                        struct ConcurrentCmdCtx *ccx) {
 
-  req->args = Aggregate_ParseRequest(argv, argc, (char **)err);
-  if (!req->args) {
-    SET_ERR(err, "Could not parse aggregate request");
-    return REDISMODULE_ERR;
-  }
-
-  req->ap = (AggregatePlan){};
-  if (!AggregatePlan_Build(&req->ap, req->args, (char **)err)) {
-    SET_ERR(err, "Could not parse aggregate request");
-    return REDISMODULE_ERR;
-  }
-
-  RSSearchOptions opts = RS_DEFAULT_SEARCHOPTS;
-  // mark the query as an aggregation query
-  opts.flags |= Search_AggregationQuery;
-  opts.concurrentMode = 0;
-  req->plan =
-      Query_BuildPlan(sctx, NULL, &opts, Aggregate_BuildDistributedChain, &req->ap, (char **)err);
-  if (!req->plan) {
-    SET_ERR(err, QUERY_ERROR_INTERNAL_STR);
-    return REDISMODULE_ERR;
-  }
-
-  return REDISMODULE_OK;
+  AggregateRequestSettings settings = {.pcb = buildDistributedProcessorChain,
+                                       .flags = AGGREGATE_REQUEST_NO_CONCURRENT |
+                                                AGGREGATE_REQUEST_NO_PARSE_QUERY |
+                                                AGGREGATE_REQUEST_SPECLESS};
+  settings.cursorLookupName = RedisModule_StringPtrLen(argv[1], NULL);
+  AggregateCommand_ExecAggregateEx(ctx, argv, argc, ccx, &settings);
 }

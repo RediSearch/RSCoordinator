@@ -19,11 +19,11 @@
 #include <math.h>
 #include "info_command.h"
 #include "version.h"
+#include "cursor.h"
 #include "build-info/info.h"
 #include <sys/param.h>
 #include <pthread.h>
 #include <aggregate/aggregate.h>
-
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
@@ -552,34 +552,12 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-int AggregateRequest_BuildDistributedPlan(AggregateRequest *req, RedisSearchCtx *sctx,
-                                          RedisModuleString **argv, int argc, char **err);
-
-struct distAggCtx {
-  RedisModuleBlockedClient *bc;
-  RedisModuleString **argv;
-  int argc;
-};
-
-void _DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                           struct ConcurrentCmdCtx *ccx) {
-  RedisSearchCtx sctx = {.redisCtx = ctx};
-  AggregateRequest req_s = {NULL};
-  char *err;
-  if (AggregateRequest_BuildDistributedPlan(&req_s, &sctx, argv, argc, &err) != REDISMODULE_OK) {
-    RedisModule_Log(ctx, "warning", "Error building dist plan: %s", err);
-    RedisModule_ReplyWithError(ctx, err ? err : "Error building plan");
-    ERR_FREE(err);
-    goto done;
-  }
-  AggregateRequest_Run(&req_s, ctx);
-done:
-  AggregateRequest_Free(&req_s);
-}
+void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                                        struct ConcurrentCmdCtx *ccx);
 
 static int DIST_AGG_THREADPOOL = -1;
 
-int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (argc < 3) {
     return RedisModule_WrongArity(ctx);
@@ -588,7 +566,18 @@ int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
   return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
-                                               _DistAggregateCommand, ctx, argv, argc);
+                                               AggregateCommand_ExecDistAggregate, ctx, argv, argc);
+}
+
+static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 1) {
+    return RedisModule_WrongArity(ctx);
+  }
+  if (!SearchCluster_Ready(GetSearchCluster())) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
+  return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
+                                               AggregateCommand_ExecCursor, ctx, argv, argc);
 }
 
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1123,6 +1112,11 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CLUSTERINFO", SafeCmd(ClusterInfoCommand), "readonly",
                                    0, 0, -1));
+
+  /**
+   * Self-commands. These are executed directly on the server
+   */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 0, 0, -1));
 
   return REDISMODULE_OK;
 }

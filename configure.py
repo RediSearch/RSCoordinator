@@ -10,8 +10,9 @@ import multiprocessing
 ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument('--build-dir', help="Build directory to use")
 ap.add_argument('--with-libuv', help="UV install directory. Will assume build dir")
-ap.add_argument('--enable-debug', help="Build unoptimized with debug symbols")
-ap.add_argument('--concurrency', '-j', help='Concurrent make build', default=multiprocessing.cpu_count() * 2)
+ap.add_argument('--enable-debug', help="Build unoptimized with debug symbols", action="store_true")
+ap.add_argument('--concurrency', '-j', help='Concurrent make build',
+                default=multiprocessing.cpu_count() * 2)
 ap.add_argument('--with-cmake', help='Path to cmake', default='cmake')
 
 options = ap.parse_args()
@@ -29,7 +30,7 @@ else:
     BUILD_DIR = os.path.abspath(BUILD_DIR)
 
 UV_DIR = options.with_libuv if options.with_libuv else os.path.join(
-    BUILD_DIR, 'libuv-'+platform.platform().replace(' ', '_'))
+    BUILD_DIR, 'libuv-' + platform.platform().replace(' ', '_'))
 
 UV_A = os.path.join(UV_DIR, 'lib', 'libuv.a')
 UV_SRC = os.path.join(
@@ -43,14 +44,16 @@ print("UV_DIR: {}".format(UV_DIR))
 if not os.path.exists(BUILD_DIR):
     os.makedirs(BUILD_DIR)
 
+
 def build_uv(uv_src, uv_dst, build_dir):
     configure = os.path.join(uv_src, 'configure')
     if not os.path.exists(configure):
         po = Popen(['sh', 'autogen.sh'])
         if po.wait() != 0:
             raise Exception("Couldn't generate configure script!")
-    os.chdir(build_dir) # Presumably the build dir
-    po = Popen([configure, '--prefix', uv_dst, '--with-pic', '--disable-shared', '--enable-static', '--disable-silent-rules'])
+    os.chdir(build_dir)  # Presumably the build dir
+    po = Popen([configure, '--prefix', uv_dst, '--with-pic',
+                '--disable-shared', '--enable-static', '--disable-silent-rules'])
     if po.wait() != 0:
         raise Exception("Couldn't execute configure")
 

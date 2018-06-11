@@ -9,6 +9,11 @@ ADD_DEFINITIONS(-DRS_CMD_PREFIX="_FT")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Werror=implicit-function-declaration -pthread")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+
+SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
+SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
+
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
 SET(RS_RUN_TESTS CACHE BOOL OFF) # Don't run RS' own tests
 
@@ -32,12 +37,13 @@ ADD_SUBDIRECTORY(src)
 SET(FINAL_OBJECTS
     ${COORDINATOR_SRC}
     $<TARGET_OBJECTS:coordinator-core>
-    $<TARGET_OBJECTS:coordinator-rmutil>)
+    $<TARGET_OBJECTS:coordinator-rmutil>
+    $<TARGET_OBJECTS:rmr>)
 
 MACRO(MODULE_TARGET SUFFIX)
     SET(_tgtName module-${SUFFIX})
-    ADD_LIBRARY(${_tgtName} SHARED ${FINAL_OBJECTS} src/build-info/info-${SUFFIX}.c)
-    TARGET_LINK_LIBRARIES(${_tgtName} rmr redisearchS ${LIBUV_LIBRARIES})
+    ADD_LIBRARY(${_tgtName} MODULE ${FINAL_OBJECTS} src/build-info/info-${SUFFIX}.c)
+    TARGET_LINK_LIBRARIES(${_tgtName} redisearchS ${LIBUV_LIBRARIES} hiredis)
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES PREFIX "")
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES SUFFIX ".so")
 ENDMACRO()

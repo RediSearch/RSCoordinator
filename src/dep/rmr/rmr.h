@@ -1,6 +1,7 @@
 
 #ifndef __LIBRMR_H__
 #define __LIBRMR_H__
+#include <stdbool.h>
 
 #include "reply.h"
 #include "cluster.h"
@@ -16,7 +17,7 @@ typedef int (*MRReduceFunc)(struct MRCtx *ctx, int count, MRReply **replies);
  * reply to the reducer callback */
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
-int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds);
+int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds, bool block);
 
 int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd);
 
@@ -41,6 +42,11 @@ void *MRCtx_GetPrivdata(struct MRCtx *ctx);
 int64_t MR_RequestDuration(struct MRCtx *ctx);
 
 struct RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx);
+MRCommand *MRCtx_GetCmds(struct MRCtx *ctx);
+int MRCtx_GetCmdsSize(struct MRCtx *ctx);
+void MRCtx_SetReduceFunction(struct MRCtx *ctx, MRReduceFunc fn);
+void requestCompleted();
+
 
 /* Free the MapReduce context */
 void MRCtx_Free(struct MRCtx *ctx);

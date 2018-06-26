@@ -37,6 +37,12 @@ struct mrCommandConf __commandConfig[] = {
     {"_FT.SUGDEL", MRCommand_Write | MRCommand_SingleKey, 1, 1},
     {"_FT.CURSOR", MRCommand_Read | MRCommand_SingleKey, 2, 2},
 
+    // Synonyms commands
+    {"_FT.SYNADD", MRCommand_Write | MRCommand_NoKey, 1, -1},
+    {"_FT.SYNDUMP", MRCommand_Write | MRCommand_NoKey, 1, -1},
+    {"_FT.SYNUPDATE", MRCommand_Write | MRCommand_NoKey, 1, -1},
+    {"_FT.SYNFORCEUPDATE", MRCommand_Write | MRCommand_NoKey, 1, -1},
+
     // Coordination commands - they are all read commands since they can be triggered from slaves
     {"FT.ADD", MRCommand_Read | MRCommand_Coordination, -1, 2},
     {"FT.SEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1},
@@ -131,6 +137,18 @@ MRCommand MR_NewCommand(int argc, ...) {
   return cmd;
 }
 
+MRCommand MR_NewCommandFromStrings(int argc, char** argv) {
+  MRCommand cmd = (MRCommand){
+      .num = argc,
+      .args = calloc(argc, sizeof(char *)),
+  };
+  for (int i = 0; i < argc; i++) {
+    cmd.args[i] = strdup(argv[i]);
+  }
+  _getCommandConfId(&cmd);
+  return cmd;
+}
+
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
   MRCommand cmd = (MRCommand){
       .num = argc,
@@ -141,6 +159,17 @@ MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
   }
   _getCommandConfId(&cmd);
   return cmd;
+}
+
+void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char** args) {
+  if (num <= 0) return;
+  int oldNum = cmd->num;
+  cmd->num += num;
+
+  cmd->args = realloc(cmd->args, cmd->num * sizeof(*cmd->args));
+  for (int i = oldNum; i < cmd->num; i++) {
+    cmd->args[i] = strdup(args[i - oldNum]);
+  }
 }
 
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {

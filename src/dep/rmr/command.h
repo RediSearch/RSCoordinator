@@ -21,6 +21,8 @@ void MRCommand_Free(MRCommand *cmd);
 MRCommand MR_NewCommandArgv(int argc, char **argv);
 /* Variadic creation of a command from a list of strings */
 MRCommand MR_NewCommand(int argc, ...);
+/* Create a command from a list of strings */
+MRCommand MR_NewCommandFromStrings(int argc, char** argv);
 /* Create a command from a list of redis strings */
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv);
 
@@ -39,6 +41,7 @@ typedef struct {
   void (*Free)(void *ctx);
 } MRCommandGenerator;
 
+void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char** args);
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
 
 /** Set the prefix of the command (i.e {prefix}.{command}) to a given prefix. If the command has a

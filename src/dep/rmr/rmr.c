@@ -128,13 +128,9 @@ void MRCtx_SetReduceFunction(struct MRCtx *ctx, MRReduceFunc fn) {
   ctx->fn = fn;
 }
 
-void requestCompleted() {
-  RQ_Done(rq_g);
-}
-
 static void freePrivDataCB(void *p) {
   // printf("FreePrivData called!\n");
-  requestCompleted();
+  MR_requestCompleted();
   if (p) {
     MRCtx *mc = p;
     MRCtx_Free(mc);
@@ -183,9 +179,9 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   // If we've received the last reply - unblock the client
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
-    if(ctx->fn){
+    if (ctx->fn){
       ctx->fn(ctx, ctx->numReplied, ctx->replies);
-    }else{
+    } else {
       RedisModuleBlockedClient *bc = ctx->redisCtx;
       RedisModule_UnblockClient(bc, ctx);
     }
@@ -253,6 +249,12 @@ static void uvFanoutRequest(struct MRRequestCtx *mc) {
   mrctx->reducer = mc->f;
   mrctx->numExpected = 0;
 
+  mrctx->numCmds = mc->numCmds;
+  mrctx->cmds = calloc(mrctx->numCmds, sizeof(MRCommand));
+  for(int i = 0 ; i < mrctx->numCmds ; ++i){
+    mrctx->cmds[i] = mc->cmds[i];
+  }
+
   if (cluster_g->topo) {
     MRCommand *cmd = &mc->cmds[0];
     mrctx->numExpected =
@@ -265,9 +267,6 @@ static void uvFanoutRequest(struct MRRequestCtx *mc) {
     // printf("could not send single command. hande fail please\n");
   }
 
-  for (int i = 0; i < mc->numCmds; i++) {
-    MRCommand_Free(&mc->cmds[i]);
-  }
   free(mc->cmds);
   free(mc);
 }
@@ -302,6 +301,10 @@ static void uvMapRequest(struct MRRequestCtx *mc) {
   free(mc);
 
   // return REDIS_OK;
+}
+
+void MR_requestCompleted() {
+  RQ_Done(rq_g);
 }
 
 /* Fanout map - send the same command to all the shards, sending the collective

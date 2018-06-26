@@ -24,14 +24,13 @@
 #include <sys/param.h>
 #include <pthread.h>
 #include <aggregate/aggregate.h>
+#include <value.h>
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
 // forward declaration
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies);
 RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType);
-RSValue *RS_NewValue(RSValueType t);
-void RSValue_ToString(RSValue *dst, RSValue *v);
 
 /* A reducer that just chains the replies from a map request */
 int chainReplyReducer(struct MRCtx *mc, int count, MRReply **replies) {
@@ -218,7 +217,7 @@ int synonymUpdateFanOutReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RSValue_Free(v);
 
   // we need to call request complete here manualy since we did not unblocked the client
-  requestCompleted();
+  MR_requestCompleted();
   return REDISMODULE_OK;
 }
 
@@ -581,11 +580,12 @@ int SynAddCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   struct MRCtx *mrCtx = MR_CreateCtx(ctx, NULL);
 
+  // reducer is set here so the client will not be unblocked.
+  // we need to send SYNFORCEUPDATE commands to the other
+  // shards before unblocking the client.
   MRCtx_SetReduceFunction(mrCtx, synonymUpdateFanOutReducer);
 
   return FirstPartitionCommandHandler(ctx, argv, argc, synonymAddFailedReducer, mrCtx);
-
-  return REDISMODULE_OK;
 }
 
 /* ft.ADD {index} ... */

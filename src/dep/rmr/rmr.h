@@ -45,7 +45,7 @@ struct RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx);
 MRCommand *MRCtx_GetCmds(struct MRCtx *ctx);
 int MRCtx_GetCmdsSize(struct MRCtx *ctx);
 void MRCtx_SetReduceFunction(struct MRCtx *ctx, MRReduceFunc fn);
-void requestCompleted();
+void MR_requestCompleted();
 
 
 /* Free the MapReduce context */

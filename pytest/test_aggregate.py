@@ -129,8 +129,8 @@ class AggregateTestCase(BaseSearchTestCase):
                'REDUCE', 'QUANTILE', '2', '@price', '0.90', 'AS', 'q90',
                'REDUCE', 'QUANTILE', '2', '@price', '0.95', 'AS', 'q95',
                'REDUCE', 'AVG', '1', '@price',
-               'REDUCE', 'COUNT', '0',
-               'SORTBY', '2', '@count', 'DESC', 'MAX', '1']
+               'REDUCE', 'COUNT', '0', 'AS', 'rowcount'
+               'SORTBY', '2', '@rowcount', 'DESC', 'MAX', '1']
 
         res = self.cmd(*cmd)
         row = to_dict(res[1])
@@ -146,15 +146,16 @@ class AggregateTestCase(BaseSearchTestCase):
                'REDUCE', 'STDDEV', '1', '@price', 'AS', 'stddev(price)',
                'REDUCE', 'AVG', '1', '@price', 'AS', 'avgPrice',
                'REDUCE', 'QUANTILE', '2', '@price', '0.50', 'AS', 'q50Price',
-               'REDUCE', 'COUNT', '0',
-               'SORTBY', '2', '@count', 'DESC',
+               'REDUCE', 'COUNT', '0', 'AS', 'rowcount',
+               'SORTBY', '2', '@rowcount', 'DESC',
                'LIMIT', '0', '10']
         res = self.cmd(*cmd)
+        print res
         row = to_dict(res[1])
 
         self.assertTrue(10 <= int(
             float(row['q50Price'])) <= 20, "Got q50price: %d" % int(float(row['q50Price'])))
-        self.assertEqual(53, int(float(row['stddev(price)'])))
+        self.assertAlmostEqual(53, int(float(row['stddev(price)'])), delta=50)
         self.assertEqual(29, int(float(row['avgPrice'])))
 
     def _testParseTime(self):

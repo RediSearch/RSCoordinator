@@ -240,7 +240,9 @@ void net_Free(ResultProcessor *rp) {
 
   // the iterator might not be done - some producers might still be sending data, let's wait for
   // them...
-  MRIterator_WaitDone(nc->it);
+  if (nc->it) {
+    MRIterator_WaitDone(nc->it);
+  }
 
   nc->cg.Free(nc->cg.ctx);
 

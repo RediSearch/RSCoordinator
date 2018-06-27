@@ -172,7 +172,7 @@ static int distributeSingleArgSelf(AggregateGroupReduce *src, AggregateStep *loc
   return 1;
 }
 
-#define QUANTILE_SAMPLE_SIZE 500
+#define RANDOM_SAMPLE_SIZE 500
 /* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
 static int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local,
                               AggregateStep *remote) {
@@ -180,10 +180,10 @@ static int distributeQuantile(AggregateGroupReduce *src, AggregateStep *local,
     return 0;
   }
   AggregateGroupStep_AddReducer(&remote->group, "RANDOM_SAMPLE", RSKEY(src->alias), 2, src->args[0],
-                                RS_NumVal(QUANTILE_SAMPLE_SIZE));
+                                RS_NumVal(RANDOM_SAMPLE_SIZE));
 
   AggregateGroupStep_AddReducer(&local->group, "QUANTILE", RSKEY(src->alias), 3,
-                                PROPVAL(src->alias), src->args[1], RS_NumVal(QUANTILE_SAMPLE_SIZE));
+                                PROPVAL(src->alias), src->args[1], RS_NumVal(RANDOM_SAMPLE_SIZE));
 
   return 1;
 }
@@ -195,7 +195,7 @@ static int distributeStdDev(AggregateGroupReduce *src, AggregateStep *local,
     return 0;
   }
   AggregateGroupStep_AddReducer(&remote->group, "RANDOM_SAMPLE", RSKEY(src->alias), 2, src->args[0],
-                                RS_NumVal(200));
+                                RS_NumVal(RANDOM_SAMPLE_SIZE));
 
   AggregateGroupStep_AddReducer(&local->group, "STDDEV", RSKEY(src->alias), 1, PROPVAL(src->alias));
 

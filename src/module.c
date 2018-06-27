@@ -1184,7 +1184,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   // Init the aggregation thread pool
-  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(CONCURRENT_SEARCH_POOL_DEFAULT_SIZE);
+  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(RSGlobalConfig.searchPoolSize);
 
   /*********************************************************
    * Single-shard simple commands

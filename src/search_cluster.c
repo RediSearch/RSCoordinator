@@ -68,6 +68,28 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitio
   }
   return 1;
 }
+
+int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *cmd) {
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(sc)) return 0;
+
+  int sk = -1;
+  if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
+    if (sk >= cmd->num) {
+      return 0;
+    }
+    // the sharding arg is the arg that we will add the partition tag to
+    char *shardingArg = cmd->args[sk];
+
+    char *tagged;
+
+    size_t part = 0;
+    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
+    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
+  }
+  return 1;
+}
+
 /* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
 int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   SCCommandMuxIterator *it = ctx;

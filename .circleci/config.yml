@@ -7,14 +7,15 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: make
+          command: >-
+              mkdir build && cd build && python ../configure.py && make
       - run:
           name: Test
-          command: make test
+          command: make -C build test
       - run:
           name: Persist Artifacts
           command: >-
-            mkdir -p /workspace/build && cp src/$MODULE_ARTIFACT /workspace/ &&
+            mkdir -p /workspace/build && cp build/$MODULE_ARTIFACT /workspace/ &&
             cp ramp.yml /workspace/
       - persist_to_workspace:
           root: /workspace

@@ -12,10 +12,13 @@ jobs:
               git submodule update &&
               mkdir build && cd build &&
               python ../configure.py &&
-              make VERBOSE=1 -j4
+              make VERBOSE=1 -j4 
       - run:
           name: Test
-          command: make -C build test
+          command: >-
+              make -C build test &&
+              cd pytest &&
+              REDIS_MODULE_PATH=$PWD/../build/module-oss.so python -m unittest discover
       - run:
           name: Persist Artifacts
           command: >-

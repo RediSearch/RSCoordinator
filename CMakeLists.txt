@@ -16,6 +16,7 @@ SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymboli
 
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
 SET(RS_RUN_TESTS CACHE BOOL OFF) # Don't run RS' own tests
+ENABLE_TESTING() # Enable our own tests
 
 FIND_PATH(LIBUV_INCLUDE_DIR uv.h
           HINTS ${LIBUV_ROOT}
@@ -50,3 +51,9 @@ ENDMACRO()
 
 MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
+
+ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} hiredis)
+# Add RMR's tests, and our own tests
+ADD_SUBDIRECTORY(src/dep/rmr/test)
+ADD_SUBDIRECTORY(test)

@@ -12,7 +12,7 @@ jobs:
               git submodule update &&
               mkdir build && cd build &&
               python ../configure.py &&
-              make
+              make VERBOSE=1 -j4
       - run:
           name: Test
           command: make -C build test

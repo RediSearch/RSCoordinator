@@ -17,20 +17,20 @@ void testCommandMux() {
 
   SearchCluster sc = NewSearchCluster(100, crc16_slot_table, 16384);
   MRCommand cmd = MR_NewCommand(3, "_FT.SEARCH", "idx", "foo");
+  MRCommand_Print(&cmd);
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd);
 
   MRCommand mxcmd;
-  int  i =0;
+  int i = 0;
   printf("Expected len: %d\n", cg.Len(cg.ctx));
   while (cg.Next(cg.ctx, &mxcmd)) {
-    i+=1;
+    i += 1;
     MRCommand_Print(&mxcmd);
     MRCommand_Free(&mxcmd);
     if (i > 100) mu_fail("number of iterations exceeded");
   }
   cg.Free(cg.ctx);
-  
 }
 
 int main(int argc, char **argv) {

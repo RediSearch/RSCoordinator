@@ -119,8 +119,9 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
   if (c->state != MRConn_Connected) {
     return REDIS_ERR;
   }
-
-  return redisAsyncCommandArgv(c->conn, fn, privdata, cmd->num, (const char **)cmd->args, NULL);
+  // printf("Sending to %s:%d\n", c->ep.host, c->ep.port);
+  // MRCommand_Print(cmd);
+  return redisAsyncCommandArgv(c->conn, fn, privdata, cmd->num, cmd->strs, cmd->lens);
 }
 
 // replace an existing coonnection pool with a new one

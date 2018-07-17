@@ -24,6 +24,30 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }
 
+static char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
+                           size_t *taggedLen) {
+  size_t total = keyLen + tagLen + 3;
+  char *tagged = malloc(total);
+  tagged[total - 1] = 0;
+  if (taggedLen) {
+    *taggedLen = total - 1;
+  }
+
+  // key{tag}
+
+  char *pos = tagged;
+  memcpy(pos, key, keyLen);
+  pos += keyLen;
+  *(pos++) = '{';
+
+  memcpy(pos, tag, tagLen);
+  pos += tagLen;
+  *(pos++) = '}';
+
+  // printf("TaggedID: %.*s\n", (int)*taggedLen, tagged);
+  return tagged;
+}
+
 int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
 
   // make sure we can actually calculate partitioning
@@ -34,37 +58,52 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   }
 
   // the partition arg is the arg which we select the partition on
-  char *partitionArg = cmd->args[partitionKey];
-  // the sharding arg is the arg that we will add the partition tag to
-  char *rewriteArg = cmd->args[arg];
-  char *tagged;
+  const char *partitionArg, *rewriteArg;
+  size_t partitionLen, rewriteLen;
 
-  size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
-  asprintf(&tagged, "%s{%s}", rewriteArg, PartitionTag(&sc->part, part));
-  MRCommand_ReplaceArgNoDup(cmd, arg, tagged);
+  partitionArg = MRCommand_ArgStringPtrLen(cmd, partitionKey, &partitionLen);
+  rewriteArg = MRCommand_ArgStringPtrLen(cmd, arg, &rewriteLen);
+
+  size_t part = PartitionForKey(&sc->part, partitionArg, partitionLen);
+  const char *tag = PartitionTag(&sc->part, part);
+  size_t tagLen = strlen(tag);
+  size_t taggedLen = 0;
+
+  char *tagged = writeTaggedId(rewriteArg, rewriteLen, tag, tagLen, &taggedLen);
+  MRCommand_ReplaceArgNoDup(cmd, arg, tagged, taggedLen);
 
   return 1;
 }
 
-int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitionKey) {
+int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx) {
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
 
   int sk = -1;
   if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
-    if (partitionKey < 0 || partitionKey >= cmd->num || sk >= cmd->num) {
+    if (partIdx < 0 || partIdx >= cmd->num || sk >= cmd->num) {
       return 0;
     }
+
+    // printf("ShardKey: %d. Before rewrite: ", sk);
+    // MRCommand_Print(cmd);
+
+    size_t partLen = 0, targetLen = 0, taggedLen;
+
     // the partition arg is the arg which we select the partition on
-    char *partitionArg = cmd->args[partitionKey];
+    const char *partStr = MRCommand_ArgStringPtrLen(cmd, partIdx, &partLen);
+
     // the sharding arg is the arg that we will add the partition tag to
-    char *shardingArg = cmd->args[sk];
+    const char *target = MRCommand_ArgStringPtrLen(cmd, sk, &targetLen);
 
-    char *tagged;
+    size_t partId = PartitionForKey(&sc->part, partStr, partLen);
+    const char *tag = PartitionTag(&sc->part, partId);
 
-    size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
-    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
-    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
+    char *tagged = writeTaggedId(target, targetLen, tag, strlen(tag), &taggedLen);
+    MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
+
+    // printf("After rewrite: ");
+    // MRCommand_Print(cmd);
   }
   return 1;
 }
@@ -73,20 +112,20 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
 
-  int sk = -1;
-  if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
-    if (sk >= cmd->num) {
-      return 0;
-    }
-    // the sharding arg is the arg that we will add the partition tag to
-    char *shardingArg = cmd->args[sk];
-
-    char *tagged;
-
-    size_t part = 0;
-    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
-    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
+  int sk = MRCommand_GetShardingKey(cmd);
+  if (sk < 0) {
+    return 1;
+  } else if (sk >= cmd->num) {
+    return 0;
   }
+
+  size_t keylen = 0;
+  const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
+
+  size_t taggedLen = 0;
+  const char *tag = PartitionTag(&sc->part, 0);
+  char *tagged = writeTaggedId(key, keylen, tag, strlen(tag), &taggedLen);
+  MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
   return 1;
 }
 
@@ -103,11 +142,13 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
 
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
-    char *arg = cmd->args[it->keyOffset];
-    char *tagged;
-    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset++));
-    // printf("tagged: %s\n", tagged);
-    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
+    size_t argLen;
+    const char *arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    const char *tag = PartitionTag(&it->cluster->part, it->offset++);
+
+    size_t taggedLen;
+    char *tagged = writeTaggedId(arg, argLen, tag, strlen(tag), &taggedLen);
+    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged, taggedLen);
   }
   // MRCommand_Print(cmd);
 

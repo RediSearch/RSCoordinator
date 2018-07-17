@@ -1,13 +1,15 @@
 #ifndef __MR_COMMAND_H__
 #define __MR_COMMAND_H__
 #include <redismodule.h>
-
+#include <assert.h>
 /* A redis command is represented with all its arguments and its flags as MRCommand */
 typedef struct {
   /* The command args starting from the command itself */
-  char **args;
+  char **strs;
+  size_t *lens;
+
   /* Number of arguments */
-  int num;
+  uint32_t num;
 
   /* Internal id used to get the command configuration */
   int id;
@@ -22,9 +24,17 @@ MRCommand MR_NewCommandArgv(int argc, char **argv);
 /* Variadic creation of a command from a list of strings */
 MRCommand MR_NewCommand(int argc, ...);
 /* Create a command from a list of strings */
-MRCommand MR_NewCommandFromStrings(int argc, char** argv);
+MRCommand MR_NewCommandFromStrings(int argc, char **argv);
 /* Create a command from a list of redis strings */
 MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv);
+
+static inline const char *MRCommand_ArgStringPtrLen(const MRCommand *cmd, size_t idx, size_t *len) {
+  // assert(idx < cmd->num);
+  if (len) {
+    *len = cmd->lens[idx];
+  }
+  return cmd->strs[idx];
+}
 
 /* A generator producing a list of commands on successive calls to Next(); */
 typedef struct {
@@ -41,15 +51,20 @@ typedef struct {
   void (*Free)(void *ctx);
 } MRCommandGenerator;
 
-void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char** args);
+void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char **args);
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
+
+/** Copy from an argument of an existing command */
+void MRCommand_AppendFrom(MRCommand *cmd, const MRCommand *srcCmd, size_t srcidx);
+void MRCommand_Append(MRCommand *cmd, const char *s, size_t len);
 
 /** Set the prefix of the command (i.e {prefix}.{command}) to a given prefix. If the command has a
  * module style prefx it gets replaced with the new prefix. If it doesn't, we prepend the prefix to
  * the command. */
 void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix);
-void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg);
-void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg);
+void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg, size_t len);
+void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg, size_t len);
+
 
 int MRCommand_GetShardingKey(MRCommand *cmd);
 int MRCommand_GetPartitioningKey(MRCommand *cmd);
@@ -71,6 +86,6 @@ void MRCommand_Print(MRCommand *cmd);
 void MRCommand_FPrint(FILE *fd, MRCommand *cmd);
 
 /* Create a copy of a command by duplicating all strings */
-MRCommand MRCommand_Copy(MRCommand *cmd);
+MRCommand MRCommand_Copy(const MRCommand *cmd);
 
 #endif

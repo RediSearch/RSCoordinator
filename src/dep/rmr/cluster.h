@@ -132,4 +132,13 @@ int MRCLuster_UpdateTopology(MRCluster *cl, MRClusterTopology *newTopology);
 mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots);
 mr_slot_t CRC12ShardFunc(MRCommand *cmd, mr_slot_t numSlots);
 
+typedef struct {
+  const char *base;
+  size_t baseLen;
+  const char *shard;
+  size_t shardLen;
+} MRKey;
+
+void MRKey_Parse(MRKey *key, const char *srckey, size_t srclen);
+
 #endif

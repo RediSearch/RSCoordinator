@@ -209,31 +209,55 @@ int MRCluster_ConnectAll(MRCluster *cl) {
   return MRConnManager_ConnectAll(&cl->mgr);
 }
 
-char *_MRGetShardKey(MRCommand *cmd, size_t *len) {
+void MRKey_Parse(MRKey *mk, const char *src, size_t srclen) {
+  mk->shard = NULL;
+  mk->shardLen = 0;
+
+  mk->shard = mk->base = src;
+  mk->shardLen = mk->baseLen = srclen;
+
+  const char *endBrace = src + srclen - 1;
+  if (srclen < 3 || !*endBrace || *endBrace != '}') {
+    // printf("No closing brace found!\n");
+    return;
+  }
+
+  const char *beginBrace = endBrace;
+  while (beginBrace >= src && *beginBrace != '{') {
+    beginBrace--;
+  }
+
+  if (*beginBrace != '{') {
+    // printf("No open brace found!\n");
+    return;
+  }
+
+  mk->baseLen = beginBrace - src;
+  mk->shard = beginBrace + 1;
+  mk->shardLen = endBrace - mk->shard;
+  // printf("Shard key: %.*s\n", (int)mk->shardLen, mk->shard);
+}
+
+static const char *MRGetShardKey(MRCommand *cmd, size_t *len) {
   int pos = MRCommand_GetShardingKey(cmd);
   if (pos < 0 || pos >= cmd->num) {
+    // printf("Returning NULL.. pos=%d, num=%d\n", pos, cmd->num);
     return NULL;
   }
-  char *k = cmd->args[MRCommand_GetShardingKey(cmd)];
-  char *brace = strchr(k, '{');
-  *len = strlen(k);
-  if (brace) {
-    char *braceEnd = strchr(brace, '}');
-    if (braceEnd) {
 
-      *len = braceEnd - brace - 1;
-      k = brace + 1;
-    }
-  }
-
-  return k;
+  size_t klen;
+  const char *k = MRCommand_ArgStringPtrLen(cmd, pos, &klen);
+  MRKey mk;
+  MRKey_Parse(&mk, k, klen);
+  *len = mk.shardLen;
+  return mk.shard;
 }
 
 mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
 
   size_t len;
 
-  char *k = _MRGetShardKey(cmd, &len);
+  const char *k = MRGetShardKey(cmd, &len);
   if (!k) return 0;
   uint16_t crc = crc16(k, len);
   return crc % numSlots;
@@ -242,7 +266,7 @@ mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
 mr_slot_t CRC12ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
   size_t len;
 
-  char *k = _MRGetShardKey(cmd, &len);
+  const char *k = MRGetShardKey(cmd, &len);
   if (!k) return 0;
   uint16_t crc = crc12(k, len);
   return crc % numSlots;

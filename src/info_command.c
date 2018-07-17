@@ -33,8 +33,16 @@ static InfoFieldSpec gcSpecs[] = {
     {.name = "bytes_collected", .type = InfoField_WholeSum},
     {.name = "effectiv_cycles_rate", .type = InfoField_DoubleAverage}};
 
+static InfoFieldSpec cursorSpecs[] = {
+    {.name = "global_idle", .type = InfoField_WholeSum},
+    {.name = "global_total", .type = InfoField_WholeSum},
+    {.name = "index_capacity", .type = InfoField_WholeSum},
+    {.name = "index_total", .type = InfoField_WholeSum},
+};
+
 #define NUM_FIELDS_SPEC (sizeof(toplevelSpecs_g) / sizeof(InfoFieldSpec))
 #define NUM_GC_FIELDS_SPEC (sizeof(gcSpecs) / sizeof(InfoFieldSpec))
+#define NUM_CURSOR_FIELDS_SPEC (sizeof(cursorSpecs) / sizeof(InfoFieldSpec))
 
 // Variant value type
 typedef struct {
@@ -58,6 +66,7 @@ typedef struct {
   size_t *errorIndexes;
   InfoValue toplevelValues[NUM_FIELDS_SPEC];
   InfoValue gcValues[NUM_GC_FIELDS_SPEC];
+  InfoValue cursorValues[NUM_CURSOR_FIELDS_SPEC];
 } InfoFields;
 
 /**
@@ -66,10 +75,10 @@ typedef struct {
  * - dsts is the destination
  * - specs describes the destination types and corresponding field names
  * - numFields - the number of specs and dsts
- * - isGc - because special handling is done in non-gc mode (i.e. top level mode)
+ * - onlyScalars - because special handling is done in toplevel mode
  */
 static void processKvArray(InfoFields *fields, MRReply *array, InfoValue *dsts,
-                           InfoFieldSpec *specs, size_t numFields, int isGc);
+                           InfoFieldSpec *specs, size_t numFields, int onlyScalars);
 
 /** Reply with a KV array, the values are emitted per name and type */
 static size_t replyKvArray(InfoFields *fields, RedisModuleCtx *ctx, InfoValue *values,
@@ -122,13 +131,15 @@ static void handleSpecialField(InfoFields *fields, const char *name, MRReply *va
       fields->indexOptions = value;
     }
   } else if (!strcmp(name, "gc_stats")) {
-    // Iterate each field inside GC
     processKvArray(fields, value, fields->gcValues, gcSpecs, NUM_GC_FIELDS_SPEC, 1);
+
+  } else if (!strcmp(name, "cursor_stats")) {
+    processKvArray(fields, value, fields->cursorValues, cursorSpecs, NUM_CURSOR_FIELDS_SPEC, 1);
   }
 }
 
 static void processKvArray(InfoFields *ctx, MRReply *array, InfoValue *dsts, InfoFieldSpec *specs,
-                           size_t numFields, int isGc) {
+                           size_t numFields, int onlyScalarValues) {
   if (MRReply_Type(array) != MR_REPLY_ARRAY) {
     return;
   }
@@ -148,7 +159,7 @@ static void processKvArray(InfoFields *ctx, MRReply *array, InfoValue *dsts, Inf
       }
     }
 
-    if (!isGc) {
+    if (!onlyScalarValues) {
       handleSpecialField(ctx, s, value);
     }
 
@@ -217,6 +228,13 @@ static void generateFieldsReply(InfoFields *fields, RedisModuleCtx *ctx) {
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   size_t nGcStats = replyKvArray(fields, ctx, fields->gcValues, gcSpecs, NUM_GC_FIELDS_SPEC);
   RedisModule_ReplySetArrayLength(ctx, nGcStats);
+  n += 2;
+
+  RedisModule_ReplyWithSimpleString(ctx, "cursor_stats");
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+  size_t nCursorStats =
+      replyKvArray(fields, ctx, fields->cursorValues, cursorSpecs, NUM_CURSOR_FIELDS_SPEC);
+  RedisModule_ReplySetArrayLength(ctx, nCursorStats);
   n += 2;
 
   n += replyKvArray(fields, ctx, fields->toplevelValues, toplevelSpecs_g, NUM_FIELDS_SPEC);

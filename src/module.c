@@ -204,30 +204,23 @@ int synonymUpdateFanOutReducer(struct MRCtx *mc, int count, MRReply **replies) {
   double d = 0;
   MRReply_ToDouble(replies[0], &d);
   char buf[128] = {0};
-  size_t nbuf = sprintf(buf, "%lf", d);
+  size_t nbuf = sprintf(buf, "%lu", (unsigned long)d);
   MRCommand_Append(&updateCommand, buf, nbuf);
 
   for (size_t ii = 2; ii < srcCmd->num; ++ii) {
     MRCommand_AppendFrom(&updateCommand, srcCmd, ii);
   }
 
-  // RSValue *id_val = MRReply_ToValue(replies[0], RSValue_Number);
-  // RSValue *v = RS_NewValue(RSValue_RedisString);
-  // RSValue_ToString(v, id_val);
-  // const char *id = RSValue_StringPtrLen(v, NULL);
-  // MRCommand_AppendArgs(&updateCommand, 1, id);
-  // MRCommand_AppendStringsArgs(&updateCommand, MRCtx_GetCmds(mc)[0].num - 2,
-  //                             MRCtx_GetCmds(mc)[0].args + 2);
   const char *cmdName = "_FT.SYNFORCEUPDATE";
   MRCommand_ReplaceArg(&updateCommand, 0, cmdName, strlen(cmdName));
 
-  size_t idLen;
+  size_t idLen = 0;
   const char *idStr = MRCommand_ArgStringPtrLen(&updateCommand, 1, &idLen);
   MRKey key = {0};
   MRKey_Parse(&key, idStr, idLen);
 
   // reseting the tag
-  MRCommand_ReplaceArg(&updateCommand, 1, idStr, idLen);
+  MRCommand_ReplaceArg(&updateCommand, 1, key.base, key.baseLen);
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &updateCommand);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);

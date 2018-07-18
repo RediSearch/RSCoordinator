@@ -189,7 +189,7 @@ MRCommand MR_NewCommandFromRedisStrings(int argc, RedisModuleString **argv) {
 }
 
 static void extendCommandList(MRCommand *cmd, size_t toAdd) {
-  cmd->num = toAdd;
+  cmd->num += toAdd;
   cmd->strs = realloc(cmd->strs, sizeof(*cmd->strs) * cmd->num);
   cmd->lens = realloc(cmd->lens, sizeof(*cmd->lens) * cmd->num);
 }
@@ -222,7 +222,7 @@ void MRCommand_AppendFrom(MRCommand *cmd, const MRCommand *srcCmd, size_t srcidx
 }
 
 void MRCommand_Append(MRCommand *cmd, const char *s, size_t n) {
-  extendCommandList(cmd, cmd->num + 1);
+  extendCommandList(cmd, 1);
   assignStr(cmd, cmd->num - 1, s, n);
   if (cmd->num == 1) {
     _getCommandConfId(cmd);

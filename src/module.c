@@ -366,8 +366,8 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
       double diff = r2->sortKeyNum - r1->sortKeyNum;
       cmp = diff < 0 ? -1 : (diff > 0 ? 1 : 0);
     } else {
-      printf("Using sortKey!! %.*s vs %.*s\n", (int)r2->sortKeyLen, r2->sortKey,
-             (int)r1->sortKeyLen, r1->sortKey);
+      // printf("Using sortKey!! %.*s vs %.*s\n", (int)r2->sortKeyLen, r2->sortKey,
+      //        (int)r1->sortKeyLen, r1->sortKey);
       // Sort by string sort keys
       cmp = cmpStrings(r2->sortKey, r2->sortKeyLen, r1->sortKey, r1->sortKeyLen);
     }

@@ -1,7 +1,7 @@
 #ifndef __RMR_CLUSTER_H__
 #define __RMR_CLUSTER_H__
 
-#include "../triemap/triemap.h"
+#include "dep/triemap/triemap.h"
 #include "hiredis/hiredis.h"
 #include "hiredis/async.h"
 #include "conn.h"

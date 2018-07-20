@@ -425,115 +425,127 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   return res;
 }
 
-int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
+typedef struct {
+  MRReply *lastError;
+  searchResult *cachedResult;
+  searchRequestCtx *searchCtx;
+  heap_t *pq;
+  size_t totalReplies;
+} searchReducerCtx;
 
-  // got no replies - this means timeout
-  if (count == 0 || req->limit < 0) {
-    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+typedef struct {
+  int step;  // offset for next reply
+  int score;
+  int firstField;
+  int payload;
+  int sortKey;
+} searchReplyOffsets;
+
+static void getReplyOffsets(const searchRequestCtx *ctx, searchReplyOffsets *offsets) {
+  offsets->step = 3;  // 1 for key, 1 for score, 1 for fields
+  offsets->score = 1;
+
+  offsets->firstField = 2;
+  offsets->payload = -1;
+  offsets->sortKey = -1;
+
+  if (ctx->withPayload) {  // save an extra step for payloads
+    offsets->step++;
+    offsets->payload = 2;
+    offsets->firstField = 3;
+  }
+  if (ctx->withSortby || ctx->withSortingKeys) {
+    offsets->step++;
+    offsets->sortKey = offsets->firstField++;
+  }
+  // nocontent - one less field, and the offset is -1 to avoid parsing it
+  if (ctx->noContent) {
+    offsets->step--;
+    offsets->firstField = -1;
+  }
+}
+
+static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx) {
+  if (arr == NULL) {
+    return;
+  }
+  if (MRReply_Type(arr) == MR_REPLY_ERROR) {
+    rCtx->lastError = arr;
+    return;
+  }
+  if (MRReply_Type(arr) != MR_REPLY_ARRAY || MRReply_Length(arr) == 0) {
+    // Empty reply??
+    return;
   }
 
-  long long total = 0;
-  MRReply *lastError = NULL;
-  size_t num = req->offset + req->limit;
-  heap_t *pq = malloc(heap_sizeof(num));
-  heap_init(pq, cmp_results, req, num);
-  searchResult *cached = NULL;
-  for (int i = 0; i < count; i++) {
-    MRReply *arr = replies[i];
-    if (!arr) continue;
-    if (MRReply_Type(arr) == MR_REPLY_ERROR) {
-      lastError = arr;
-      continue;
+  // first element is always the total count
+  rCtx->totalReplies += MRReply_Integer(MRReply_ArrayElement(arr, 0));
+  size_t len = MRReply_Length(arr);
+  searchReplyOffsets offsets = {0};
+  getReplyOffsets(rCtx->searchCtx, &offsets);
+
+  // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
+  //         scoreOffset, fieldsOffset, sortKeyOffset);
+  for (int j = 1; j < len; j += offsets.step) {
+    searchResult *res = newResult(rCtx->cachedResult, arr, j, offsets.score, offsets.payload,
+                                  offsets.firstField, offsets.sortKey);
+    if (!res || !res->id) {
+      // invalid result - usually means something is off with the response, and we should just
+      // quit this response
+      rCtx->cachedResult = res;
+      break;
+    } else {
+      rCtx->cachedResult = NULL;
     }
-    if (MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 0) {
-      // first element is always the total count
-      total += MRReply_Integer(MRReply_ArrayElement(arr, 0));
-      size_t len = MRReply_Length(arr);
 
-      int step = 3;  // 1 for key, 1 for score, 1 for fields
-      int scoreOffset = 1, fieldsOffset = 2, payloadOffset = -1, sortKeyOffset = -1;
-      if (req->withPayload) {  // save an extra step for payloads
-        step++;
-        payloadOffset = 2;
-        fieldsOffset = 3;
-      }
-      if (req->withSortby || req->withSortingKeys) {
-        step++;
-        sortKeyOffset = fieldsOffset++;
-      }
-      // nocontent - one less field, and the offset is -1 to avoid parsing it
-      if (req->noContent) {
-        step--;
-        fieldsOffset = -1;
-      }
-      // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
-      //         scoreOffset, fieldsOffset, sortKeyOffset);
-      for (int j = 1; j < len; j += step) {
-        searchResult *res =
-            newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
-        if (!res || !res->id) {
-          // invalid result - usually means something is off with the response, and we should just
-          // quit this response
-          cached = res;
-          break;
-        } else {
-          cached = NULL;
-        }
-        // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
-        //         res->id, res->score, res->sortKeyNum);
+    // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
+    //         res->id, res->score, res->sortKeyNum);
 
-        if (heap_count(pq) < heap_size(pq)) {
-          // printf("Offering result score %f\n", res->score);
-          heap_offerx(pq, res);
+    // TODO: minmax_heap?
+    if (heap_count(rCtx->pq) < heap_size(rCtx->pq)) {
+      // printf("Offering result score %f\n", res->score);
+      heap_offerx(rCtx->pq, res);
 
-        } else {
-          searchResult *smallest = heap_peek(pq);
-          int c = cmp_results(res, smallest, req);
-          if (c < 0) {
-            smallest = heap_poll(pq);
-            heap_offerx(pq, res);
-            cached = smallest;
-          } else {
-            // If the result is lower than the last result in the heap - we can stop now
-            cached = res;
-            break;
-          }
-        }
+    } else {
+      searchResult *smallest = heap_peek(rCtx->pq);
+      int c = cmp_results(res, smallest, rCtx->searchCtx);
+      if (c < 0) {
+        smallest = heap_poll(rCtx->pq);
+        heap_offerx(rCtx->pq, res);
+        rCtx->cachedResult = smallest;
+      } else {
+        // If the result is lower than the last result in the heap - we can stop now
+        rCtx->cachedResult = res;
+        break;
       }
     }
   }
-  if (cached) free(cached);
-  // If we didn't get any results and we got an error - return it.
-  // If some shards returned results and some errors - we prefer to show the results we got an not
-  // return an error. This might change in the future
-  if (total == 0 && lastError != NULL) {
-    MR_ReplyWithMRReply(ctx, lastError);
-    searchRequestCtx_Free(req);
+}
 
-    return REDISMODULE_OK;
-  }
-
+static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
   // Reverse the top N results
-  size_t qlen = heap_count(pq);
+  searchRequestCtx *req = rCtx->searchCtx;
 
-  // // If we didn't get enough results - we return nothing
-  // if (qlen <= req->offset) {
-  //   qlen = 0;
-  // }
+  // Number of results to actually return
+  size_t num = req->limit + req->offset;
 
+  size_t qlen = heap_count(rCtx->pq);
   size_t pos = qlen;
+
+  // Load the results from the heap into a sorted array. Free the items in
+  // the heap one-by-one so that we don't have to go through them again
   searchResult *results[qlen];
   while (pos) {
-    results[--pos] = heap_poll(pq);
+    results[--pos] = heap_poll(rCtx->pq);
   }
-  heap_free(pq);
+  heap_free(rCtx->pq);
+  rCtx->pq = NULL;
 
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-  int len = 1;
-  RedisModule_ReplyWithLongLong(ctx, total);
-  for (pos = req->offset; pos < qlen && pos < num; pos++) {
+  RedisModule_ReplyWithLongLong(ctx, rCtx->totalReplies);
+  size_t len = 1;
+
+  for (pos = rCtx->searchCtx->offset; pos < qlen && pos < num; pos++) {
     searchResult *res = results[pos];
     RedisModule_ReplyWithStringBuffer(ctx, res->id, res->idLen);
     len++;
@@ -560,12 +572,53 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
   }
   RedisModule_ReplySetArrayLength(ctx, len);
+
+  // Free the sorted results
   for (pos = 0; pos < qlen; pos++) {
     free(results[pos]);
   }
+}
+
+int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
+  searchReducerCtx rCtx = {NULL};
+
+  // got no replies - this means timeout
+  if (count == 0 || req->limit < 0) {
+    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+  }
+
+  size_t num = req->offset + req->limit;
+  rCtx.pq = malloc(heap_sizeof(num));
+  heap_init(rCtx.pq, cmp_results, req, num);
+
+  rCtx.searchCtx = req;
+
+  for (int i = 0; i < count; i++) {
+    processSearchReply(replies[i], &rCtx);
+  }
+  if (rCtx.cachedResult) {
+    free(rCtx.cachedResult);
+  }
+  // If we didn't get any results and we got an error - return it.
+  // If some shards returned results and some errors - we prefer to show the results we got an not
+  // return an error. This might change in the future
+  if (rCtx.totalReplies == 0 && rCtx.lastError != NULL) {
+    MR_ReplyWithMRReply(ctx, rCtx.lastError);
+  } else {
+    sendSearchResults(ctx, &rCtx);
+  }
+
+  if (rCtx.pq) {
+    searchResult *res;
+    while ((res = heap_poll(rCtx.pq))) {
+      free(res);
+    }
+    heap_free(rCtx.pq);
+  }
 
   searchRequestCtx_Free(req);
-
   return REDISMODULE_OK;
 }
 

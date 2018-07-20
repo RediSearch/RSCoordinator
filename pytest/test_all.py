@@ -1,4 +1,4 @@
-import rmtest; rmtest.set_cluster_mode()
+import rmtest2; rmtest2.set_cluster_mode()
 import base_case
 from oss_tests import base_case as oss_base_case
 # del oss_base_case.BaseSearchTestCase

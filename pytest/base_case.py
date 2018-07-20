@@ -1,12 +1,12 @@
-import rmtest.config
+import rmtest2.config
 from oss_tests.base_case import FTBaseCaseMethods
 
 
-class BaseSearchTestCase(rmtest.ClusterTestCase, FTBaseCaseMethods):
+class BaseSearchTestCase(rmtest2.ClusterTestCase, FTBaseCaseMethods):
     @classmethod
     def get_module_args(cls):
-        print("Getting module args!!!")
-        return super(BaseSearchTestCase, cls).get_module_args() + ['PARTITIONS', 'AUTO']
+        return super(BaseSearchTestCase, cls).get_module_args() + [
+            'PARTITIONS', 'AUTO', 'TIMEOUT', '20000']
 
     def setUp(self):
         # Update all the nodes

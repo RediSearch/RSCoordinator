@@ -12,7 +12,7 @@
 #include "dep/rmr/redis_cluster.h"
 #include "dep/rmr/redise.h"
 #include "fnv32.h"
-#include "dep/heap.h"
+#include "util/heap.h"
 #include "search_cluster.h"
 #include "config.h"
 #include "dep/RediSearch/src/module.h"

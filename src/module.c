@@ -172,8 +172,9 @@ int synonymAllOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
   size_t groupLen;
   const char *groupStr = MRCommand_ArgStringPtrLen(&MRCtx_GetCmds(mc)[0], 2, &groupLen);
   RedisModuleString *synonymGroupIdStr = RedisModule_CreateString(ctx, groupStr, groupLen);
-  long long synonymGroupId;
-  assert(RedisModule_StringToLongLong(synonymGroupIdStr, &synonymGroupId) == REDIS_OK);
+  long long synonymGroupId = 0;
+  int rv = RedisModule_StringToLongLong(synonymGroupIdStr, &synonymGroupId);
+  assert(rv == REDIS_OK);
 
   RedisModule_ReplyWithLongLong(ctx, synonymGroupId);
 

@@ -1,5 +1,5 @@
 import rmtest2.config
-from oss_tests.base_case import FTBaseCaseMethods
+from redisearch_pytests.base_case import FTBaseCaseMethods
 
 
 class BaseSearchTestCase(rmtest2.ClusterTestCase, FTBaseCaseMethods):

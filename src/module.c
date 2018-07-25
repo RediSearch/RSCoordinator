@@ -523,9 +523,12 @@ static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx) {
         heap_offerx(rCtx->pq, res);
         rCtx->cachedResult = smallest;
       } else {
-        // If the result is lower than the last result in the heap - we can stop now
         rCtx->cachedResult = res;
-        break;
+        if (rCtx->searchCtx->withSortby) {
+          // If the result is lower than the last result in the heap,
+          // AND there is a user-defined sort order - we can stop now
+          break;
+        }
       }
     }
   }

@@ -347,11 +347,19 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
   return req;
 }
 
-static int cmpStrings(const char *s1, size_t n1, const char *s2, size_t n2) {
-  if (n1 != n2) {
-    return n1 > n2 ? 1 : -1;
+static int cmpStrings(const char *s1, size_t l1, const char *s2, size_t l2) {
+  int cmp = memcmp(s1, s2, MIN(l1, l2));
+  if (l1 == l2) {
+    // if the strings are the same length, just return the result of strcmp
+    return cmp;
   }
-  return memcmp(s1, s2, n1);
+
+  // if the strings are identical but the lengths aren't, return the longer string
+  if (cmp == 0) {
+    return l1 > l2 ? 1 : -1;
+  } else {  // the strings are lexically different, just return that
+    return cmp;
+}
 }
 
 static int cmp_results(const void *p1, const void *p2, const void *udata) {

@@ -359,37 +359,55 @@ static int cmpStrings(const char *s1, size_t l1, const char *s2, size_t l2) {
     return l1 > l2 ? 1 : -1;
   } else {  // the strings are lexically different, just return that
     return cmp;
-}
+  }
 }
 
 static int cmp_results(const void *p1, const void *p2, const void *udata) {
 
   const searchResult *r1 = p1, *r2 = p2;
-
   const searchRequestCtx *req = udata;
-  int cmp = 0;
   // Compary by sorting keys
-  if (r1->sortKey && r2->sortKey && req->withSortby) {
+  if ((r1->sortKey || r2->sortKey) && req->withSortby) {
+    int cmp = 0;
     // Sort by numeric sorting keys
     if (r1->sortKeyNum != HUGE_VAL && r2->sortKeyNum != HUGE_VAL) {
       double diff = r2->sortKeyNum - r1->sortKeyNum;
       cmp = diff < 0 ? -1 : (diff > 0 ? 1 : 0);
-    } else {
-      // printf("Using sortKey!! %.*s vs %.*s\n", (int)r2->sortKeyLen, r2->sortKey,
-      //        (int)r1->sortKeyLen, r1->sortKey);
+    } else if (r1->sortKey && r2->sortKey) {
+
       // Sort by string sort keys
       cmp = cmpStrings(r2->sortKey, r2->sortKeyLen, r1->sortKey, r1->sortKeyLen);
+      // printf("Using sortKey!! <N=%lu> %.*s vs <N=%lu> %.*s. Result=%d\n", r2->sortKeyLen,
+      //        (int)r2->sortKeyLen, r2->sortKey, r1->sortKeyLen, (int)r1->sortKeyLen, r1->sortKey,
+      //        cmp);
+    } else {
+      // If at least one of these has a sort key
+      cmp = r2->sortKey ? 1 : -1;
     }
     // in case of a tie - compare ids
     if (!cmp) {
+      // printf("It's a tie! Comparing <N=%lu> %.*s vs <N=%lu> %.*s\n", r2->idLen, (int)r2->idLen,
+      //        r2->id, r1->idLen, (int)r1->idLen, r1->id);
       cmp = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
     }
     return (req->sortAscending ? -cmp : cmp);
   }
 
   double s1 = r1->score, s2 = r2->score;
-
-  return s1 < s2 ? 1 : (s1 > s2 ? -1 : cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen));
+  // printf("Scores: %lf vs %lf. WithSortBy: %d. SK1=%p. SK2=%p\n", s1, s2, req->withSortby,
+  //        r1->sortKey, r2->sortKey);
+  if (s1 < s2) {
+    return 1;
+  } else if (s1 > s2) {
+    return -1;
+  } else {
+    // printf("Scores are tied. Will compare ID Strings instead\n");
+    int rv = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    // printf("ID Strings: Comparing <N=%lu> %.*s vs <N=%lu> %.*s => %d\n", r2->idLen,
+    // (int)r2->idLen,
+    //        r2->id, r1->idLen, (int)r1->idLen, r1->id, rv);
+    return rv;
+  }
 }
 
 searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,

@@ -210,9 +210,6 @@ int MRCluster_ConnectAll(MRCluster *cl) {
 }
 
 void MRKey_Parse(MRKey *mk, const char *src, size_t srclen) {
-  mk->shard = NULL;
-  mk->shardLen = 0;
-
   mk->shard = mk->base = src;
   mk->shardLen = mk->baseLen = srclen;
 

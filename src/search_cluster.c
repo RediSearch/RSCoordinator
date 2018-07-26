@@ -26,7 +26,7 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
 
 static char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
                            size_t *taggedLen) {
-  size_t total = keyLen + tagLen + 3;
+  size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL
   char *tagged = malloc(total);
   tagged[total - 1] = 0;
   if (taggedLen) {

@@ -90,6 +90,33 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
   return 1;
 }
 
+/* Get the next multiplexed command for spellcheck command. Return 1 if we are not done, else 0 */
+int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
+  SCCommandMuxIterator *it = ctx;
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(it->cluster)) return 0;
+
+  /* at end */
+  if (it->offset >= it->cluster->size) {
+    return 0;
+  }
+
+  *cmd = MRCommand_Copy(it->cmd);
+  if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
+    char *arg = cmd->args[it->keyOffset];
+    char *tagged;
+    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset++));
+    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
+  }
+
+  // todo: rewrite the dict names here
+
+  // we ask for full score info so we can aggregate correctly
+  MRCommand_AppendArgs(cmd, 1, "FULLSCOREINFO");
+
+  return 1;
+}
+
 /* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
 int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   SCCommandMuxIterator *it = ctx;
@@ -127,6 +154,32 @@ void SCCommandMuxIterator_Free(void *ctx) {
   free(it);
 }
 
+MRCommandGenerator defaultCommandGenerator = (MRCommandGenerator){
+  .Next = SCCommandMuxIterator_Next,
+  .Free = SCCommandMuxIterator_Free,
+  .Len =  SCCommandMuxIterator_Len,
+  .ctx =  NULL
+};
+
+MRCommandGenerator spellCheckCommandGenerator = (MRCommandGenerator){
+  .Next = SpellCheckMuxIterator_Next,
+  .Free = SCCommandMuxIterator_Free,
+  .Len =  SCCommandMuxIterator_Len,
+  .ctx =  NULL
+};
+
+MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, MRCommand *cmd){
+  MRCommandGenerator* ptr = MRCommand_GetCommandGenerator(cmd);
+  MRCommandGenerator ret;
+  if(ptr){
+    ret = *ptr;
+  }else{
+    ret = defaultCommandGenerator;
+  }
+  ret.ctx = mux;
+  return ret;
+}
+
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
 MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd) {
@@ -135,10 +188,7 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
   *mux = (SCCommandMuxIterator){
       .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
 
-  return (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
-                              .Free = SCCommandMuxIterator_Free,
-                              .Len = SCCommandMuxIterator_Len,
-                              .ctx = mux};
+  return SearchCluster_GetCommandGenerator(mux, cmd);
 }
 
 /* Make sure that the cluster either has a size or updates its size from the topology when updated.

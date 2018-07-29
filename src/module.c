@@ -25,6 +25,8 @@
 #include <pthread.h>
 #include <aggregate/aggregate.h>
 #include <value.h>
+#include <stdbool.h>
+#include "cluster_spell_check.h"
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
@@ -239,14 +241,30 @@ int allOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
     RedisModule_ReplyWithError(ctx, "Could not distribute comand");
     return REDISMODULE_OK;
   }
+  bool isIntegerReply = false;
+  long long integerReply = 0;
   for (int i = 0; i < count; i++) {
     if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
       MR_ReplyWithMRReply(ctx, replies[i]);
       return REDISMODULE_OK;
     }
+    if (MRReply_Type(replies[i]) == MR_REPLY_INTEGER){
+      long long currIntegerReply = MRReply_Integer(replies[i]);
+      if(!isIntegerReply){
+        integerReply = currIntegerReply;
+        isIntegerReply = true;
+      }else if(currIntegerReply != integerReply){
+        RedisModule_ReplyWithSimpleString(ctx, "not all results are the same");
+        return REDISMODULE_OK;
+      }
+    }
   }
 
-  RedisModule_ReplyWithSimpleString(ctx, "OK");
+  if(isIntegerReply){
+    RedisModule_ReplyWithLongLong(ctx, integerReply);
+  }else{
+    RedisModule_ReplyWithSimpleString(ctx, "OK");
+  }
   return REDISMODULE_OK;
 }
 
@@ -551,7 +569,7 @@ int FirstPartitionCommandHandler(RedisModuleCtx *ctx,
   return REDISMODULE_OK;
 }
 
-int SynDumpCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int FirstShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -645,6 +663,28 @@ int MGetCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
   MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
   MR_Map(mrctx, mergeArraysReducer, cg, true);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
+int SpellCheckCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(GetSearchCluster())) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own FT command with _FT. command */
+  MRCommand_SetPrefix(&cmd, "_FT");
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
+  MR_Map(mrctx, spellCheckReducer, cg, true);
   cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
@@ -1260,9 +1300,22 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
    * Synonym Support
    */
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNADD", SafeCmd(SynAddCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNDUMP", SafeCmd(SynDumpCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNDUMP", SafeCmd(FirstShardCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNUPDATE", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNFORCEUPDATE", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
+
+
+  /**
+   * Dictionary commands
+   */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTADD", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTDEL", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTDUMP", SafeCmd(FirstShardCommandHandler), "readonly", 0, 0, -1));
+
+  /**
+   * spell check
+   */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler), "readonly", 0, 0, -1));
 
   return REDISMODULE_OK;
 }

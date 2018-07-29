@@ -105,14 +105,25 @@ int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
     char *arg = cmd->args[it->keyOffset];
     char *tagged;
-    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset++));
+    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset));
     MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
   }
 
-  // todo: rewrite the dict names here
+  for(int i = 0 ; i < it->cmd->num ; ++i){
+    if(strcmp(it->cmd->args[i], "TERMS") == 0){
+      if(i + 2 < it->cmd->num){
+        char *arg = cmd->args[i + 2];
+        char *tagged;
+        asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset));
+        MRCommand_ReplaceArgNoDup(cmd, i + 2, tagged);
+      }
+    }
+  }
 
   // we ask for full score info so we can aggregate correctly
   MRCommand_AppendArgs(cmd, 1, "FULLSCOREINFO");
+
+  ++it->offset;
 
   return 1;
 }

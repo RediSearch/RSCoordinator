@@ -19,11 +19,14 @@ FOREACH (flags_var_to_scrub
 ENDFOREACH()
 
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Werror=implicit-function-declaration -pthread")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+SET(RS_COMMON_FLAGS "-Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fPIC -Werror=implicit-function-declaration")
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -pthread")
+# Specific to coordinator
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fvisibility=hidden")
 
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${RS_COMMON_FLAGS} -std=gnu99")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RS_COMMON_FLAGS} -fno-rtti -fno-exceptions")
 
 SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
 SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")

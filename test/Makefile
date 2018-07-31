@@ -25,7 +25,7 @@ endif
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 SOURCEDIR=$(abspath ../)
-CC_SOURCES = ../src/search_cluster.c  ../src/fnv.c ../src/partition.c $(wildcard ../src/dep/rmr/redise_parser/*.c) 
+CC_SOURCES = ../src/search_cluster.c  ../src/fnv32.c ../src/partition.c $(wildcard ../src/dep/rmr/redise_parser/*.c) 
 CC_OBJECTS = $(patsubst %.c, %.o, $(CC_SOURCES))
 
 LIBS= $(abspath ../src/dep/rmr/librmr.a ../src/dep/rmr/hiredis/libhiredis.a  ../src/libuv.a ../src/dep/rmutil/librmutil.a ../src/dep/triemap/libtriemap.a )

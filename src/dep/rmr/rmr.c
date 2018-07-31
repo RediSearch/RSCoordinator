@@ -94,6 +94,7 @@ void MRCtx_Free(MRCtx *ctx) {
   for (int i = 0; i < ctx->numCmds; i++) {
     MRCommand_Free(&ctx->cmds[i]);
   }
+  free(ctx->cmds);
 
   for (int i = 0; i < ctx->numReplied; i++) {
     if (ctx->replies[i] != NULL) {
@@ -179,7 +180,7 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   // If we've received the last reply - unblock the client
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
-    if (ctx->fn){
+    if (ctx->fn) {
       ctx->fn(ctx, ctx->numReplied, ctx->replies);
     } else {
       RedisModuleBlockedClient *bc = ctx->redisCtx;
@@ -251,7 +252,7 @@ static void uvFanoutRequest(struct MRRequestCtx *mc) {
 
   mrctx->numCmds = mc->numCmds;
   mrctx->cmds = calloc(mrctx->numCmds, sizeof(MRCommand));
-  for(int i = 0 ; i < mrctx->numCmds ; ++i){
+  for (int i = 0; i < mrctx->numCmds; ++i) {
     mrctx->cmds[i] = mc->cmds[i];
   }
 
@@ -279,7 +280,7 @@ static void uvMapRequest(struct MRRequestCtx *mc) {
 
   mrctx->numCmds = mc->numCmds;
   mrctx->cmds = calloc(mrctx->numCmds, sizeof(MRCommand));
-  for(int i = 0 ; i < mrctx->numCmds ; ++i){
+  for (int i = 0; i < mrctx->numCmds; ++i) {
     mrctx->cmds[i] = mc->cmds[i];
   }
 
@@ -339,7 +340,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds, boo
     }
   }
 
-  if(block){
+  if (block) {
     ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
                                             freePrivDataCB, timeout_g);
   }

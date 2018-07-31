@@ -48,7 +48,7 @@ if not os.path.exists(BUILD_DIR):
 def build_uv(uv_src, uv_dst, build_dir):
     configure = os.path.join(uv_src, 'configure')
     if not os.path.exists(configure):
-        po = Popen(['sh', 'autogen.sh'])
+        po = Popen(['sh', os.path.join(uv_src, 'autogen.sh')])
         if po.wait() != 0:
             raise Exception("Couldn't generate configure script!")
     os.chdir(build_dir)  # Presumably the build dir

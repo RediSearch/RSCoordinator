@@ -24,6 +24,47 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }
 
+static char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
+                           size_t *taggedLen) {
+  size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL
+  char *tagged = malloc(total);
+  tagged[total - 1] = 0;
+  if (taggedLen) {
+    *taggedLen = total - 1;
+  }
+
+  // key{tag}
+
+  char *pos = tagged;
+  memcpy(pos, key, keyLen);
+  pos += keyLen;
+  *(pos++) = '{';
+
+  memcpy(pos, tag, tagLen);
+  pos += tagLen;
+  *(pos++) = '}';
+
+  // printf("TaggedID: %.*s\n", (int)*taggedLen, tagged);
+  return tagged;
+}
+
+/**
+ * Rewrite a command for a given partition.
+ * @param sc the cluster
+ * @param cmd the command to rewrite
+ * @param dstArg the index within the command that contains the key to rewrite
+ * @param partition the partition to use for tagging
+ */
+static void SearchCluster_RewriteForPartition(SearchCluster *sc, MRCommand *cmd, int dstArg,
+                                              size_t partition) {
+  size_t narg;
+  const char *arg = MRCommand_ArgStringPtrLen(cmd, dstArg, &narg);
+  const char *partTag = PartitionTag(&sc->part, partition);
+  size_t taggedLen;
+  char *tagged = writeTaggedId(arg, narg, partTag, strlen(partTag), &taggedLen);
+  MRCommand_ReplaceArgNoDup(cmd, dstArg, tagged, taggedLen);
+}
+
 int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int partitionKey, int arg) {
 
   // make sure we can actually calculate partitioning
@@ -34,37 +75,45 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   }
 
   // the partition arg is the arg which we select the partition on
-  char *partitionArg = cmd->args[partitionKey];
-  // the sharding arg is the arg that we will add the partition tag to
-  char *rewriteArg = cmd->args[arg];
-  char *tagged;
+  const char *partitionArg, *rewriteArg;
+  size_t partitionLen, rewriteLen;
 
-  size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
-  asprintf(&tagged, "%s{%s}", rewriteArg, PartitionTag(&sc->part, part));
-  MRCommand_ReplaceArgNoDup(cmd, arg, tagged);
+  partitionArg = MRCommand_ArgStringPtrLen(cmd, partitionKey, &partitionLen);
 
+  size_t part = PartitionForKey(&sc->part, partitionArg, partitionLen);
+  SearchCluster_RewriteForPartition(sc, cmd, arg, part);
   return 1;
 }
 
-int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partitionKey) {
+int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx) {
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
 
   int sk = -1;
   if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
-    if (partitionKey < 0 || partitionKey >= cmd->num || sk >= cmd->num) {
+    if (partIdx < 0 || partIdx >= cmd->num || sk >= cmd->num) {
       return 0;
     }
+
+    // printf("ShardKey: %d. Before rewrite: ", sk);
+    // MRCommand_Print(cmd);
+
+    size_t partLen = 0, targetLen = 0, taggedLen;
+
     // the partition arg is the arg which we select the partition on
-    char *partitionArg = cmd->args[partitionKey];
+    const char *partStr = MRCommand_ArgStringPtrLen(cmd, partIdx, &partLen);
+
     // the sharding arg is the arg that we will add the partition tag to
-    char *shardingArg = cmd->args[sk];
+    const char *target = MRCommand_ArgStringPtrLen(cmd, sk, &targetLen);
 
-    char *tagged;
+    size_t partId = PartitionForKey(&sc->part, partStr, partLen);
+    const char *tag = PartitionTag(&sc->part, partId);
 
-    size_t part = PartitionForKey(&sc->part, partitionArg, strlen(partitionArg));
-    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
-    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
+    char *tagged = writeTaggedId(target, targetLen, tag, strlen(tag), &taggedLen);
+    MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
+
+    // printf("After rewrite: ");
+    // MRCommand_Print(cmd);
   }
   return 1;
 }
@@ -73,20 +122,54 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
 
-  int sk = -1;
-  if ((sk = MRCommand_GetShardingKey(cmd)) >= 0) {
-    if (sk >= cmd->num) {
-      return 0;
-    }
-    // the sharding arg is the arg that we will add the partition tag to
-    char *shardingArg = cmd->args[sk];
-
-    char *tagged;
-
-    size_t part = 0;
-    asprintf(&tagged, "%s{%s}", shardingArg, PartitionTag(&sc->part, part));
-    MRCommand_ReplaceArgNoDup(cmd, sk, tagged);
+  int sk = MRCommand_GetShardingKey(cmd);
+  if (sk < 0) {
+    return 1;
+  } else if (sk >= cmd->num) {
+    return 0;
   }
+
+  size_t keylen = 0;
+  const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
+
+  size_t taggedLen = 0;
+  const char *tag = PartitionTag(&sc->part, 0);
+  char *tagged = writeTaggedId(key, keylen, tag, strlen(tag), &taggedLen);
+  MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
+  return 1;
+}
+
+/* Get the next multiplexed command for spellcheck command. Return 1 if we are not done, else 0 */
+int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
+  SCCommandMuxIterator *it = ctx;
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(it->cluster)) return 0;
+
+  /* at end */
+  if (it->offset >= it->cluster->size) {
+    return 0;
+  }
+
+  *cmd = MRCommand_Copy(it->cmd);
+  if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
+    SearchCluster_RewriteForPartition(it->cluster, cmd, it->keyOffset, it->offset);
+  }
+
+  for (size_t i = 0; i < it->cmd->num; ++i) {
+    size_t argLen;
+    const char *arg = MRCommand_ArgStringPtrLen(it->cmd, i, &argLen);
+    if (!strncasecmp("terms", arg, argLen)) {
+      if (i + 2 < it->cmd->num) {
+        SearchCluster_RewriteForPartition(it->cluster, cmd, i + 2, it->offset);
+      }
+    }
+  }
+
+  // we ask for full score info so we can aggregate correctly
+  MRCommand_AppendArgs(cmd, 1, "FULLSCOREINFO");
+
+  ++it->offset;
+
   return 1;
 }
 
@@ -103,11 +186,13 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
 
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
-    char *arg = cmd->args[it->keyOffset];
-    char *tagged;
-    asprintf(&tagged, "%s{%s}", arg, PartitionTag(&it->cluster->part, it->offset++));
-    // printf("tagged: %s\n", tagged);
-    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged);
+    size_t argLen;
+    const char *arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    const char *tag = PartitionTag(&it->cluster->part, it->offset++);
+
+    size_t taggedLen;
+    char *tagged = writeTaggedId(arg, argLen, tag, strlen(tag), &taggedLen);
+    MRCommand_ReplaceArgNoDup(cmd, it->keyOffset, tagged, taggedLen);
   }
   // MRCommand_Print(cmd);
 
@@ -127,6 +212,29 @@ void SCCommandMuxIterator_Free(void *ctx) {
   free(it);
 }
 
+MRCommandGenerator defaultCommandGenerator = (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
+                                                                  .Free = SCCommandMuxIterator_Free,
+                                                                  .Len = SCCommandMuxIterator_Len,
+                                                                  .ctx = NULL};
+
+MRCommandGenerator spellCheckCommandGenerator =
+    (MRCommandGenerator){.Next = SpellCheckMuxIterator_Next,
+                         .Free = SCCommandMuxIterator_Free,
+                         .Len = SCCommandMuxIterator_Len,
+                         .ctx = NULL};
+
+MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, MRCommand *cmd) {
+  MRCommandGenerator *ptr = MRCommand_GetCommandGenerator(cmd);
+  MRCommandGenerator ret;
+  if (ptr) {
+    ret = *ptr;
+  } else {
+    ret = defaultCommandGenerator;
+  }
+  ret.ctx = mux;
+  return ret;
+}
+
 /* Multiplex a command to the cluster using an iterator that will yield a multiplexed command per
  * iteration, based on the original command */
 MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *cmd) {
@@ -135,10 +243,7 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
   *mux = (SCCommandMuxIterator){
       .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
 
-  return (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
-                              .Free = SCCommandMuxIterator_Free,
-                              .Len = SCCommandMuxIterator_Len,
-                              .ctx = mux};
+  return SearchCluster_GetCommandGenerator(mux, cmd);
 }
 
 /* Make sure that the cluster either has a size or updates its size from the topology when updated.

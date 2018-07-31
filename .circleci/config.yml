@@ -7,14 +7,23 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: make
+          command: >-
+              git submodule init &&
+              git submodule update &&
+              mkdir build && cd build &&
+              python ../configure.py &&
+              make VERBOSE=1 -j4 
       - run:
           name: Test
-          command: make test
+          command: >-
+              pip install git+https://github.com/RedisLabs/rmtest@2.0 &&
+              make -C build test &&
+              cd pytest &&
+              REDIS_MODULE_PATH=$PWD/../build/module-oss.so python -m unittest discover
       - run:
           name: Persist Artifacts
           command: >-
-            mkdir -p /workspace/build && cp src/$MODULE_ARTIFACT /workspace/ &&
+            mkdir -p /workspace/build && cp build/$MODULE_ARTIFACT /workspace/ &&
             cp ramp.yml /workspace/
       - persist_to_workspace:
           root: /workspace

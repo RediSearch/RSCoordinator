@@ -5,8 +5,7 @@
 #include "hiredis/async.h"
 #include "endpoint.h"
 #include "command.h"
-
-#include "../triemap/triemap.h"
+#include "dep/triemap/triemap.h"
 
 #define MR_CONN_POOL_SIZE 4
 

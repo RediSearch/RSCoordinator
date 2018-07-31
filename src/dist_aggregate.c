@@ -56,7 +56,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 
   char buf[128];
   sprintf(buf, "%lld", cursorId);
-  const char *idx = cmd->args[1];
+  const char *idx = MRCommand_ArgStringPtrLen(cmd, 1, NULL);
   MRCommand newCmd = MR_NewCommand(4, "_" RS_CURSOR_CMD, "READ", idx, buf);
   MRCommand_Free(cmd);
   *cmd = newCmd;
@@ -240,7 +240,9 @@ void net_Free(ResultProcessor *rp) {
 
   // the iterator might not be done - some producers might still be sending data, let's wait for
   // them...
-  MRIterator_WaitDone(nc->it);
+  if (nc->it) {
+    MRIterator_WaitDone(nc->it);
+  }
 
   nc->cg.Free(nc->cg.ctx);
 

@@ -21,16 +21,13 @@ void testCommandMux() {
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(&sc, &cmd);
 
   MRCommand mxcmd;
-  int  i =0;
-  printf("Expected len: %d\n", cg.Len(cg.ctx));
+  int i = 0;
   while (cg.Next(cg.ctx, &mxcmd)) {
-    i+=1;
-    MRCommand_Print(&mxcmd);
+    i += 1;
     MRCommand_Free(&mxcmd);
     if (i > 100) mu_fail("number of iterations exceeded");
   }
   cg.Free(cg.ctx);
-  
 }
 
 int main(int argc, char **argv) {

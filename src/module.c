@@ -12,7 +12,7 @@
 #include "dep/rmr/redis_cluster.h"
 #include "dep/rmr/redise.h"
 #include "fnv32.h"
-#include "dep/heap.h"
+#include "util/heap.h"
 #include "search_cluster.h"
 #include "config.h"
 #include "dep/RediSearch/src/module.h"
@@ -25,6 +25,8 @@
 #include <pthread.h>
 #include <aggregate/aggregate.h>
 #include <value.h>
+#include <stdbool.h>
+#include "cluster_spell_check.h"
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
@@ -169,10 +171,12 @@ int synonymAllOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   assert(MRCtx_GetCmdsSize(mc) >= 1);
   assert(MRCtx_GetCmds(mc)[0].num > 3);
-
-  RedisModuleString* synonymGroupIdStr = RedisModule_CreateString(ctx, MRCtx_GetCmds(mc)[0].args[2], strlen(MRCtx_GetCmds(mc)[0].args[2]));
-  long long synonymGroupId;
-  assert(RedisModule_StringToLongLong(synonymGroupIdStr, &synonymGroupId) == REDIS_OK);
+  size_t groupLen;
+  const char *groupStr = MRCommand_ArgStringPtrLen(&MRCtx_GetCmds(mc)[0], 2, &groupLen);
+  RedisModuleString *synonymGroupIdStr = RedisModule_CreateString(ctx, groupStr, groupLen);
+  long long synonymGroupId = 0;
+  int rv = RedisModule_StringToLongLong(synonymGroupIdStr, &synonymGroupId);
+  assert(rv == REDIS_OK);
 
   RedisModule_ReplyWithLongLong(ctx, synonymGroupId);
 
@@ -182,39 +186,50 @@ int synonymAllOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
 int synonymUpdateFanOutReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  if(count != 1){
-    RedisModuleBlockedClient *bc = (RedisModuleBlockedClient*)ctx;
+  if (count != 1) {
+    RedisModuleBlockedClient *bc = (RedisModuleBlockedClient *)ctx;
     RedisModule_UnblockClient(bc, mc);
     return REDISMODULE_OK;
   }
-  if(MRReply_Type(replies[0]) != MR_REPLY_INTEGER){
-    RedisModuleBlockedClient *bc = (RedisModuleBlockedClient*)ctx;
+  if (MRReply_Type(replies[0]) != MR_REPLY_INTEGER) {
+    RedisModuleBlockedClient *bc = (RedisModuleBlockedClient *)ctx;
     RedisModule_UnblockClient(bc, mc);
     return REDISMODULE_OK;
   }
   assert(MRCtx_GetCmdsSize(mc) == 1);
-  MRCommand updateCommand = MR_NewCommandFromStrings(2, MRCtx_GetCmds(mc)[0].args);
-  RSValue *id_val = MRReply_ToValue(replies[0], RSValue_Number);
-  RSValue *v = RS_NewValue(RSValue_RedisString);
-  RSValue_ToString(v, id_val);
-  const char* id = RSValue_StringPtrLen(v, NULL);
-  MRCommand_AppendArgs(&updateCommand, 1, id);
-  MRCommand_AppendStringsArgs(&updateCommand, MRCtx_GetCmds(mc)[0].num - 2, MRCtx_GetCmds(mc)[0].args + 2);
-  MRCommand_ReplaceArg(&updateCommand, 0, "_FT.SYNFORCEUPDATE");
+  MRCommand updateCommand = {NULL};
+  const MRCommand *srcCmd = &MRCtx_GetCmds(mc)[0];
+  for (size_t ii = 0; ii < 2; ++ii) {
+    MRCommand_AppendFrom(&updateCommand, srcCmd, ii);
+  }
+
+  // MRCommand updateCommand = MR_NewCommandFromStrings(2, MRCtx_GetCmds(mc)[0].args);
+  double d = 0;
+  MRReply_ToDouble(replies[0], &d);
+  char buf[128] = {0};
+  size_t nbuf = sprintf(buf, "%lu", (unsigned long)d);
+  MRCommand_Append(&updateCommand, buf, nbuf);
+
+  for (size_t ii = 2; ii < srcCmd->num; ++ii) {
+    MRCommand_AppendFrom(&updateCommand, srcCmd, ii);
+  }
+
+  const char *cmdName = "_FT.SYNFORCEUPDATE";
+  MRCommand_ReplaceArg(&updateCommand, 0, cmdName, strlen(cmdName));
+
+  size_t idLen = 0;
+  const char *idStr = MRCommand_ArgStringPtrLen(&updateCommand, 1, &idLen);
+  MRKey key = {0};
+  MRKey_Parse(&key, idStr, idLen);
 
   // reseting the tag
-  char* index = strdup(updateCommand.args[1]);
-  char* tag = strstr(index, "{");
-  *tag = '\0';
-  MRCommand_ReplaceArg(&updateCommand, 1, index);
+  MRCommand_ReplaceArg(&updateCommand, 1, key.base, key.baseLen);
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &updateCommand);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
   MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly);
   MR_Map(mrctx, synonymAllOKReducer, cg, false);
   cg.Free(cg.ctx);
-  RSValue_Free(id_val);
-  RSValue_Free(v);
 
   // we need to call request complete here manualy since we did not unblocked the client
   MR_requestCompleted();
@@ -239,23 +254,41 @@ int allOKReducer(struct MRCtx *mc, int count, MRReply **replies) {
     RedisModule_ReplyWithError(ctx, "Could not distribute comand");
     return REDISMODULE_OK;
   }
+  bool isIntegerReply = false;
+  long long integerReply = 0;
   for (int i = 0; i < count; i++) {
     if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
       MR_ReplyWithMRReply(ctx, replies[i]);
       return REDISMODULE_OK;
     }
+    if (MRReply_Type(replies[i]) == MR_REPLY_INTEGER) {
+      long long currIntegerReply = MRReply_Integer(replies[i]);
+      if (!isIntegerReply) {
+        integerReply = currIntegerReply;
+        isIntegerReply = true;
+      } else if (currIntegerReply != integerReply) {
+        RedisModule_ReplyWithSimpleString(ctx, "not all results are the same");
+        return REDISMODULE_OK;
+      }
+    }
   }
 
-  RedisModule_ReplyWithSimpleString(ctx, "OK");
+  if (isIntegerReply) {
+    RedisModule_ReplyWithLongLong(ctx, integerReply);
+  } else {
+    RedisModule_ReplyWithSimpleString(ctx, "OK");
+  }
   return REDISMODULE_OK;
 }
 
 typedef struct {
   char *id;
+  size_t idLen;
   double score;
   MRReply *fields;
   MRReply *payload;
   const char *sortKey;
+  size_t sortKeyLen;
   double sortKeyNum;
 } searchResult;
 
@@ -321,36 +354,78 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
 
   // Parse LIMIT argument
   RMUtil_ParseArgsAfter("LIMIT", argv, argc, "ll", &req->offset, &req->limit);
-  if (req->limit <= 0) req->limit = 10;
-  if (req->offset <= 0) req->offset = 0;
+  if (req->limit < 0 || req->offset < 0) {
+    free(req);
+    return NULL;
+  }
+  if (req->limit == 0) {
+    req->limit = 10;
+  }
 
   return req;
 }
 
-int cmp_results(const void *p1, const void *p2, const void *udata) {
+static int cmpStrings(const char *s1, size_t l1, const char *s2, size_t l2) {
+  int cmp = memcmp(s1, s2, MIN(l1, l2));
+  if (l1 == l2) {
+    // if the strings are the same length, just return the result of strcmp
+    return cmp;
+  }
+
+  // if the strings are identical but the lengths aren't, return the longer string
+  if (cmp == 0) {
+    return l1 > l2 ? 1 : -1;
+  } else {  // the strings are lexically different, just return that
+    return cmp;
+  }
+}
+
+static int cmp_results(const void *p1, const void *p2, const void *udata) {
 
   const searchResult *r1 = p1, *r2 = p2;
-
   const searchRequestCtx *req = udata;
-  int cmp = 0;
   // Compary by sorting keys
-  if (r1->sortKey && r2->sortKey && req->withSortby) {
+  if ((r1->sortKey || r2->sortKey) && req->withSortby) {
+    int cmp = 0;
     // Sort by numeric sorting keys
     if (r1->sortKeyNum != HUGE_VAL && r2->sortKeyNum != HUGE_VAL) {
       double diff = r2->sortKeyNum - r1->sortKeyNum;
       cmp = diff < 0 ? -1 : (diff > 0 ? 1 : 0);
-    } else {
+    } else if (r1->sortKey && r2->sortKey) {
+
       // Sort by string sort keys
-      cmp = strcmp(r2->sortKey, r1->sortKey);
+      cmp = cmpStrings(r2->sortKey, r2->sortKeyLen, r1->sortKey, r1->sortKeyLen);
+      // printf("Using sortKey!! <N=%lu> %.*s vs <N=%lu> %.*s. Result=%d\n", r2->sortKeyLen,
+      //        (int)r2->sortKeyLen, r2->sortKey, r1->sortKeyLen, (int)r1->sortKeyLen, r1->sortKey,
+      //        cmp);
+    } else {
+      // If at least one of these has a sort key
+      cmp = r2->sortKey ? 1 : -1;
     }
     // in case of a tie - compare ids
-    if (!cmp) cmp = strcmp(r2->id, r1->id);
+    if (!cmp) {
+      // printf("It's a tie! Comparing <N=%lu> %.*s vs <N=%lu> %.*s\n", r2->idLen, (int)r2->idLen,
+      //        r2->id, r1->idLen, (int)r1->idLen, r1->id);
+      cmp = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    }
     return (req->sortAscending ? -cmp : cmp);
   }
 
   double s1 = r1->score, s2 = r2->score;
-
-  return s1 < s2 ? 1 : (s1 > s2 ? -1 : strcmp(r2->id, r1->id));
+  // printf("Scores: %lf vs %lf. WithSortBy: %d. SK1=%p. SK2=%p\n", s1, s2, req->withSortby,
+  //        r1->sortKey, r2->sortKey);
+  if (s1 < s2) {
+    return 1;
+  } else if (s1 > s2) {
+    return -1;
+  } else {
+    // printf("Scores are tied. Will compare ID Strings instead\n");
+    int rv = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    // printf("ID Strings: Comparing <N=%lu> %.*s vs <N=%lu> %.*s => %d\n", r2->idLen,
+    // (int)r2->idLen,
+    //        r2->id, r1->idLen, (int)r1->idLen, r1->id, rv);
+    return rv;
+  }
 }
 
 searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,
@@ -358,12 +433,15 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   searchResult *res = cached ? cached : malloc(sizeof(searchResult));
   res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
-  res->id = MRReply_String(MRReply_ArrayElement(arr, j), NULL);
+  res->id = MRReply_String(MRReply_ArrayElement(arr, j), &res->idLen);
   // if the id contains curly braces, get rid of them now
   if (res->id) {
-    char *brace = strchr(res->id, '{');
-    if (brace && strchr(brace, '}')) {
-      *brace = '\0';
+    MRKey mk;
+    MRKey_Parse(&mk, res->id, res->idLen);
+    res->idLen = mk.baseLen;
+    res->id = mk.base;
+    if (mk.shardLen) {
+      res->id[res->idLen] = '\0';
     }
   } else {  // this usually means an invalid result
     return res;
@@ -374,9 +452,11 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
   // get payloads
   res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, j + payloadOffset) : NULL;
-
-  res->sortKey =
-      sortKeyOffset > 0 ? MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), NULL) : NULL;
+  if (sortKeyOffset > 0) {
+    res->sortKey = MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), &res->sortKeyLen);
+  } else {
+    res->sortKey = NULL;
+  }
   if (res->sortKey) {
     if (res->sortKey[0] == '#') {
       char *eptr;
@@ -390,117 +470,132 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   return res;
 }
 
-int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
+typedef struct {
+  MRReply *lastError;
+  searchResult *cachedResult;
+  searchRequestCtx *searchCtx;
+  heap_t *pq;
+  size_t totalReplies;
+} searchReducerCtx;
 
-  // got no replies - this means timeout
-  if (count == 0 || req->limit < 0) {
-    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+typedef struct {
+  int step;  // offset for next reply
+  int score;
+  int firstField;
+  int payload;
+  int sortKey;
+} searchReplyOffsets;
+
+static void getReplyOffsets(const searchRequestCtx *ctx, searchReplyOffsets *offsets) {
+  offsets->step = 3;  // 1 for key, 1 for score, 1 for fields
+  offsets->score = 1;
+
+  offsets->firstField = 2;
+  offsets->payload = -1;
+  offsets->sortKey = -1;
+
+  if (ctx->withPayload) {  // save an extra step for payloads
+    offsets->step++;
+    offsets->payload = 2;
+    offsets->firstField = 3;
+  }
+  if (ctx->withSortby || ctx->withSortingKeys) {
+    offsets->step++;
+    offsets->sortKey = offsets->firstField++;
+  }
+  // nocontent - one less field, and the offset is -1 to avoid parsing it
+  if (ctx->noContent) {
+    offsets->step--;
+    offsets->firstField = -1;
+  }
+}
+
+static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx) {
+  if (arr == NULL) {
+    return;
+  }
+  if (MRReply_Type(arr) == MR_REPLY_ERROR) {
+    rCtx->lastError = arr;
+    return;
+  }
+  if (MRReply_Type(arr) != MR_REPLY_ARRAY || MRReply_Length(arr) == 0) {
+    // Empty reply??
+    return;
   }
 
-  long long total = 0;
-  MRReply *lastError = NULL;
-  size_t num = req->offset + req->limit;
-  heap_t *pq = malloc(heap_sizeof(num));
-  heap_init(pq, cmp_results, req, num);
-  searchResult *cached = NULL;
-  for (int i = 0; i < count; i++) {
-    MRReply *arr = replies[i];
-    if (!arr) continue;
-    if (MRReply_Type(arr) == MR_REPLY_ERROR) {
-      lastError = arr;
-      continue;
-    }
-    if (MRReply_Type(arr) == MR_REPLY_ARRAY && MRReply_Length(arr) > 0) {
-      // first element is always the total count
-      total += MRReply_Integer(MRReply_ArrayElement(arr, 0));
-      size_t len = MRReply_Length(arr);
+  // first element is always the total count
+  rCtx->totalReplies += MRReply_Integer(MRReply_ArrayElement(arr, 0));
+  size_t len = MRReply_Length(arr);
+  searchReplyOffsets offsets = {0};
+  getReplyOffsets(rCtx->searchCtx, &offsets);
 
-      int step = 3;  // 1 for key, 1 for score, 1 for fields
-      int scoreOffset = 1, fieldsOffset = 2, payloadOffset = -1, sortKeyOffset = -1;
-      if (req->withPayload) {  // save an extra step for payloads
-        step++;
-        payloadOffset = 2;
-        fieldsOffset = 3;
-      }
-      if (req->withSortby || req->withSortingKeys) {
-        step++;
-        sortKeyOffset = fieldsOffset++;
-      }
-      // nocontent - one less field, and the offset is -1 to avoid parsing it
-      if (req->noContent) {
-        step--;
-        fieldsOffset = -1;
-      }
-      // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
-      //         scoreOffset, fieldsOffset, sortKeyOffset);
-      for (int j = 1; j < len; j += step) {
-        searchResult *res =
-            newResult(cached, arr, j, scoreOffset, payloadOffset, fieldsOffset, sortKeyOffset);
-        if (!res || !res->id) {
-          // invalid result - usually means something is off with the response, and we should just
-          // quit this response
-          cached = res;
+  // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
+  //         scoreOffset, fieldsOffset, sortKeyOffset);
+  for (int j = 1; j < len; j += offsets.step) {
+    searchResult *res = newResult(rCtx->cachedResult, arr, j, offsets.score, offsets.payload,
+                                  offsets.firstField, offsets.sortKey);
+    if (!res || !res->id) {
+      // invalid result - usually means something is off with the response, and we should just
+      // quit this response
+      rCtx->cachedResult = res;
+      break;
+    } else {
+      rCtx->cachedResult = NULL;
+    }
+
+    // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
+    //         res->id, res->score, res->sortKeyNum);
+
+    // TODO: minmax_heap?
+    if (heap_count(rCtx->pq) < heap_size(rCtx->pq)) {
+      // printf("Offering result score %f\n", res->score);
+      heap_offerx(rCtx->pq, res);
+
+    } else {
+      searchResult *smallest = heap_peek(rCtx->pq);
+      int c = cmp_results(res, smallest, rCtx->searchCtx);
+      if (c < 0) {
+        smallest = heap_poll(rCtx->pq);
+        heap_offerx(rCtx->pq, res);
+        rCtx->cachedResult = smallest;
+      } else {
+        rCtx->cachedResult = res;
+        if (rCtx->searchCtx->withSortby) {
+          // If the result is lower than the last result in the heap,
+          // AND there is a user-defined sort order - we can stop now
           break;
-        } else {
-          cached = NULL;
-        }
-        // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
-        //         res->id, res->score, res->sortKeyNum);
-
-        if (heap_count(pq) < heap_size(pq)) {
-          // printf("Offering result score %f\n", res->score);
-          heap_offerx(pq, res);
-
-        } else {
-          searchResult *smallest = heap_peek(pq);
-          int c = cmp_results(res, smallest, req);
-          if (c < 0) {
-            smallest = heap_poll(pq);
-            heap_offerx(pq, res);
-            cached = smallest;
-          } else {
-            // If the result is lower than the last result in the heap - we can stop now
-            cached = res;
-            break;
-          }
         }
       }
     }
   }
-  if (cached) free(cached);
-  // If we didn't get any results and we got an error - return it.
-  // If some shards returned results and some errors - we prefer to show the results we got an not
-  // return an error. This might change in the future
-  if (total == 0 && lastError != NULL) {
-    MR_ReplyWithMRReply(ctx, lastError);
-    searchRequestCtx_Free(req);
+}
 
-    return REDISMODULE_OK;
-  }
-
+static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
   // Reverse the top N results
-  size_t qlen = heap_count(pq);
+  searchRequestCtx *req = rCtx->searchCtx;
 
-  // // If we didn't get enough results - we return nothing
-  // if (qlen <= req->offset) {
-  //   qlen = 0;
-  // }
+  // Number of results to actually return
+  size_t num = req->limit + req->offset;
 
+  size_t qlen = heap_count(rCtx->pq);
   size_t pos = qlen;
+
+  // Load the results from the heap into a sorted array. Free the items in
+  // the heap one-by-one so that we don't have to go through them again
   searchResult *results[qlen];
   while (pos) {
-    results[--pos] = heap_poll(pq);
+    results[--pos] = heap_poll(rCtx->pq);
   }
-  heap_free(pq);
+  heap_free(rCtx->pq);
+  rCtx->pq = NULL;
 
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-  int len = 1;
-  RedisModule_ReplyWithLongLong(ctx, total);
-  for (pos = req->offset; pos < qlen && pos < num; pos++) {
+  RedisModule_ReplyWithLongLong(ctx, rCtx->totalReplies);
+  size_t len = 1;
+
+  for (pos = rCtx->searchCtx->offset; pos < qlen && pos < num; pos++) {
     searchResult *res = results[pos];
-    RedisModule_ReplyWithStringBuffer(ctx, res->id, strlen(res->id));
+    RedisModule_ReplyWithStringBuffer(ctx, res->id, res->idLen);
     len++;
     if (req->withScores) {
       RedisModule_ReplyWithDouble(ctx, res->score);
@@ -514,7 +609,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     if (req->withSortingKeys && req->withSortby) {
       len++;
       if (res->sortKey) {
-        RedisModule_ReplyWithStringBuffer(ctx, res->sortKey, strlen(res->sortKey));
+        RedisModule_ReplyWithStringBuffer(ctx, res->sortKey, res->sortKeyLen);
       } else {
         RedisModule_ReplyWithNull(ctx);
       }
@@ -525,19 +620,58 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     }
   }
   RedisModule_ReplySetArrayLength(ctx, len);
+
+  // Free the sorted results
   for (pos = 0; pos < qlen; pos++) {
     free(results[pos]);
   }
+}
+
+int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
+  searchReducerCtx rCtx = {NULL};
+
+  // got no replies - this means timeout
+  if (count == 0 || req->limit < 0) {
+    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+  }
+
+  size_t num = req->offset + req->limit;
+  rCtx.pq = malloc(heap_sizeof(num));
+  heap_init(rCtx.pq, cmp_results, req, num);
+
+  rCtx.searchCtx = req;
+
+  for (int i = 0; i < count; i++) {
+    processSearchReply(replies[i], &rCtx);
+  }
+  if (rCtx.cachedResult) {
+    free(rCtx.cachedResult);
+  }
+  // If we didn't get any results and we got an error - return it.
+  // If some shards returned results and some errors - we prefer to show the results we got an not
+  // return an error. This might change in the future
+  if (rCtx.totalReplies == 0 && rCtx.lastError != NULL) {
+    MR_ReplyWithMRReply(ctx, rCtx.lastError);
+  } else {
+    sendSearchResults(ctx, &rCtx);
+  }
+
+  if (rCtx.pq) {
+    searchResult *res;
+    while ((res = heap_poll(rCtx.pq))) {
+      free(res);
+    }
+    heap_free(rCtx.pq);
+  }
 
   searchRequestCtx_Free(req);
-
   return REDISMODULE_OK;
 }
 
-int FirstPartitionCommandHandler(RedisModuleCtx *ctx,
-                                 RedisModuleString **argv, int argc,
-                                 MRReduceFunc reducer,
-                                 struct MRCtx *mrCtx) {
+int FirstPartitionCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                                 MRReduceFunc reducer, struct MRCtx *mrCtx) {
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own FT command with _FT. command */
@@ -551,7 +685,7 @@ int FirstPartitionCommandHandler(RedisModuleCtx *ctx,
   return REDISMODULE_OK;
 }
 
-int SynDumpCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+int FirstShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -645,6 +779,28 @@ int MGetCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
   MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
   MR_Map(mrctx, mergeArraysReducer, cg, true);
+  cg.Free(cg.ctx);
+  return REDISMODULE_OK;
+}
+
+int SpellCheckCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  // Check that the cluster state is valid
+  if (!SearchCluster_Ready(GetSearchCluster())) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+  /* Replace our own FT command with _FT. command */
+  MRCommand_SetPrefix(&cmd, "_FT");
+
+  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
+  struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
+  MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
+  MR_Map(mrctx, spellCheckReducer, cg, true);
   cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
@@ -812,11 +968,11 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
   if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
-    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
+    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0", 1);
   }
 
   /* Replace our own DFT command with FT. command */
-  MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH");
+  MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
@@ -858,10 +1014,10 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
   if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
-    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0");
+    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0", 1);
     char buf[32];
     snprintf(buf, sizeof(buf), "%lld", req->limit + req->offset);
-    MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf);
+    MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf, strlen(buf));
   }
 
   // Tag the InKeys arguments
@@ -882,7 +1038,7 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   // MRCommand_Print(&cmd);
 
   /* Replace our own FT command with _FT. command */
-  MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH");
+  MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
@@ -912,7 +1068,7 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  MRCommand_ReplaceArg(&cmd, 0, "FT.LSEARCH");
+  MRCommand_ReplaceArg(&cmd, 0, "FT.LSEARCH", sizeof("FT.LSEARCH") - 1);
 
   searchRequestCtx *req = rscParseRequest(argv, argc);
   if (!req) {
@@ -1184,7 +1340,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   // Init the aggregation thread pool
-  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(CONCURRENT_SEARCH_POOL_DEFAULT_SIZE);
+  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(RSGlobalConfig.searchPoolSize);
 
   /*********************************************************
    * Single-shard simple commands
@@ -1253,16 +1409,35 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   /**
    * Self-commands. These are executed directly on the server
    */
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));
-
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 0, 0, -1));
 
   /**
    * Synonym Support
    */
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNADD", SafeCmd(SynAddCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNDUMP", SafeCmd(SynDumpCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNUPDATE", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNFORCEUPDATE", SafeCmd(MastersFanoutCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNADD", SafeCmd(SynAddCommandHandler), "readonly", 0,
+                                   0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNDUMP", SafeCmd(FirstShardCommandHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNUPDATE", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SYNFORCEUPDATE", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+
+  /**
+   * Dictionary commands
+   */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTADD", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTDEL", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DICTDUMP", SafeCmd(FirstShardCommandHandler),
+                                   "readonly", 0, 0, -1));
+
+  /**
+   * spell check
+   */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler),
+                                   "readonly", 0, 0, -1));
 
   return REDISMODULE_OK;
 }

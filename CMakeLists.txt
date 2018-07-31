@@ -5,17 +5,35 @@ ADD_DEFINITIONS(-DREDISMODULE_EXPERIMENTAL_API)
 ADD_DEFINITIONS(-D_GNU_SOURCE)
 ADD_DEFINITIONS(-DREDIS_MODULE_TARGET)
 ADD_DEFINITIONS(-DRS_CMD_PREFIX="_FT")
+ADD_DEFINITIONS( -UNDEBUG )
+# Also remove /D NDEBUG to avoid MSVC warnings about conflicting defines.
+FOREACH (flags_var_to_scrub
+    CMAKE_CXX_FLAGS_RELEASE
+    CMAKE_CXX_FLAGS_RELWITHDEBINFO
+    CMAKE_CXX_FLAGS_MINSIZEREL
+    CMAKE_C_FLAGS_RELEASE
+    CMAKE_C_FLAGS_RELWITHDEBINFO
+    CMAKE_C_FLAGS_MINSIZEREL)
+  STRING(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " "
+    "${flags_var_to_scrub}" "${${flags_var_to_scrub}}")
+ENDFOREACH()
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Werror=implicit-function-declaration -pthread")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+
+SET(RS_COMMON_FLAGS "-Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fPIC -Werror=implicit-function-declaration")
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -pthread")
+# Specific to coordinator
+SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fvisibility=hidden")
+
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${RS_COMMON_FLAGS} -std=gnu99")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RS_COMMON_FLAGS} -fno-rtti -fno-exceptions")
 
 SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
 SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
 
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
 SET(RS_RUN_TESTS CACHE BOOL OFF) # Don't run RS' own tests
+ENABLE_TESTING() # Enable our own tests
 
 FIND_PATH(LIBUV_INCLUDE_DIR uv.h
           HINTS ${LIBUV_ROOT}
@@ -50,3 +68,9 @@ ENDMACRO()
 
 MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
+
+ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS hiredis)
+# Add RMR's tests, and our own tests
+ADD_SUBDIRECTORY(src/dep/rmr/test)
+ADD_SUBDIRECTORY(test)

@@ -7,7 +7,7 @@ build:
 test: build
 	$(MAKE) -C ./test
 	$(MAKE) -C ./src/dep/rmr/test test
-	$(MAKE) -C ./src/dep/RediSearch/src redisearch.so test
+	$(MAKE) -C ./src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
 	$(MAKE) -C ./src module-oss.so
 	$(MAKE) -C ./pytest 
 	

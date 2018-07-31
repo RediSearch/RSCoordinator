@@ -32,3 +32,6 @@ from redisearch_pytests.test_wideschema import WideSchemaTestCase
 
 # Spell check
 from redisearch_pytests.test_spell_check import SpellCheckTestCase
+
+# Phonetics:
+from redisearch_pytests.test_phonetics import PhoneticsTestCase

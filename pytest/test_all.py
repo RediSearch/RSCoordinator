@@ -29,3 +29,6 @@ from redisearch_pytests.test_summarize import SummarizeTestCase
 from redisearch_pytests.test_synonyms import SynonymsTestCase
 from redisearch_pytests.test_tags import TagsTestCase
 from redisearch_pytests.test_wideschema import WideSchemaTestCase
+
+# Spell check
+from redisearch_pytests.test_spell_check import SpellCheckTestCase

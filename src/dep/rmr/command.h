@@ -65,6 +65,7 @@ void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix);
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg, size_t len);
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg, size_t len);
 
+MRCommandGenerator* MRCommand_GetCommandGenerator(MRCommand *cmd);
 int MRCommand_GetShardingKey(MRCommand *cmd);
 int MRCommand_GetPartitioningKey(MRCommand *cmd);
 typedef enum {

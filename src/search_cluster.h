@@ -13,6 +13,8 @@ typedef struct {
 
 } SearchCluster;
 
+#define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
+
 SearchCluster *GetSearchCluster();
 
 /* Create a search cluster with a given number of partitions (size) and a partitioner.

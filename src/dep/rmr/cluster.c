@@ -3,7 +3,7 @@
 #include <dep/triemap/triemap.h>
 #include "crc16.h"
 #include "crc12.h"
-#include <dep/rmutil/vector.h>
+#include <rmutil/vector.h>
 
 #include <stdlib.h>
 

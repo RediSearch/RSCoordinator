@@ -5,8 +5,8 @@
 #include "dep/rmr/rmr.h"
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
-#include "dep/rmutil/util.h"
-#include "dep/rmutil/strings.h"
+#include <rmutil/util.h>
+#include <rmutil/strings.h>
 #include "crc16_tags.h"
 #include "crc12_tags.h"
 #include "dep/rmr/redis_cluster.h"

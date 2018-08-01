@@ -2,8 +2,8 @@
 #include <stdlib.h>
 
 #include "config.h"
-#include "dep/rmutil/util.h"
-#include "dep/rmutil/strings.h"
+#include <rmutil/util.h>
+#include <rmutil/strings.h>
 #include "dep/rmr/endpoint.h"
 #include "dep/rmr/hiredis/hiredis.h"
 

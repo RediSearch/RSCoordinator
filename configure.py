@@ -6,6 +6,7 @@ from subprocess import Popen
 import os
 import platform
 import multiprocessing
+import shutil
 
 ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument('--build-dir', help="Build directory to use")
@@ -41,17 +42,19 @@ print("BUILD_DIR: {}".format(BUILD_DIR))
 print("UV_DIR: {}".format(UV_DIR))
 # sys.exit(0)
 
-if not os.path.exists(BUILD_DIR):
-    os.makedirs(BUILD_DIR)
-
-
 def build_uv(uv_src, uv_dst, build_dir):
-    configure = os.path.join(uv_src, 'configure')
-    if not os.path.exists(configure):
-        po = Popen(['sh', os.path.join(uv_src, 'autogen.sh')])
-        if po.wait() != 0:
-            raise Exception("Couldn't generate configure script!")
+    # See if the UV source exists in the build dir
+    copy_dst = os.path.join(build_dir, 'libuv-src')
+    if not os.path.exists(copy_dst):
+        shutil.copytree(uv_src, copy_dst)
+
+    uv_src = copy_dst
+    po = Popen(['sh', os.path.join(uv_src, 'autogen.sh')])
+    if po.wait() != 0:
+        raise Exception("Couldn't generate configure script!")
     os.chdir(build_dir)  # Presumably the build dir
+
+    configure = os.path.join(uv_src, 'configure')
     po = Popen([configure, '--prefix', uv_dst, '--with-pic',
                 '--disable-shared', '--enable-static', '--disable-silent-rules'])
     if po.wait() != 0:
@@ -62,6 +65,9 @@ def build_uv(uv_src, uv_dst, build_dir):
     if po.wait() != 0:
         raise Exception("Couldn't build libuv!")
 
+
+if not os.path.exists(BUILD_DIR):
+    os.makedirs(BUILD_DIR)
 
 if not os.path.exists(UV_A):
     uv_build_dir = os.path.join(BUILD_DIR, 'UV_BUILD')

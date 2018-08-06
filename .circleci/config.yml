@@ -1,89 +1,76 @@
 version: 2
+defaults:
+  ci_steps: &ci_steps
+    - checkout
+    - run:
+        name: Python Dependencies
+        command: >-
+          pip install --upgrade
+          git+https://github.com/RedisLabs/rmtest@2.0
+          git+https://github.com/mnunberg/RAMP@print_version
+          nose
+  
+    - run:
+        name: Submodule checkout
+        command: >-
+          if [ ! -e src/dep/RediSearch/CMakeLists.txt ]; then
+            git submodule init && git submodule update;
+          fi
+
+    - run:
+        name: Configuration & UV Build
+        command: ./.circleci/configure.sh
+    
+    - run:
+        name: Main Build
+        command: ./.circleci/build.sh
+    - run:
+        name: Test
+        command: ./.circleci/test.sh
+    - run:
+        name: Package
+        command: ./.circleci/package.sh
+
+    - persist_to_workspace:
+        root: /workspace
+        paths:
+          - 'snapshot'
+          - 'release'
+
+  default_jobs: &default_jobs
+    - centos
+    - ubuntu
+
 jobs:
-  build:
+  ubuntu:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
-    steps:
-      - checkout
-      - run:
-          name: Build
-          command: >-
-              git submodule init &&
-              git submodule update &&
-              mkdir build && cd build &&
-              python ../configure.py &&
-              make VERBOSE=1 -j4 
-      - run:
-          name: Test
-          command: >-
-              pip install git+https://github.com/RedisLabs/rmtest@2.0 &&
-              make -C build test &&
-              cd pytest &&
-              REDIS_MODULE_PATH=$PWD/../build/module-oss.so python -m unittest discover
-      - run:
-          name: Persist Artifacts
-          command: >-
-            mkdir -p /workspace/build && cp build/$MODULE_ARTIFACT /workspace/ &&
-            cp ramp.yml /workspace/
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - '*.so'
-            - ramp.yml
-            - build
-  package_branch:
+    environment:
+      - BUILD_DIR: build-debian
+
+    steps: *ci_steps
+  
+  centos:
+    docker:
+      - image: 'redislabsmodules/rmbuildercentos:latest'
+    environment:
+      - BUILD_DIR: build-el
+
+    steps: *ci_steps
+
+  deploy_snapshots:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
     steps:
       - attach_workspace:
           at: /workspace
       - run:
-          name: Package
+          name: Deploy Snapshots to S3
           command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.$CIRCLE_BRANCH.zip
-            /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
-  package_release:
-    docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
-    steps:
-      - attach_workspace:
-          at: /workspace
-      - run:
-          name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.{semantic_version}.zip
-            /workspace/$MODULE_ARTIFACT
-      - run:
-          name: Package
-          command: >-
-            ramp pack -m /workspace/ramp.yml -o
-            /workspace/build/$PACKAGE_NAME.{os}-{architecture}.latest.zip
-            /workspace/$MODULE_ARTIFACT
-      - persist_to_workspace:
-          root: /workspace
-          paths:
-            - build
-      - store_artifacts:
-          path: /workspace/build
-  deploy_branch:
-    docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
-    steps:
-      - attach_workspace:
-          at: /workspace
-      - run:
-          name: Deploy to S3
-          command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read --recursive --exclude "*" --include "*.zip"
+            for f in /workspace/snapshot/*.zip; do
+              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read;
+            done
+
   deploy_release:
     docker:
       - image: 'redislabsmodules/rmbuilder:latest'
@@ -91,38 +78,29 @@ jobs:
       - attach_workspace:
           at: /workspace
       - run:
-          name: Deploy to S3
+          name: Deploy Releases to S3
           command: >-
-            aws s3 cp /workspace/build/ s3://redismodules/$PACKAGE_NAME/ --acl
-            public-read  --recursive --exclude "*" --include "*.zip"
+            aws s3 cp /workspace/release/*.zip s3://redismodules/$PACKAGE_NAME/
+            --acl public-read
+  
 workflows:
   version: 2
-  build_and_package:
+
+  default_flow:
     jobs:
-      - build:
-          filters:
-            tags:
-              only: /.*/
-      - package_branch:
-          requires:
-            - build
+      - ubuntu
+      - centos
+      - deploy_snapshots:
+          requires: *default_jobs
           filters:
             branches:
-              only: master
-      - package_release:
-          requires:
-            - build
+              only:
+                - master
+                - circle-overhaul
+      - deploy_release:
+          requires: *default_jobs
           filters:
             branches:
               ignore: /.*/
             tags:
-              only: '/^v[0-9].*/'
-      - deploy_branch:
-          requires:
-            - package_branch
-      - deploy_release:
-          filters:
-            tags:
-              only: '/^v[0-9].*/'
-          requires:
-            - package_release
+              only: /^v[0-9].*/

@@ -212,16 +212,15 @@ void SCCommandMuxIterator_Free(void *ctx) {
   free(it);
 }
 
-MRCommandGenerator defaultCommandGenerator = (MRCommandGenerator){.Next = SCCommandMuxIterator_Next,
-                                                                  .Free = SCCommandMuxIterator_Free,
-                                                                  .Len = SCCommandMuxIterator_Len,
-                                                                  .ctx = NULL};
+MRCommandGenerator defaultCommandGenerator = {.Next = SCCommandMuxIterator_Next,
+                                              .Free = SCCommandMuxIterator_Free,
+                                              .Len = SCCommandMuxIterator_Len,
+                                              .ctx = NULL};
 
-MRCommandGenerator spellCheckCommandGenerator =
-    (MRCommandGenerator){.Next = SpellCheckMuxIterator_Next,
-                         .Free = SCCommandMuxIterator_Free,
-                         .Len = SCCommandMuxIterator_Len,
-                         .ctx = NULL};
+MRCommandGenerator spellCheckCommandGenerator = {.Next = SpellCheckMuxIterator_Next,
+                                                 .Free = SCCommandMuxIterator_Free,
+                                                 .Len = SCCommandMuxIterator_Len,
+                                                 .ctx = NULL};
 
 MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, MRCommand *cmd) {
   MRCommandGenerator *ptr = MRCommand_GetCommandGenerator(cmd);

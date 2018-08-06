@@ -80,9 +80,10 @@ jobs:
       - run:
           name: Deploy Releases to S3
           command: >-
-            aws s3 cp /workspace/release/*.zip s3://redismodules/$PACKAGE_NAME/
-            --acl public-read
-  
+            for f in /workspace/release/*.zip; do
+              echo aws s3 $f s3://redismodules/$PACKAGE_NAME/ --acl public-read;
+            done
+
 workflows:
   version: 2
 

@@ -57,7 +57,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
   char buf[128];
   sprintf(buf, "%lld", cursorId);
   const char *idx = MRCommand_ArgStringPtrLen(cmd, 1, NULL);
-  MRCommand newCmd = MR_NewCommand(4, "_" RS_CURSOR_CMD, "READ", idx, buf);
+  MRCommand newCmd = MR_NewCommand(4, RS_CURSOR_CMD, "READ", idx, buf);
   MRCommand_Free(cmd);
   *cmd = newCmd;
   return 1;

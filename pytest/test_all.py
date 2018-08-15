@@ -14,6 +14,7 @@ oss_base_case.BaseSearchTestCase = base_case.BaseSearchTestCase
 
 from redisearch_pytests.test import SearchTestCase
 from redisearch_pytests.test_aggregate import AggregateTestCase
+from redisearch_pytests.test_aggregate import AggregateTestCase2
 from redisearch_pytests.test_cn import CnTestCase
 from redisearch_pytests.test_conditional_updates import ConditionalUpdateTestCase
 from redisearch_pytests.test_cursors import CursorTestCase

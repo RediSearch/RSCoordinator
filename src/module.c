@@ -107,8 +107,8 @@ int mergeArraysReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
 
-  for(int i = 0 ; i < count ; ++i){
-    if (MRReply_Type(replies[i]) == MR_REPLY_ERROR){
+  for (size_t i = 0; i < count; ++i) {
+    if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
       // we got an error reply, something goes wrong so we return the error to the user.
       return MR_ReplyWithMRReply(ctx, replies[i]);
     }

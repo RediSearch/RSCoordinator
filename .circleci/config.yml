@@ -40,6 +40,7 @@ defaults:
   default_jobs: &default_jobs
     - centos
     - ubuntu
+    - trusty
 
 jobs:
   ubuntu:
@@ -47,7 +48,16 @@ jobs:
       - image: 'redislabsmodules/rmbuilder:latest'
     environment:
       - BUILD_DIR: build-debian
+      - DIST_SUFFIX: ''
 
+    steps: *ci_steps
+
+  trusty:
+    docker:
+      - image: 'mnunberg/rmbuilder-trusty:latest'
+    environment:
+      - BUILD_DIR: build-trusty
+      - DIST_SUFFIX: -trusty
     steps: *ci_steps
   
   centos:
@@ -55,6 +65,7 @@ jobs:
       - image: 'redislabsmodules/rmbuildercentos:latest'
     environment:
       - BUILD_DIR: build-el
+      - DIST_SUFFIX: -rhe
 
     steps: *ci_steps
 
@@ -91,13 +102,14 @@ workflows:
     jobs:
       - ubuntu
       - centos
+      - trusty
       - deploy_snapshots:
           requires: *default_jobs
           filters:
             branches:
               only:
                 - master
-                - circle-overhaul
+                - circle-sandbox
       - deploy_release:
           requires: *default_jobs
           filters:

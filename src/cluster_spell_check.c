@@ -68,6 +68,10 @@ static void spellcheckReducerCtx_AddTermSuggestion(spellcheckReducerCtx* ctx, co
   spellCheckReducerTerm_AddSuggestion(term, suggestionStr, score);
 }
 
+static void spellcheckReducerCtx_AddEmptyTermSuggestion(spellcheckReducerCtx* ctx, const char* termStr) {
+  spellcheckReducerCtx_GetOrCreateTermSuggerstions(ctx, termStr);
+}
+
 static void spellcheckReducerCtx_AddTermAsFoundInIndex(spellcheckReducerCtx* ctx,
                                                        const char* termStr) {
   spellCheckReducerTerm* term = spellcheckReducerCtx_GetOrCreateTermSuggerstions(ctx, termStr);
@@ -120,7 +124,8 @@ static bool spellCheckAnalizeResult(spellcheckReducerCtx* ctx, MRReply* reply) {
     return false;
   }
 
-  for (int i = 0; i < MRReply_Length(termSuggestionsReply); ++i) {
+  int i;
+  for (i = 0; i < MRReply_Length(termSuggestionsReply); ++i) {
     MRReply* termSuggestionReply = MRReply_ArrayElement(termSuggestionsReply, i);
     if (MRReply_Type(termSuggestionReply) != MR_REPLY_ARRAY) {
       return false;
@@ -147,6 +152,10 @@ static bool spellCheckAnalizeResult(spellcheckReducerCtx* ctx, MRReply* reply) {
     const char* suggestionStr = MRReply_String(suggestionReply, NULL);
 
     spellcheckReducerCtx_AddTermSuggestion(ctx, termValue, suggestionStr, score);
+  }
+
+  if (i == 0) {
+    spellcheckReducerCtx_AddEmptyTermSuggestion(ctx, termValue);
   }
 
   return true;

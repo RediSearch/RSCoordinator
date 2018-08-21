@@ -365,9 +365,6 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
     free(req);
     return NULL;
   }
-  if (req->limit == 0) {
-    req->limit = 10;
-  }
 
   return req;
 }

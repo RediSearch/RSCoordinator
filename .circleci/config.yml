@@ -48,7 +48,7 @@ jobs:
       - image: 'redislabsmodules/rmbuilder:latest'
     environment:
       - BUILD_DIR: build-debian
-      - DIST_SUFFIX: ''
+      - DIST_SUFFIX: -ubuntu16.04
 
     steps: *ci_steps
 
@@ -57,7 +57,7 @@ jobs:
       - image: 'mnunberg/rmbuilder-trusty:latest'
     environment:
       - BUILD_DIR: build-trusty
-      - DIST_SUFFIX: -trusty
+      - DIST_SUFFIX: -ubuntu14.04
     steps: *ci_steps
   
   centos:
@@ -65,7 +65,7 @@ jobs:
       - image: 'redislabsmodules/rmbuildercentos:latest'
     environment:
       - BUILD_DIR: build-el
-      - DIST_SUFFIX: -rhe
+      - DIST_SUFFIX: -rhel7
 
     steps: *ci_steps
 

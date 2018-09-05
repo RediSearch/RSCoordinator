@@ -1332,7 +1332,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   // Init RediSearch internal search
-  if (RediSearch_InitModuleInternal(ctx, argv, argc) == REDISMODULE_ERR) {
+  if (RediSearch_InitModuleInternal(ctx, argv, argc, false) == REDISMODULE_ERR) {
     RedisModule_Log(ctx, "warning", "Could not init search library...");
     return REDISMODULE_ERR;
   }

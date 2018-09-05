@@ -3,6 +3,7 @@
 
 #include "redismodule.h"
 #include "dep/rmr/endpoint.h"
+#include "dep/RediSearch/src/config.h"
 #include <string.h>
 typedef enum { ClusterType_RedisOSS = 0, ClusterType_RedisLabs = 1 } MRClusterType;
 
@@ -31,5 +32,7 @@ MRClusterType DetectClusterType();
  * Argument format: PARTITIONS {num_partitions} ENDPOINT {[password@]host:port}
  */
 int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
+
+RSConfigOptions *GetClusterConfigOptions(void);
 
 #endif

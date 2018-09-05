@@ -7,48 +7,80 @@
 #include "dep/rmr/endpoint.h"
 #include "dep/rmr/hiredis/hiredis.h"
 
-SearchClusterConfig clusterConfig;
-/* Load the configuration from the module arguments.
- * Argument format:
- *  PARTITIONS {num_partitions} TYPE {cluster type} ENDPOINT {[password@]host:port}
- */
-int ParseConfig(SearchClusterConfig *conf, RedisModuleCtx *ctx, RedisModuleString **argv,
-                int argc) {
-  *conf = DEFAULT_CLUSTER_CONFIG;
+#define CONFIG_SETTER(name) \
+  static int name(RSConfig *config, RedisModuleString **argv, size_t argc, size_t *offset)
 
-  if (argc < 2) {
+#define CONFIG_GETTER(name) static sds name(const RSConfig *config)
+#define CONFIG_FROM_RSCONFIG(c) ((SearchClusterConfig *)(c)->chainedConfig)
+
+// PARTITIONS
+CONFIG_SETTER(setNumPartitions) {
+  if (*offset == argc) {
     return REDISMODULE_ERR;
   }
-
-  /* Parse the partition number */
-  long long numPartitions = 0;
-  int pi = -1;
-  if ((pi = RMUtil_ArgIndex("PARTITIONS", argv, argc)) >= 0) {
-    // Allow PARTITIONS AUTO (which is similar to 0)
-    if (pi < argc - 1 && RMUtil_StringEqualsC(argv[pi + 1], "AUTO")) {
-      numPartitions = 0;
-    } else {
-      // Parse number of partitions manually
-      if (RMUtil_ParseArgsAfter("PARTITIONS", argv, argc, "l", &numPartitions) == REDISMODULE_ERR ||
-          numPartitions < 0) {
-        RedisModule_Log(ctx, "warning", "Invalid num partitions %d", numPartitions);
-        return REDISMODULE_ERR;
-      }
+  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  RedisModuleString *s = argv[(*offset)++];
+  const char *sstr = RedisModule_StringPtrLen(s, NULL);
+  if (!strcasecmp(sstr, "AUTO")) {
+    realConfig->numPartitions = 0;
+  } else {
+    long long ll = 0;
+    if (RedisModule_StringToLongLong(s, &ll) != REDISMODULE_OK || ll < 0) {
+      return REDISMODULE_ERR;
     }
-  }
-  conf->numPartitions = numPartitions;
-  conf->type = DetectClusterType();
-
-  /* Read the query timeout */
-  if (argc >= 2 && RMUtil_ArgIndex("TIMEOUT", argv, argc) >= 0) {
-    long long to = 500;
-    RMUtil_ParseArgsAfter("TIMEOUT", argv, argc, "l", &to);
-    if (to > 0) {
-      conf->timeoutMS = to;
-    }
+    realConfig->numPartitions = ll;
   }
   return REDISMODULE_OK;
 }
+
+CONFIG_GETTER(getNumPartitions) {
+  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  sds ss = sdsempty();
+  return sdscatprintf(ss, "%lld", realConfig->numPartitions);
+}
+
+// TIMEOUT
+CONFIG_SETTER(setTimeout) {
+  if (*offset == argc) {
+    return REDISMODULE_ERR;
+  }
+  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  RedisModuleString *s = argv[(*offset)++];
+  long long ll;
+  if (RedisModule_StringToLongLong(s, &ll) != REDISMODULE_OK || ll < 0) {
+    return REDISMODULE_ERR;
+  }
+  if (ll > 0) {
+    realConfig->timeoutMS = ll;
+  }
+  return REDISMODULE_OK;
+}
+
+CONFIG_GETTER(getTimeout) {
+  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  sds ss = sdsempty();
+  return sdscatprintf(ss, "%lld", realConfig->timeoutMS);
+}
+
+static RSConfigOptions clusterOptions_g = {
+    .vars =
+        {
+            {.name = "PARTITIONS",
+             .helpText = "Number of RediSearch partitions to use",
+             .setValue = setNumPartitions,
+             .getValue = getNumPartitions,
+             .flags = RSCONFIGVAR_F_IMMUTABLE},
+            {.name = "TIMEOUT",
+             .helpText = "Cluster synchronization timeout",
+             .setValue = setTimeout,
+             .getValue = getTimeout},
+            {.name = NULL}
+            // fin
+        }
+    // fin
+};
+
+SearchClusterConfig clusterConfig = {0};
 
 /* Detect the cluster type, by trying to see if we are running inside RLEC.
  * If we cannot determine, we return OSS type anyway
@@ -75,4 +107,8 @@ MRClusterType DetectClusterType() {
   // RedisModule_ThreadSafeContextUnlock(ctx);
   RedisModule_FreeThreadSafeContext(ctx);
   return ret;
+}
+
+RSConfigOptions *GetClusterConfigOptions(void) {
+  return &clusterOptions_g;
 }

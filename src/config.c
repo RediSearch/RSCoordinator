@@ -13,12 +13,19 @@
 #define CONFIG_GETTER(name) static sds name(const RSConfig *config)
 #define CONFIG_FROM_RSCONFIG(c) ((SearchClusterConfig *)(c)->chainedConfig)
 
+static SearchClusterConfig* getOrCreateRealConfig(RSConfig *config){
+  if(!CONFIG_FROM_RSCONFIG(config)){
+    config->chainedConfig = &clusterConfig;
+  }
+  return CONFIG_FROM_RSCONFIG(config);
+}
+
 // PARTITIONS
 CONFIG_SETTER(setNumPartitions) {
   if (*offset == argc) {
     return REDISMODULE_ERR;
   }
-  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  SearchClusterConfig *realConfig = getOrCreateRealConfig(config);
   RedisModuleString *s = argv[(*offset)++];
   const char *sstr = RedisModule_StringPtrLen(s, NULL);
   if (!strcasecmp(sstr, "AUTO")) {
@@ -34,7 +41,7 @@ CONFIG_SETTER(setNumPartitions) {
 }
 
 CONFIG_GETTER(getNumPartitions) {
-  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  SearchClusterConfig *realConfig = getOrCreateRealConfig((RSConfig *)config);
   sds ss = sdsempty();
   return sdscatprintf(ss, "%lld", realConfig->numPartitions);
 }
@@ -44,7 +51,7 @@ CONFIG_SETTER(setTimeout) {
   if (*offset == argc) {
     return REDISMODULE_ERR;
   }
-  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  SearchClusterConfig *realConfig = getOrCreateRealConfig(config);
   RedisModuleString *s = argv[(*offset)++];
   long long ll;
   if (RedisModule_StringToLongLong(s, &ll) != REDISMODULE_OK || ll < 0) {
@@ -57,7 +64,7 @@ CONFIG_SETTER(setTimeout) {
 }
 
 CONFIG_GETTER(getTimeout) {
-  SearchClusterConfig *realConfig = CONFIG_FROM_RSCONFIG(config);
+  SearchClusterConfig *realConfig = getOrCreateRealConfig((RSConfig *)config);
   sds ss = sdsempty();
   return sdscatprintf(ss, "%lld", realConfig->timeoutMS);
 }

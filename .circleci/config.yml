@@ -5,10 +5,9 @@ defaults:
     - run:
         name: Python Dependencies
         command: >-
-          pip install --upgrade
-          git+https://github.com/RedisLabs/rmtest@2.0
+          pip install --upgrade wheel setuptools
+          git+https://github.com/RedisLabsModules/RLTest.git@master
           git+https://github.com/mnunberg/RAMP@print_version
-          nose
   
     - run:
         name: Submodule checkout
@@ -54,7 +53,7 @@ jobs:
 
   trusty:
     docker:
-      - image: 'mnunberg/rmbuilder-trusty:latest'
+      - image: 'redislabsmodules/rmbuildertrusty:latest'
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04

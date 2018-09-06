@@ -1214,18 +1214,7 @@ int SetClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 /* Perform basic configurations and init all threads and global structures */
 int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  /* Init cluster configs */
-  if (argc > 0) {
-    if (ParseConfig(&clusterConfig, ctx, argv, argc) == REDISMODULE_ERR) {
-      // printf("Could not parse module config\n");
-      RedisModule_Log(ctx, "warning", "Could not parse module config");
-      return REDISMODULE_ERR;
-    }
-  } else {
-    RedisModule_Log(ctx, "warning", "No module config, reverting to default settings");
-    clusterConfig = DEFAULT_CLUSTER_CONFIG;
-  }
+  clusterConfig.type = DetectClusterType();
 
   RedisModule_Log(ctx, "notice",
                   "Cluster configuration: %d partitions, type: %d, coordinator timeout: %dms",
@@ -1331,6 +1320,9 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     return REDISMODULE_ERR;
   }
 
+  // Chain the config into RediSearch's global config
+  RSConfigOptions_AddConfigs(&RSGlobalConfigOptions, GetClusterConfigOptions());
+
   // Init RediSearch internal search
   if (RediSearch_InitModuleInternal(ctx, argv, argc) == REDISMODULE_ERR) {
     RedisModule_Log(ctx, "warning", "Could not init search library...");
@@ -1377,12 +1369,12 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   /*********************************************************
    * Multi shard, fanout commands
    **********************************************************/
-  if(clusterConfig.type == ClusterType_RedisLabs){
+  if (clusterConfig.type == ClusterType_RedisLabs) {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.AGGREGATE", SafeCmd(DistAggregateCommand), "readonly",
                                      0, 1, -2));
-  }else{
+  } else {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.AGGREGATE", SafeCmd(DistAggregateCommand), "readonly",
-                                         0, 0, -1));
+                                     0, 0, -1));
   }
 
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
@@ -1419,10 +1411,12 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   /**
    * Self-commands. These are executed directly on the server
    */
-  if(clusterConfig.type == ClusterType_RedisLabs){
-    RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));
-  }else{
-    RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 0, 0, -1));
+  if (clusterConfig.type == ClusterType_RedisLabs) {
+    RM_TRY(
+        RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));
+  } else {
+    RM_TRY(
+        RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 0, 0, -1));
   }
 
   /**

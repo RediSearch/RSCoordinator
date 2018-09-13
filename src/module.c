@@ -1161,6 +1161,10 @@ int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   return REDISMODULE_OK;
 }
 
+int UnsuportedOnCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  return RedisModule_ReplyWithError(ctx, "Command not supported on cluster");
+}
+
 // A special command for redis cluster OSS, that refreshes the cluster state
 int RefreshClusterCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
@@ -1352,7 +1356,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(
       RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
 
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(SingleShardCommandHandler),
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster),
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));

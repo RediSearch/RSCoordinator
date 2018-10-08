@@ -17,5 +17,5 @@ module = $ROOT/$MODULE_OSS_SO
 EOF
 
 ctest -V
-RLTest --env oss-cluster --env-reuse --tests-dir $ROOT/src/dep/RediSearch/src/pytest/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO --module-args "PARTITIONS AUTO"
-RLTest --env oss-cluster --env-reuse --tests-dir $ROOT/src/dep/RediSearch/src/pytest/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO --module-args "PARTITIONS AUTO SAFEMODE"
+RLTest --env oss-cluster --env-reuse --t $ROOT/src/dep/RediSearch/src/pytest/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO --module-args "PARTITIONS AUTO"
+RLTest --env oss-cluster --env-reuse --t $ROOT/src/dep/RediSearch/src/pytest/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO --module-args "PARTITIONS AUTO SAFEMODE"

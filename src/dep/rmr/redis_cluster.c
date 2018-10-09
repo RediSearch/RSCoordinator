@@ -2,7 +2,7 @@
 #include "conn.h"
 #include <uv.h>
 #include <redismodule.h>
-#include "dep/rmutil/periodic.h"
+#include "dep/RediSearch/src/rmutil/periodic.h"
 
 #define REDIS_CLUSTER_REFRESH_TIMEOUT 1000
 

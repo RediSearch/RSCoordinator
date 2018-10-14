@@ -45,6 +45,7 @@ void _MRClsuter_UpdateNodes(MRCluster *cl) {
         /* See if this is us - if so we need to update the cluster's host and current id */
         if (node->flags & MRNode_Self) {
           cl->myNode = node;
+          cl->myshard = &cl->topo->shards[sh];
         }
       }
     }

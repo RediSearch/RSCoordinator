@@ -17,6 +17,8 @@ typedef struct {
 
 size_t PartitionForKey(PartitionCtx *ctx, const char *key, size_t len);
 
+int GetSlotByPartition(PartitionCtx *ctx, size_t partition);
+
 const char *PartitionTag(PartitionCtx *ctx, size_t partition);
 
 void PartitionCtx_Init(PartitionCtx *ctx, size_t numPartitions, const char **table,

@@ -70,6 +70,7 @@ typedef struct {
   MRClusterTopology *topo;
   /* the current node, detected when updating the topology */
   MRClusterNode *myNode;
+  MRClusterShard *myshard;
   /* The sharding functino, responsible for transforming keys into slots */
   ShardFunc sf;
 

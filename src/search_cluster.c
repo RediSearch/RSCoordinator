@@ -24,7 +24,7 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }
 
-static char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
+char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
                            size_t *taggedLen) {
   size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL
   char *tagged = malloc(total);
@@ -254,5 +254,16 @@ void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTo
     RedisModule_Log(ctx, "notice", "Setting number of partitions to %d", topo->numShards);
     c->size = topo->numShards;
     PartitionCtx_SetSize(&c->part, topo->numShards);
+  }
+}
+
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard){
+  SearchCluster *c = GetSearchCluster();
+  for (size_t i = 0 ; i < c->size ; ++i){
+    int slot = GetSlotByPartition(&c->part, i);
+    if (myShard->startSlot <= slot && myShard->endSlot >= slot){
+      c->myPartition = i;
+      return;
+    }
   }
 }

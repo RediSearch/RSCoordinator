@@ -334,12 +334,13 @@ void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString *
                                        .flags = AGGREGATE_REQUEST_NO_CONCURRENT |
                                                 AGGREGATE_REQUEST_NO_PARSE_QUERY |
                                                 AGGREGATE_REQUEST_SPECLESS};
-  size_t lookUpLen;
-  settings.cursorLookupName = RedisModule_StringPtrLen(argv[1], &lookUpLen);
+  size_t originalLookupNameLen;
+  const char* originalLookupName = RedisModule_StringPtrLen(argv[1], &originalLookupNameLen);
   SearchCluster *sc = GetSearchCluster();
   const char *partTag = PartitionTag(&sc->part, sc->myPartition);
-  size_t taggedLen;
-  settings.cursorLookupName = writeTaggedId(settings.cursorLookupName, lookUpLen, partTag, strlen(partTag), &taggedLen);
+  size_t taggedLookupNameLen;
+  char* taggedLookupName = writeTaggedId(originalLookupName, originalLookupNameLen, partTag, strlen(partTag), &taggedLookupNameLen);
+  settings.cursorLookupName = taggedLookupName;
   AggregateCommand_ExecAggregateEx(ctx, argv, argc, ccx, &settings);
-  free((char*)settings.cursorLookupName);
+  free(taggedLookupName);
 }

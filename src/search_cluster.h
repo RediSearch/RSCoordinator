@@ -10,6 +10,7 @@
 typedef struct {
   size_t size;
   PartitionCtx part;
+  size_t myPartition;
 
 } SearchCluster;
 
@@ -48,4 +49,9 @@ int SearchCluster_RewriteCommandArg(SearchCluster *c, MRCommand *cmd, int partit
 /* Make sure that if the cluster is unaware of its sizing, it will take the size from the topology
  */
 void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo);
+
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard);
+
+char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
+                           size_t *taggedLen);
 #endif

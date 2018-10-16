@@ -6,15 +6,18 @@ size_t PartitionForKey(PartitionCtx *ctx, const char *key, size_t len) {
   return fnv_32a_buf((void *)key, len, 0) % ctx->size;
 }
 
+int GetSlotByPartition(PartitionCtx *ctx, size_t partition){
+  size_t step = ctx->tableSize / ctx->size;
+  return ((partition + 1) * step - 1) % ctx->tableSize;
+}
+
 const char *PartitionTag(PartitionCtx *ctx, size_t partition) {
 
   if (partition > ctx->size) {
     return NULL;
   }
 
-  size_t step = ctx->tableSize / ctx->size;
-  // printf("parition %d, index %d\n", partition, partition * (sp->tableSize / sp->size));
-  return ctx->table[((partition + 1) * step - 1) % ctx->tableSize];
+  return ctx->table[GetSlotByPartition(ctx, partition)];
 }
 
 void PartitionCtx_Init(PartitionCtx *ctx, size_t numPartitions, const char **table,

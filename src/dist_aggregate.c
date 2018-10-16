@@ -289,13 +289,14 @@ int NetworkFetcher_Start(struct netCtx *nc) {
 int getAggregateFields(FieldList *l, RedisModuleCtx *ctx, CmdArg *cmd);
 
 ResultProcessor *AggregatePlan_BuildProcessorChain(AggregatePlan *plan, RedisSearchCtx *sctx,
-                                                   ResultProcessor *root, char **err);
+                                                   ResultProcessor *root, QueryError *status);
 
-static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ctx, char **err) {
+static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ctx, QueryError *status) {
   AggregatePlan *ap = ctx;
   AggregatePlan *remote = AggregatePlan_MakeDistributed(ap);
   if (!remote) {
-    SET_ERR(err, "Could not process plan for distribution");
+    // todo: I think this can not happened anyway.
+    QueryError_SetError(status, QUERY_EGENERIC, "Could not process plan for distribution");
     return NULL;
   }
 
@@ -317,7 +318,7 @@ static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ct
 
   ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
   root->ctx.qxc = &plan->execCtx;
-  ResultProcessor *ret = AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, err);
+  ResultProcessor *ret = AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, status);
   // err is null if there was a problem building the chain.
   // If it's not NULL we need to start the network fetcher now
   if (ret) {
@@ -333,6 +334,13 @@ void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString *
                                        .flags = AGGREGATE_REQUEST_NO_CONCURRENT |
                                                 AGGREGATE_REQUEST_NO_PARSE_QUERY |
                                                 AGGREGATE_REQUEST_SPECLESS};
-  settings.cursorLookupName = RedisModule_StringPtrLen(argv[1], NULL);
+  size_t originalLookupNameLen;
+  const char* originalLookupName = RedisModule_StringPtrLen(argv[1], &originalLookupNameLen);
+  SearchCluster *sc = GetSearchCluster();
+  const char *partTag = PartitionTag(&sc->part, sc->myPartition);
+  size_t taggedLookupNameLen;
+  char* taggedLookupName = writeTaggedId(originalLookupName, originalLookupNameLen, partTag, strlen(partTag), &taggedLookupNameLen);
+  settings.cursorLookupName = taggedLookupName;
   AggregateCommand_ExecAggregateEx(ctx, argv, argc, ccx, &settings);
+  free(taggedLookupName);
 }

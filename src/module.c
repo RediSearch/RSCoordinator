@@ -30,6 +30,10 @@
 
 #define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
 
+int redisMajorVesion = 0;
+int redisMinorVesion = 0;
+int redisPatchVesion = 0;
+
 // forward declaration
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies);
 RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType);
@@ -1308,6 +1312,21 @@ static void addIndexCursor(const IndexSpec *sp) {
     return REDISMODULE_ERR;                                           \
   }
 
+static void getRedisVersion(){
+    RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
+    RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
+    assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
+    size_t len;
+    const char* replyStr = RedisModule_CallReplyStringPtr(reply, &len);
+
+    int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion, &redisPatchVesion);
+
+    assert(n == 3);
+
+    RedisModule_FreeCallReply(reply);
+    RedisModule_FreeThreadSafeContext(ctx);
+}
+
 int __attribute__((visibility("default")))
 RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   IndexSpec_OnCreate = addIndexCursor;
@@ -1323,6 +1342,9 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RedisModule_Init(ctx, "ft", RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
+
+  getRedisVersion();
+  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d", redisMajorVesion, redisMinorVesion, redisPatchVesion);
 
   // Chain the config into RediSearch's global config
   RSConfigOptions_AddConfigs(&RSGlobalConfigOptions, GetClusterConfigOptions());

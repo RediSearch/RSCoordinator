@@ -20,6 +20,8 @@
 #include "chan.h"
 #include "rq.h"
 
+extern int redisMajorVesion;
+
 /* Currently a single cluster is supported */
 static MRCluster *cluster_g = NULL;
 static MRWorkQueue *rq_g = NULL;
@@ -136,6 +138,10 @@ static void freePrivDataCB(void *p) {
     MRCtx *mc = p;
     MRCtx_Free(mc);
   }
+}
+
+static void freePrivDataCB_V5(RedisModuleCtx* ctx, void *p) {
+    freePrivDataCB(p);
 }
 
 static int timeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -314,7 +320,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          freePrivDataCB, timeout_g);
+                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -342,7 +348,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds, boo
 
   if (block) {
     ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                            freePrivDataCB, timeout_g);
+                                            redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
   }
 
   rc->cb = uvMapRequest;
@@ -360,7 +366,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          freePrivDataCB, timeout_g);
+                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
 
   rc->cb = uvMapRequest;
   RQ_Push(rq_g, requestCb, rc);

@@ -5,9 +5,9 @@ defaults:
     - run:
         name: Python Dependencies
         command: >-
-          pip install --upgrade wheel setuptools
+          pip install --upgrade setuptools
           git+https://github.com/RedisLabsModules/RLTest.git@master
-          git+https://github.com/mnunberg/RAMP@print_version
+          git+https://github.com/mnunberg/RAMP@print_version;pip install redis-py-cluster
   
     - run:
         name: Submodule checkout

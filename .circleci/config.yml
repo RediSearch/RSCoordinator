@@ -91,7 +91,7 @@ jobs:
           name: Deploy Releases to S3
           command: >-
             for f in /workspace/release/*.zip; do
-              aws s3 cp $f s3://redismodules/staging/$PACKAGE_NAME/ --acl public-read;
+              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read;
             done
 
 workflows:

@@ -5,9 +5,9 @@ defaults:
     - run:
         name: Python Dependencies
         command: >-
-          pip install --upgrade wheel setuptools
+          pip install --upgrade setuptools
           git+https://github.com/RedisLabsModules/RLTest.git@master
-          git+https://github.com/mnunberg/RAMP@print_version
+          git+https://github.com/mnunberg/RAMP@print_version;pip install redis-py-cluster
   
     - run:
         name: Submodule checkout
@@ -91,7 +91,7 @@ jobs:
           name: Deploy Releases to S3
           command: >-
             for f in /workspace/release/*.zip; do
-              aws s3 cp $f s3://redismodules/staging/$PACKAGE_NAME/ --acl public-read;
+              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read;
             done
 
 workflows:

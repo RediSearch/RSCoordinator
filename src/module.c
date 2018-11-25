@@ -28,7 +28,7 @@
 #include <stdbool.h>
 #include "cluster_spell_check.h"
 
-#define CLUSTERDOWN_ERR "Uninitialized cluster state, could not perform command"
+#define CLUSTERDOWN_ERR "ERRCLUSTER Uninitialized cluster state, could not perform command"
 
 int redisMajorVesion = 0;
 int redisMinorVesion = 0;

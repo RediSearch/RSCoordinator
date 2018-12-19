@@ -74,6 +74,9 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
     return 0;
   }
 
+  char* idxName = cmd->strs[1];
+  size_t idxLen = cmd->lens[1];
+
   // the partition arg is the arg which we select the partition on
   const char *partitionArg, *rewriteArg;
   size_t partitionLen, rewriteLen;
@@ -81,7 +84,17 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   partitionArg = MRCommand_ArgStringPtrLen(cmd, partitionKey, &partitionLen);
 
   size_t part = PartitionForKey(&sc->part, partitionArg, partitionLen);
-  SearchCluster_RewriteForPartition(sc, cmd, arg, part);
+
+  size_t finalLen = partitionLen + idxLen + 1;
+  char* newTagged = malloc(sizeof(char) * finalLen);
+  memcpy(newTagged, idxName, idxLen);
+  newTagged[idxLen] = '.';
+  memcpy(newTagged + idxLen + 1, partitionArg, partitionLen);
+  newTagged[finalLen] = '\0';
+
+  MRCommand_ReplaceArgNoDup(cmd, arg, newTagged, finalLen);
+
+//  SearchCluster_RewriteForPartition(sc, cmd, arg, part);
   return 1;
 }
 
@@ -110,6 +123,7 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx)
     const char *tag = PartitionTag(&sc->part, partId);
 
     char *tagged = writeTaggedId(target, targetLen, tag, strlen(tag), &taggedLen);
+
     MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
 
     // printf("After rewrite: ");

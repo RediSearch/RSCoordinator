@@ -121,7 +121,8 @@ int MRReply_ToDouble(MRReply *reply, double *d) {
       return 1;
 
     case MR_REPLY_STRING:
-    case MR_REPLY_STATUS: {
+    case MR_REPLY_STATUS:
+    case MR_REPLY_ERROR: {
       size_t n;
       const char *s = MRReply__Accessors.getString(reply, &n);
       return _parseFloat(s, n, d);

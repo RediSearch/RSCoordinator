@@ -1,43 +1,11 @@
-
 #include <result_processor.h>
 #include <dep/rmr/rmr.h>
 #include <search_cluster.h>
-#include <query_plan.h>
 #include <commands.h>
 #include <aggregate/aggregate.h>
 #include <util/arr.h>
 #include "dist_plan.h"
 #include <err.h>
-
-/* Exctract the schema from WITHSCHEMA */
-AggregateSchema net_extractSchema(MRReply *rep) {
-  if (rep == NULL || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) == 0) {
-    return NULL;
-  }
-
-  AggregateSchema sc = array_new(AggregateProperty, MRReply_Length(rep));
-  for (size_t i = 0; i < MRReply_Length(rep); i++) {
-    MRReply *e = MRReply_ArrayElement(rep, i);
-    if (e && MRReply_Type(e) == MR_REPLY_ARRAY && MRReply_Length(e) == 2) {
-      RSValueType t = RSValue_String;
-      size_t nlen;
-      const char *name = MRReply_String(MRReply_ArrayElement(e, 0), &nlen);
-      if (MRReply_StringEquals(MRReply_ArrayElement(e, 1), "number", 0)) {
-        t = RSValue_Number;
-      } else if (MRReply_StringEquals(MRReply_ArrayElement(e, 1), "array", 0)) {
-        t = RSValue_Array;
-      }
-      sc = array_append(sc, ((AggregateProperty){
-                                .property = strndup(name, nlen),
-                                .kind = Property_Field,
-                                .type = t,
-                            }));
-    }
-    // fprintf(stderr, "%s %s\n", array_tail(sc).property, RSValue_TypeName(array_tail(sc).type));
-  }
-
-  return sc;
-}
 
 /* Get cursor command using a cursor id and an existing aggregate command */
 static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
@@ -63,7 +31,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
   return 1;
 }
 
-int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
+static int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
       // printf("Error is '%s'\n", MRReply_String(rep, NULL));
@@ -104,7 +72,7 @@ int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) 
   return rc;
 }
 
-RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
+RSValue *MRReply_ToValue(MRReply *r) {
   if (!r) return RS_NullVal();
   RSValue *v = NULL;
   switch (MRReply_Type(r)) {
@@ -112,14 +80,14 @@ RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
     case MR_REPLY_STRING: {
       size_t l;
       char *s = MRReply_String(r, &l);
-      // If we need to convert the value to number - do it now...
-      if (convertType == RSValue_Number) {
-        v = RSValue_ParseNumber(s, l);
-
-        if (!v) v = RS_NullVal();
-      } else {
-        v = RS_StringValT(s, l, RSString_Volatile);
-      }
+      v = RS_NewCopiedString(s, l);
+      // v = RS_StringValT(s, l, RSString_Volatile);
+      break;
+    }
+    case MR_REPLY_ERROR: {
+      double d = 42;
+      MRReply_ToDouble(r, &d);
+      v = RS_NumVal(d);
       break;
     }
     case MR_REPLY_INTEGER:
@@ -128,9 +96,9 @@ RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
     case MR_REPLY_ARRAY: {
       RSValue **arr = calloc(MRReply_Length(r), sizeof(*arr));
       for (size_t i = 0; i < MRReply_Length(r); i++) {
-        arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i), RSValue_String);
+        arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i));
       }
-      v = RS_ArrVal(arr, MRReply_Length(r));
+      v = RSValue_NewArrayEx(arr, MRReply_Length(r), RSVAL_ARRAY_ALLOC | RSVAL_ARRAY_NOINCREF);
       break;
     }
     case MR_REPLY_NIL:
@@ -141,23 +109,21 @@ RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
   return v;
 }
 
-struct netCtx {
+typedef struct {
+  ResultProcessor base;
   struct {
     MRReply *root;  // Root reply. We need to free this when done with the rows
     MRReply *rows;  // Array containing reply rows for quick access
   } current;
-
-  MRReply *currentRoot;
+  // Lookup - the rows are written in here
+  RLookup *lookup;
   size_t curIdx;
-  size_t numReplies;
-  uint64_t totalCount;
-  AggregateSchema schema;
   MRIterator *it;
   MRCommand cmd;
   MRCommandGenerator cg;
-};
+} RPNet;
 
-static int getNextReply(struct netCtx *nc) {
+static int getNextReply(RPNet *nc) {
   while (1) {
     MRReply *root = MRIterator_Next(nc->it);
     if (root == MRITERATOR_DONE) {
@@ -178,8 +144,17 @@ static int getNextReply(struct netCtx *nc) {
   }
 }
 
-static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
-  struct netCtx *nc = ctx->privdata;
+static const RLookupKey *keyForField(RPNet *nc, const char *s) {
+  for (const RLookupKey *kk = nc->lookup->head; kk; kk = kk->next) {
+    if (!strcmp(kk->name, s)) {
+      return kk;
+    }
+  }
+  return NULL;
+}
+
+static int rpnetNext(ResultProcessor *self, SearchResult *r) {
+  RPNet *nc = (RPNet *)self;
   // if we've consumed the last reply - free it
   if (nc->current.rows && nc->curIdx == MRReply_Length(nc->current.rows)) {
     MRReply_Free(nc->current.root);
@@ -191,52 +166,34 @@ static int net_Next(ResultProcessorCtx *ctx, SearchResult *r) {
     if (!getNextReply(nc)) {
       return RS_RESULT_EOF;
     }
-    int totalIdx = 0;
-    // the first reply returns the schema as the first element, the others the number of results
-    if (MRReply_Type(MRReply_ArrayElement(nc->current.rows, 0)) ==
-        MR_REPLY_ARRAY) {  // <--- this is a schema response
-                           // the total will be at the second element in this case
-      totalIdx++;
-      if (!nc->schema) {
-        // This seems to work
-        nc->schema = net_extractSchema(MRReply_ArrayElement(nc->current.rows, 0));
-      }  // Otherwise another node probably gave us a schema already.
-
-      ctx->qxc->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current.rows, totalIdx));
-    }
-    nc->curIdx = totalIdx + 1;
+    // Get the index from the first
+    nc->base.parent->totalResults += MRReply_Integer(MRReply_ArrayElement(nc->current.rows, 0));
+    nc->curIdx = 1;
   }
 
   MRReply *rep = MRReply_ArrayElement(nc->current.rows, nc->curIdx++);
-
-  if (r->fields) {
-    RSFieldMap_Reset(r->fields);
-  } else {
-    r->fields = RS_NewFieldMap(8);
-  }
-
-  for (int i = 0; i < MRReply_Length(rep); i += 2) {
+  for (size_t i = 0; i < MRReply_Length(rep); i += 2) {
     const char *c = MRReply_String(MRReply_ArrayElement(rep, i), NULL);
-
-    RSValueType t = RSValue_String;  // *p = NULL;
     MRReply *val = MRReply_ArrayElement(rep, i + 1);
-
-    // If this is a string it might actually be a number, we need to extract the type from the
-    // schema and convert to a number
-    if (MRReply_Type(val) == MR_REPLY_STRING) {
-      AggregateProperty *p = AggregateSchema_Get(nc->schema, c);
-      if (p) t = p->type;
-    }
-    //}
-    RSValue *v = MRReply_ToValue(val, t);
-
-    RSFieldMap_Add(&r->fields, c, v);
+    RSValue *v = MRReply_ToValue(val);
+    RLookup_WriteOwnKeyByName(nc->lookup, c, &r->rowdata, v);
   }
   return RS_RESULT_OK;
 }
 
-void net_Free(ResultProcessor *rp) {
-  struct netCtx *nc = rp->ctx.privdata;
+static int rpnetNext_Start(ResultProcessor *rp, SearchResult *r) {
+  RPNet *nc = (RPNet *)rp;
+  MRIterator *it = MR_Iterate(nc->cg, netCursorCallback, NULL);
+  if (!it) {
+    return RS_RESULT_ERROR;
+  }
+  nc->it = it;
+  nc->base.Next = rpnetNext;
+  return rpnetNext(rp, r);
+}
+
+static void rpnetFree(ResultProcessor *rp) {
+  RPNet *nc = (RPNet *)rp;
 
   // the iterator might not be done - some producers might still be sending data, let's wait for
   // them...
@@ -246,101 +203,120 @@ void net_Free(ResultProcessor *rp) {
 
   nc->cg.Free(nc->cg.ctx);
 
-  if (nc->schema) {
-    array_free_ex(nc->schema, free((char *)((AggregateProperty *)ptr)->property));
-  }
-
   if (nc->current.root) {
     MRReply_Free(nc->current.root);
   }
 
   if (nc->it) MRIterator_Free(nc->it);
-  free(nc);
   free(rp);
 }
-ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCluster *sc) {
 
+static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
   //  MRCommand_FPrint(stderr, &cmd);
-  struct netCtx *nc = malloc(sizeof(*nc));
-  nc->curIdx = 0;
-  nc->current.root = NULL;
-  nc->current.rows = NULL;
-  nc->numReplies = 0;
-  nc->it = NULL;
-  nc->cmd = cmd;
-  nc->totalCount = 0;
-  nc->schema = NULL;
+  RPNet *nc = calloc(1, sizeof(*nc));
+  nc->cmd = *cmd;
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
-
-  ResultProcessor *proc = NewResultProcessor(NULL, nc);
-  proc->Free = net_Free;
-  proc->Next = net_Next;
-  return proc;
+  nc->base.Free = rpnetFree;
+  nc->base.Next = rpnetNext_Start;
+  nc->base.name = "Network";
+  return nc;
 }
 
-int NetworkFetcher_Start(struct netCtx *nc) {
-  MRIterator *it = MR_Iterate(nc->cg, netCursorCallback, NULL);
-  if (!it) {
-    return 0;
+void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                         struct ConcurrentCmdCtx *cmdCtx) {
+  // CMD, index, expr, args...
+  AREQ *r = AREQ_New();
+  QueryError status = {0};
+  int rc = AREQ_Compile(r, argv + 2, argc - 2, &status);
+  if (rc != REDISMODULE_OK) {
+    assert(QueryError_HasError(&status));
+    goto err;
   }
-  nc->it = it;
-  return 1;
-}
-int getAggregateFields(FieldList *l, RedisModuleCtx *ctx, CmdArg *cmd);
-
-ResultProcessor *AggregatePlan_BuildProcessorChain(AggregatePlan *plan, RedisSearchCtx *sctx,
-                                                   ResultProcessor *root, QueryError *status);
-
-static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ctx, QueryError *status) {
-  AggregatePlan *ap = ctx;
-  AggregatePlan *remote = AggregatePlan_MakeDistributed(ap);
-  if (!remote) {
-    // todo: I think this can not happened anyway.
-    QueryError_SetError(status, QUERY_EGENERIC, "Could not process plan for distribution");
-    return NULL;
+  rc = AGGPLN_Distribute(&r->ap, &status);
+  if (rc != REDISMODULE_OK) {
+    assert(QueryError_HasError(&status));
+    goto err;
+  }
+  AREQDIST_UpstreamInfo us = {NULL};
+  rc = AREQ_BuildDistributedPipeline(r, &us, &status);
+  if (rc != REDISMODULE_OK) {
+    assert(QueryError_HasError(&status));
+    goto err;
   }
 
-  // Set hook to write the extracted schema if needed
-  if (ap->withSchema) {
-    AggregateSchema sc = AggregatePlan_GetSchema(ap, NULL);
-    if (sc) {
-      QueryPlan_SetHook(plan, QueryPlanHook_Pre, AggregatePlan_DumpSchema, sc, array_free);
+  // We need to prepend the array with the command, index, and query that
+  // we want to use.
+  const char **tmparr = array_new(const char *, us.nserialized);
+  tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
+  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Query
+  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
+  tmparr = array_append(tmparr, "WITHCURSOR");
+  // Numeric responses are encoded as simple strings.
+  tmparr = array_append(tmparr, "_NUM_SSTRING");
+
+  for (size_t ii = 0; ii < us.nserialized; ++ii) {
+    tmparr = array_append(tmparr, us.serialized[ii]);
+  }
+
+  MRCommand xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);
+  MRCommand_SetPrefix(&xcmd, "_FT");
+  array_free(tmparr);
+
+  SearchCluster *sc = GetSearchCluster();
+
+  // Establish our root processor, which is the distributed processor
+  RPNet *rpRoot = RPNet_New(&xcmd, sc);
+  rpRoot->lookup = us.lookup;
+
+  assert(!r->qiter.rootProc);
+  // Get the deepest-most root:
+  int found = 0;
+  for (ResultProcessor *rp = r->qiter.endProc; rp; rp = rp->upstream) {
+    if (!rp->upstream) {
+      rp->upstream = &rpRoot->base;
+      found = 1;
+      break;
     }
   }
 
-  // AggregatePlan_Print(remote);
-  // AggregatePlan_Print(ap);
-
-  char **args = AggregatePlan_Serialize(remote);
-  MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);
-  MRCommand_SetPrefix(&xcmd, "_FT");
-  array_free_ex(args, free(*(void **)ptr));
-
-  ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
-  root->ctx.qxc = &plan->execCtx;
-  ResultProcessor *ret = AggregatePlan_BuildProcessorChain(ap, plan->ctx, root, status);
-  // err is null if there was a problem building the chain.
-  // If it's not NULL we need to start the network fetcher now
-  if (ret) {
-    NetworkFetcher_Start(root->ctx.privdata);
+  // assert(found);
+  r->qiter.rootProc = &rpRoot->base;
+  if (!found) {
+    r->qiter.endProc = &rpRoot->base;
   }
-  return ret;
-}
+  rpRoot->base.parent = &r->qiter;
 
-void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                                        struct ConcurrentCmdCtx *ccx) {
+  // Now try to process the existing tags that we have, analyzing the results
+  // of the distributed query.
 
-  AggregateRequestSettings settings = {.pcb = buildDistributedProcessorChain,
-                                       .flags = AGGREGATE_REQUEST_NO_CONCURRENT |
-                                                AGGREGATE_REQUEST_NO_PARSE_QUERY |
-                                                AGGREGATE_REQUEST_SPECLESS};
-  size_t originalLookupNameLen;
-  const char* originalLookupName = RedisModule_StringPtrLen(argv[1], &originalLookupNameLen);
-  SearchCluster *sc = GetSearchCluster();
-  const char *partTag = PartitionTag(&sc->part, sc->myPartition);
-  size_t taggedLookupNameLen;
-  char* taggedLookupName = writeTaggedId(originalLookupName, originalLookupNameLen, partTag, strlen(partTag), &taggedLookupNameLen);
-  settings.cursorLookupName = taggedLookupName;
-  AggregateCommand_ExecAggregateEx(ctx, argv, argc, ccx, &settings);
-  free(taggedLookupName);
+  if (r->reqflags & QEXEC_F_IS_CURSOR) {
+    const char *ixname = RedisModule_StringPtrLen(argv[1], NULL);
+    const char *partTag = PartitionTag(&sc->part, sc->myPartition);
+    size_t dummy;
+    char *tagged = writeTaggedId(ixname, strlen(ixname), partTag, strlen(partTag), &dummy);
+
+    // Keep the original concurrent context
+    ConcurrentCmdCtx_KeepRedisCtx(cmdCtx);
+
+    // Assign the context to the AREQ, so that when the AREQ is freed, the
+    // search context is released as well.
+    r->sctx = NewSearchCtxC(ctx, tagged, true);
+    rc = AREQ_StartCursor(r, ctx, tagged, &status);
+
+    free(tagged);
+    if (rc != REDISMODULE_OK) {
+      assert(QueryError_HasError(&status));
+      goto err;
+    }
+  } else {
+    AREQ_Execute(r, ctx);
+  }
+  return;
+
+// See if we can distribute the plan...
+err:
+  assert(QueryError_HasError(&status));
+  QueryError_ReplyAndClear(ctx, &status);
+  AREQ_Free(r);
+  return;
 }

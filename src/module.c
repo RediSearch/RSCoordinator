@@ -854,9 +854,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                                        struct ConcurrentCmdCtx *ccx);
-
+void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                         struct ConcurrentCmdCtx *cmdCtx);
 static int DIST_AGG_THREADPOOL = -1;
 
 static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -868,7 +867,7 @@ static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
   return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
-                                               AggregateCommand_ExecDistAggregate, ctx, argv, argc);
+                                               RSExecDistAggregate, ctx, argv, argc);
 }
 
 static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -878,8 +877,8 @@ static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!SearchCluster_Ready(GetSearchCluster())) {
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
-  return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
-                                               AggregateCommand_ExecCursor, ctx, argv, argc);
+  RSCursorCommand(ctx, argv, argc);
+  return REDISMODULE_OK;
 }
 
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {

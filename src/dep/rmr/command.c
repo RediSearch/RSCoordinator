@@ -145,7 +145,7 @@ static void MRCommand_Init(MRCommand *cmd, size_t len) {
   cmd->id = 0;
 }
 
-MRCommand MR_NewCommandArgv(int argc, char **argv) {
+MRCommand MR_NewCommandArgv(int argc, const char **argv) {
   MRCommand cmd = {.num = argc};
   MRCommand_Init(&cmd, argc);
 
@@ -287,7 +287,7 @@ MRCommandFlags MRCommand_GetFlags(MRCommand *cmd) {
   return __commandConfig[cmd->id].flags;
 }
 
-MRCommandGenerator* MRCommand_GetCommandGenerator(MRCommand *cmd) {
+MRCommandGenerator *MRCommand_GetCommandGenerator(MRCommand *cmd) {
   if (cmd->id < 0) {
     return NULL;  // default
   }

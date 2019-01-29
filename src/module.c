@@ -33,6 +33,7 @@
 int redisMajorVesion = 0;
 int redisMinorVesion = 0;
 int redisPatchVesion = 0;
+REDISMODULE_INIT_SYMBOLS();
 
 // forward declaration
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies);
@@ -1312,19 +1313,20 @@ static void addIndexCursor(const IndexSpec *sp) {
     return REDISMODULE_ERR;                                           \
   }
 
-static void getRedisVersion(){
-    RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
-    RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
-    assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
-    size_t len;
-    const char* replyStr = RedisModule_CallReplyStringPtr(reply, &len);
+static void getRedisVersion() {
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
+  RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
+  assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
+  size_t len;
+  const char *replyStr = RedisModule_CallReplyStringPtr(reply, &len);
 
-    int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion, &redisPatchVesion);
+  int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion,
+                 &redisPatchVesion);
 
-    assert(n == 3);
+  assert(n == 3);
 
-    RedisModule_FreeCallReply(reply);
-    RedisModule_FreeThreadSafeContext(ctx);
+  RedisModule_FreeCallReply(reply);
+  RedisModule_FreeThreadSafeContext(ctx);
 }
 
 int __attribute__((visibility("default")))
@@ -1344,7 +1346,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   getRedisVersion();
-  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d", redisMajorVesion, redisMinorVesion, redisPatchVesion);
+  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d",
+                  redisMajorVesion, redisMinorVesion, redisPatchVesion);
 
   // Chain the config into RediSearch's global config
   RSConfigOptions_AddConfigs(&RSGlobalConfigOptions, GetClusterConfigOptions());
@@ -1378,8 +1381,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(
       RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
 
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster),
-                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster), "readonly", 0,
+                                   0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));
 

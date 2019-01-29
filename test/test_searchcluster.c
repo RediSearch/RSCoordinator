@@ -38,3 +38,5 @@ int main(int argc, char **argv) {
   MU_REPORT();
   return minunit_status;
 }
+
+REDISMODULE_INIT_SYMBOLS()

@@ -1,6 +1,8 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.9)
 PROJECT(RSCoordinator)
 
+INCLUDE(src/dep/RediSearch/cmake/redisearch_cflags.cmake)
+
 ADD_DEFINITIONS(-DREDISMODULE_EXPERIMENTAL_API)
 ADD_DEFINITIONS(-D_GNU_SOURCE)
 ADD_DEFINITIONS(-DREDIS_MODULE_TARGET)
@@ -19,20 +21,18 @@ FOREACH (flags_var_to_scrub
 ENDFOREACH()
 
 
-SET(RS_COMMON_FLAGS "-Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-result")
-SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fPIC -Werror=implicit-function-declaration")
-SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -pthread")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${RS_C_FLAGS}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RS_CXX_FLAGS}")
 # Specific to coordinator
-SET(RS_COMMON_FLAGS "${RS_COMMON_FLAGS} -fvisibility=hidden")
-
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${RS_COMMON_FLAGS} -std=gnu99")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RS_COMMON_FLAGS} -fno-rtti -fno-exceptions")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
 
 SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
 SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymbolic-functions")
 
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
-SET(RS_RUN_TESTS CACHE BOOL OFF) # Don't run RS' own tests
+SET(RS_RUN_TESTS OFF CACHE BOOL "" FORCE) # Don't run RS' own tests
+SET(RS_ENABLE_MOCK ON CACHE BOOL "" FORCE) # But build mock so we can link our own tests
 ENABLE_TESTING() # Enable our own tests
 
 FIND_PATH(LIBUV_INCLUDE_DIR uv.h
@@ -70,7 +70,7 @@ MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
 
 ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
-TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS hiredis)
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS redismock hiredis)
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)

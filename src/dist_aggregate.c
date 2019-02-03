@@ -222,6 +222,51 @@ static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
   return nc;
 }
 
+static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_UpstreamInfo *us,
+                           MRCommand *xcmd) {
+  // We need to prepend the array with the command, index, and query that
+  // we want to use.
+  const char **tmparr = array_new(const char *, us->nserialized);
+  tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
+  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Query
+  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
+  tmparr = array_append(tmparr, "WITHCURSOR");
+  // Numeric responses are encoded as simple strings.
+  tmparr = array_append(tmparr, "_NUM_SSTRING");
+
+  for (size_t ii = 0; ii < us->nserialized; ++ii) {
+    tmparr = array_append(tmparr, us->serialized[ii]);
+  }
+
+  *xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);
+  MRCommand_SetPrefix(xcmd, "_FT");
+}
+
+static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
+                             AREQDIST_UpstreamInfo *us) {
+  // Establish our root processor, which is the distributed processor
+  RPNet *rpRoot = RPNet_New(xcmd, sc);
+  rpRoot->lookup = us->lookup;
+
+  assert(!r->qiter.rootProc);
+  // Get the deepest-most root:
+  int found = 0;
+  for (ResultProcessor *rp = r->qiter.endProc; rp; rp = rp->upstream) {
+    if (!rp->upstream) {
+      rp->upstream = &rpRoot->base;
+      found = 1;
+      break;
+    }
+  }
+
+  // assert(found);
+  r->qiter.rootProc = &rpRoot->base;
+  if (!found) {
+    r->qiter.endProc = &rpRoot->base;
+  }
+  rpRoot->base.parent = &r->qiter;
+}
+
 void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
                          struct ConcurrentCmdCtx *cmdCtx) {
   // CMD, index, expr, args...
@@ -244,50 +289,14 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     goto err;
   }
 
-  // We need to prepend the array with the command, index, and query that
-  // we want to use.
-  const char **tmparr = array_new(const char *, us.nserialized);
-  tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
-  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Query
-  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
-  tmparr = array_append(tmparr, "WITHCURSOR");
-  // Numeric responses are encoded as simple strings.
-  tmparr = array_append(tmparr, "_NUM_SSTRING");
-
-  for (size_t ii = 0; ii < us.nserialized; ++ii) {
-    tmparr = array_append(tmparr, us.serialized[ii]);
-  }
-
-  MRCommand xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);
-  MRCommand_SetPrefix(&xcmd, "_FT");
-  array_free(tmparr);
-
   SearchCluster *sc = GetSearchCluster();
 
-  // Establish our root processor, which is the distributed processor
-  RPNet *rpRoot = RPNet_New(&xcmd, sc);
-  rpRoot->lookup = us.lookup;
+  // Construct the command string
+  MRCommand xcmd;
+  buildMRCommand(argv, argc, &us, &xcmd);
 
-  assert(!r->qiter.rootProc);
-  // Get the deepest-most root:
-  int found = 0;
-  for (ResultProcessor *rp = r->qiter.endProc; rp; rp = rp->upstream) {
-    if (!rp->upstream) {
-      rp->upstream = &rpRoot->base;
-      found = 1;
-      break;
-    }
-  }
-
-  // assert(found);
-  r->qiter.rootProc = &rpRoot->base;
-  if (!found) {
-    r->qiter.endProc = &rpRoot->base;
-  }
-  rpRoot->base.parent = &r->qiter;
-
-  // Now try to process the existing tags that we have, analyzing the results
-  // of the distributed query.
+  // Build the result processor chain
+  buildDistRPChain(r, &xcmd, sc, &us);
 
   if (r->reqflags & QEXEC_F_IS_CURSOR) {
     const char *ixname = RedisModule_StringPtrLen(argv[1], NULL);

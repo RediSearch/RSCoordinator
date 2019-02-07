@@ -20,7 +20,7 @@ typedef struct {
 void MRCommand_Free(MRCommand *cmd);
 
 /* Createa a new command from an argv list of strings */
-MRCommand MR_NewCommandArgv(int argc, char **argv);
+MRCommand MR_NewCommandArgv(int argc, const char **argv);
 /* Variadic creation of a command from a list of strings */
 MRCommand MR_NewCommand(int argc, ...);
 /* Create a command from a list of strings */
@@ -65,7 +65,7 @@ void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix);
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg, size_t len);
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg, size_t len);
 
-MRCommandGenerator* MRCommand_GetCommandGenerator(MRCommand *cmd);
+MRCommandGenerator *MRCommand_GetCommandGenerator(MRCommand *cmd);
 int MRCommand_GetShardingKey(MRCommand *cmd);
 int MRCommand_GetPartitioningKey(MRCommand *cmd);
 typedef enum {

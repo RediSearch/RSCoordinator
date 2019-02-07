@@ -1,7 +1,7 @@
 # Get the actual test names
 INCLUDE_DIRECTORIES(../)
 FUNCTION(RMRTEST name)
-    ADD_EXECUTABLE("${name}" "${name}.c")
+    ADD_EXECUTABLE("${name}" ${name}.c init-rm.c)
 
     TARGET_LINK_LIBRARIES("${name}" testdeps m)
     ADD_TEST(NAME "${name}" COMMAND "${name}")

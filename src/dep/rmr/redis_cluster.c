@@ -111,7 +111,7 @@ err:
 
 static struct RMUtilTimer *updateTopoTimer;
 
-static void updateTopoCB(RedisModuleCtx *ctx, void *p) {
+static int updateTopoCB(RedisModuleCtx *ctx, void *p) {
   RedisModule_ThreadSafeContextLock(ctx);
   RedisModule_AutoMemory(ctx);
 
@@ -121,6 +121,7 @@ static void updateTopoCB(RedisModuleCtx *ctx, void *p) {
   }
   if (r) RedisModule_FreeCallReply(r);
   RedisModule_ThreadSafeContextUnlock(ctx);
+  return 1;
 }
 
 int InitRedisTopologyUpdater() {

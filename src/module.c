@@ -33,6 +33,7 @@
 int redisMajorVesion = 0;
 int redisMinorVesion = 0;
 int redisPatchVesion = 0;
+REDISMODULE_INIT_SYMBOLS();
 
 // forward declaration
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies);
@@ -438,8 +439,7 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
 
 searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,
                         int payloadOffset, int fieldsOffset, int sortKeyOffset) {
-  searchResult *res = cached ? cached : malloc(sizeof(searchResult));
-  res->sortKey = NULL;
+  searchResult *res = cached ? cached : calloc(1, sizeof(*res));
   res->sortKeyNum = HUGE_VAL;
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), &res->idLen);
   // if the id contains curly braces, get rid of them now
@@ -454,14 +454,28 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   } else {  // this usually means an invalid result
     return res;
   }
+
+  fieldsOffset += j;
+  payloadOffset += j;
+  sortKeyOffset += j;
+  scoreOffset += j;
+
+  // Array length:
+  size_t arrlen = MRReply_Length(arr);
   // parse socre
-  MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score);
-  // get fields
-  res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
+  if (arrlen > scoreOffset) {
+    MRReply_ToDouble(MRReply_ArrayElement(arr, scoreOffset), &res->score);
+  }
+  // get fields.. only applicable if there *are* fields..
+  if (arrlen > fieldsOffset) {
+    res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, fieldsOffset) : NULL;
+  }
   // get payloads
-  res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, j + payloadOffset) : NULL;
-  if (sortKeyOffset > 0) {
-    res->sortKey = MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), &res->sortKeyLen);
+  if (arrlen > payloadOffset) {
+    res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, payloadOffset) : NULL;
+  }
+  if (sortKeyOffset > 0 && sortKeyOffset < arrlen) {
+    res->sortKey = MRReply_String(MRReply_ArrayElement(arr, sortKeyOffset), &res->sortKeyLen);
   } else {
     res->sortKey = NULL;
   }
@@ -853,9 +867,8 @@ int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDISMODULE_OK;
 }
 
-void AggregateCommand_ExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                                        struct ConcurrentCmdCtx *ccx);
-
+void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                         struct ConcurrentCmdCtx *cmdCtx);
 static int DIST_AGG_THREADPOOL = -1;
 
 static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -867,7 +880,7 @@ static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
   return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
-                                               AggregateCommand_ExecDistAggregate, ctx, argv, argc);
+                                               RSExecDistAggregate, ctx, argv, argc);
 }
 
 static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -877,8 +890,8 @@ static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!SearchCluster_Ready(GetSearchCluster())) {
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
-  return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
-                                               AggregateCommand_ExecCursor, ctx, argv, argc);
+  RSCursorCommand(ctx, argv, argc);
+  return REDISMODULE_OK;
 }
 
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1312,19 +1325,20 @@ static void addIndexCursor(const IndexSpec *sp) {
     return REDISMODULE_ERR;                                           \
   }
 
-static void getRedisVersion(){
-    RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
-    RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
-    assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
-    size_t len;
-    const char* replyStr = RedisModule_CallReplyStringPtr(reply, &len);
+static void getRedisVersion() {
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
+  RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
+  assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
+  size_t len;
+  const char *replyStr = RedisModule_CallReplyStringPtr(reply, &len);
 
-    int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion, &redisPatchVesion);
+  int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion,
+                 &redisPatchVesion);
 
-    assert(n == 3);
+  assert(n == 3);
 
-    RedisModule_FreeCallReply(reply);
-    RedisModule_FreeThreadSafeContext(ctx);
+  RedisModule_FreeCallReply(reply);
+  RedisModule_FreeThreadSafeContext(ctx);
 }
 
 int __attribute__((visibility("default")))
@@ -1344,7 +1358,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   getRedisVersion();
-  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d", redisMajorVesion, redisMinorVesion, redisPatchVesion);
+  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d",
+                  redisMajorVesion, redisMinorVesion, redisPatchVesion);
 
   // Chain the config into RediSearch's global config
   RSConfigOptions_AddConfigs(&RSGlobalConfigOptions, GetClusterConfigOptions());
@@ -1378,8 +1393,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(
       RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
 
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster),
-                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster), "readonly", 0,
+                                   0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));
 

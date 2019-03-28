@@ -64,6 +64,10 @@ MACRO(MODULE_TARGET SUFFIX)
     TARGET_LINK_LIBRARIES(${_tgtName} redisearchS ${LIBUV_LIBRARIES} hiredis)
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES PREFIX "")
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES SUFFIX ".so")
+    IF (APPLE) 
+        SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES
+            LINK_FLAGS "-undefined dynamic_lookup")
+    ENDIF()
 ENDMACRO()
 
 MODULE_TARGET(oss)

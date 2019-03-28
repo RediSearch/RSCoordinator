@@ -9,6 +9,15 @@ static int my_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   if (RedisModule_Init(ctx, "dummy", 0, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
+  return REDISMODULE_OK;
+}
+
+uint64_t siphash(const uint8_t *in, const size_t inlen, const uint8_t *k) {
+  return 0;
+}
+
+uint64_t siphash_nocase(const uint8_t *in, const size_t inlen, const uint8_t *k) {
+  return 0;
 }
 }
 

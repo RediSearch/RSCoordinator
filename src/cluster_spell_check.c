@@ -74,15 +74,25 @@ static void spellcheckReducerCtx_AddTermAsFoundInIndex(spellcheckReducerCtx* ctx
   term->foundInIndex = true;
 }
 
-static bool spellCheckReplySanity(int count, MRReply** replies, uint64_t* totalDocNum) {
-  for (int i = 0; i < count; ++i) {
+static bool spellCheckReplySanity(int count, MRReply** replies, uint64_t* totalDocNum,
+                                  QueryError* status) {
+  for (size_t i = 0; i < count; ++i) {
+    if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
+      size_t ndummy = 0;
+      const char* s = MRReply_String(replies[i], &ndummy);
+      QueryError_SetError(status, QUERY_EGENERIC, s);
+      return false;
+    }
+
     if (MRReply_Type(replies[i]) != MR_REPLY_ARRAY) {
+      QueryError_SetError(status, QUERY_EGENERIC, "Invalid reply format");
       return false;
     }
 
     MRReply* numOfDocReply = MRReply_ArrayElement(replies[i], 0);
 
     if (MRReply_Type(numOfDocReply) != MR_REPLY_INTEGER) {
+      QueryError_SetError(status, QUERY_EGENERIC, "Invalid reply format");
       return false;
     }
 
@@ -176,6 +186,7 @@ void spellCheckSendResult(RedisModuleCtx* ctx, spellcheckReducerCtx* spellCheckC
 }
 
 int spellCheckReducer(struct MRCtx* mc, int count, MRReply** replies) {
+  QueryError status = {0};
   RedisModuleCtx* ctx = MRCtx_GetRedisCtx(mc);
   if (count == 0) {
     RedisModule_ReplyWithError(ctx, "Could not distribute command");
@@ -183,8 +194,8 @@ int spellCheckReducer(struct MRCtx* mc, int count, MRReply** replies) {
   }
 
   uint64_t totalDocNum = 0;
-  if (!spellCheckReplySanity(count, replies, &totalDocNum)) {
-    RedisModule_ReplyWithError(ctx, "internal error occurs");
+  if (!spellCheckReplySanity(count, replies, &totalDocNum, &status)) {
+    QueryError_ReplyAndClear(ctx, &status);
     return REDISMODULE_OK;
   }
 

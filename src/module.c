@@ -27,6 +27,7 @@
 #include <value.h>
 #include <stdbool.h>
 #include "cluster_spell_check.h"
+#include "dist_alias.h"
 
 #define CLUSTERDOWN_ERR "ERRCLUSTER Uninitialized cluster state, could not perform command"
 
@@ -1375,6 +1376,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RedisModule_Log(ctx, "warning", "Could not init MR search cluster");
     return REDISMODULE_ERR;
   }
+  ClusterAlias_Init();
 
   // Init the aggregation thread pool
   DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(RSGlobalConfig.searchPoolSize);
@@ -1486,6 +1488,14 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
    * spell check
    */
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler),
+                                   "readonly", 0, 0, -1));
+
+  /* alias */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASADD", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASDEL", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASUPDATE", SafeCmd(MastersFanoutCommandHandler),
                                    "readonly", 0, 0, -1));
 
   return REDISMODULE_OK;

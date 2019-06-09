@@ -65,6 +65,9 @@ void MRCommand_SetPrefix(MRCommand *cmd, const char *newPrefix);
 void MRCommand_ReplaceArg(MRCommand *cmd, int index, const char *newArg, size_t len);
 void MRCommand_ReplaceArgNoDup(MRCommand *cmd, int index, const char *newArg, size_t len);
 
+void MRCommand_WriteTaggedKey(MRCommand *cmd, int index, const char *newarg, const char *part,
+                              size_t n);
+
 MRCommandGenerator *MRCommand_GetCommandGenerator(MRCommand *cmd);
 int MRCommand_GetShardingKey(MRCommand *cmd);
 int MRCommand_GetPartitioningKey(MRCommand *cmd);
@@ -75,6 +78,8 @@ typedef enum {
   MRCommand_Write = 0x08,
   MRCommand_Coordination = 0x10,
   MRCommand_NoKey = 0x20,
+  // Command can be aliased. Look up the alias and rewrite if possible
+  MRCommand_Aliased = 0x40
 } MRCommandFlags;
 
 MRCommandFlags MRCommand_GetFlags(MRCommand *cmd);

@@ -2,6 +2,7 @@
 #include "redismodule.h"
 #include "dep/RediSearch/src/spell_check.h"
 #include "dep/RediSearch/src/util/arr.h"
+#include "query_error.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -74,15 +75,25 @@ static void spellcheckReducerCtx_AddTermAsFoundInIndex(spellcheckReducerCtx* ctx
   term->foundInIndex = true;
 }
 
-static bool spellCheckReplySanity(int count, MRReply** replies, uint64_t* totalDocNum) {
+static bool spellCheckReplySanity(int count, MRReply** replies, uint64_t* totalDocNum,
+                                  QueryError* qerr) {
   for (int i = 0; i < count; ++i) {
+    if (MRReply_Type(replies[i]) == MR_REPLY_ERROR) {
+      QueryError_SetError(qerr, QUERY_EGENERIC, MRReply_String(replies[i], NULL));
+      return false;
+    }
+
     if (MRReply_Type(replies[i]) != MR_REPLY_ARRAY) {
+      QueryError_SetErrorFmt(qerr, QUERY_EGENERIC, "wrong reply type. Expected array. Got %d",
+                             MRReply_Type(replies[i]));
       return false;
     }
 
     MRReply* numOfDocReply = MRReply_ArrayElement(replies[i], 0);
 
     if (MRReply_Type(numOfDocReply) != MR_REPLY_INTEGER) {
+      QueryError_SetErrorFmt(qerr, QUERY_EGENERIC, "Expected first reply as integer. Have %d",
+                             MRReply_Type(numOfDocReply));
       return false;
     }
 
@@ -183,8 +194,9 @@ int spellCheckReducer(struct MRCtx* mc, int count, MRReply** replies) {
   }
 
   uint64_t totalDocNum = 0;
-  if (!spellCheckReplySanity(count, replies, &totalDocNum)) {
-    RedisModule_ReplyWithError(ctx, "internal error occurs");
+  QueryError qerr = {0};
+  if (!spellCheckReplySanity(count, replies, &totalDocNum, &qerr)) {
+    QueryError_ReplyAndClear(ctx, &qerr);
     return REDISMODULE_OK;
   }
 

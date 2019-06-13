@@ -3,6 +3,7 @@
 #include <string.h>
 #include "search_cluster.h"
 #include "partition.h"
+#include "dist_alias.h"
 
 SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize) {
   SearchCluster ret = (SearchCluster){.size = size};
@@ -25,7 +26,7 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
 }
 
 char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
-                           size_t *taggedLen) {
+                    size_t *taggedLen) {
   size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL
   char *tagged = malloc(total);
   tagged[total - 1] = 0;
@@ -108,6 +109,13 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx)
 
     size_t partId = PartitionForKey(&sc->part, partStr, partLen);
     const char *tag = PartitionTag(&sc->part, partId);
+    if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+      const char *alias = ClusterAlias_Get(target);
+      if (alias) {
+        target = alias;
+        targetLen = strlen(alias);
+      }
+    }
 
     char *tagged = writeTaggedId(target, targetLen, tag, strlen(tag), &taggedLen);
     MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
@@ -131,6 +139,13 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
 
   size_t keylen = 0;
   const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
+  if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+    const char *alias = ClusterAlias_Get(key);
+    if (alias) {
+      key = alias;
+      keylen = strlen(alias);
+    }
+  }
 
   size_t taggedLen = 0;
   const char *tag = PartitionTag(&sc->part, 0);
@@ -173,6 +188,24 @@ int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
   return 1;
 }
 
+static int AliasIterator_Next(void *ctx, MRCommand *cmd) {
+  SCCommandMuxIterator *it = ctx;
+  // we need special handling if the command is:
+  if (!SearchCluster_Ready(it->cluster) || it->offset >= it->cluster->size) {
+    return 0;
+  }
+
+  *cmd = MRCommand_Copy(it->cmd);
+  SearchCluster_RewriteForPartition(it->cluster, cmd, 1, it->offset);
+  if (cmd->num > 2) {
+    // del or update
+    SearchCluster_RewriteForPartition(it->cluster, cmd, 2, it->offset);
+  }
+  MRCommand_Print(cmd);
+  ++it->offset;
+  return 1;
+}
+
 /* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
 int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   SCCommandMuxIterator *it = ctx;
@@ -187,7 +220,13 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
     size_t argLen;
-    const char *arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    const char *arg;
+    if (it->keyAlias) {
+      arg = it->keyAlias;
+      argLen = strlen(it->keyAlias);
+    } else {
+      arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    }
     const char *tag = PartitionTag(&it->cluster->part, it->offset++);
 
     size_t taggedLen;
@@ -209,6 +248,7 @@ void SCCommandMuxIterator_Free(void *ctx) {
   SCCommandMuxIterator *it = ctx;
   if (it->cmd) MRCommand_Free(it->cmd);
   it->cmd = NULL;
+  free(it->keyAlias);
   free(it);
 }
 
@@ -221,6 +261,11 @@ MRCommandGenerator spellCheckCommandGenerator = {.Next = SpellCheckMuxIterator_N
                                                  .Free = SCCommandMuxIterator_Free,
                                                  .Len = SCCommandMuxIterator_Len,
                                                  .ctx = NULL};
+
+MRCommandGenerator aliasCommandGenerator = {.Next = AliasIterator_Next,
+                                            .Free = SCCommandMuxIterator_Free,
+                                            .Len = SCCommandMuxIterator_Len,
+                                            .ctx = NULL};
 
 MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, MRCommand *cmd) {
   MRCommandGenerator *ptr = MRCommand_GetCommandGenerator(cmd);
@@ -241,7 +286,14 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
   SCCommandMuxIterator *mux = malloc(sizeof(SCCommandMuxIterator));
   *mux = (SCCommandMuxIterator){
       .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
-
+  if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+    if (mux->keyOffset > 0 && mux->keyOffset < cmd->num) {
+      const char *alias = ClusterAlias_Get(cmd->strs[mux->keyOffset]);
+      if (alias) {
+        mux->keyAlias = strdup(alias);
+      }
+    }
+  }
   return SearchCluster_GetCommandGenerator(mux, cmd);
 }
 
@@ -257,11 +309,11 @@ void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTo
   }
 }
 
-void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard){
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard *myShard) {
   SearchCluster *c = GetSearchCluster();
-  for (size_t i = 0 ; i < c->size ; ++i){
+  for (size_t i = 0; i < c->size; ++i) {
     int slot = GetSlotByPartition(&c->part, i);
-    if (myShard->startSlot <= slot && myShard->endSlot >= slot){
+    if (myShard->startSlot <= slot && myShard->endSlot >= slot) {
       c->myPartition = i;
       return;
     }

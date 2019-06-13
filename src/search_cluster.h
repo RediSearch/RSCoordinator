@@ -24,6 +24,7 @@ void InitGlobalSearchCluster(size_t size, const char **table, size_t tableSize);
 /* A command generator that multiplexes a command across multiple partitions by tagging it */
 typedef struct {
   MRCommand *cmd;
+  char *keyAlias;
   int keyOffset;
   size_t offset;
   SearchCluster *cluster;
@@ -50,8 +51,8 @@ int SearchCluster_RewriteCommandArg(SearchCluster *c, MRCommand *cmd, int partit
  */
 void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo);
 
-void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard);
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard *myShard);
 
 char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
-                           size_t *taggedLen);
+                    size_t *taggedLen);
 #endif

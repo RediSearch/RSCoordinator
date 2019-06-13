@@ -64,13 +64,16 @@ MACRO(MODULE_TARGET SUFFIX)
     TARGET_LINK_LIBRARIES(${_tgtName} redisearchS ${LIBUV_LIBRARIES} hiredis)
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES PREFIX "")
     SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES SUFFIX ".so")
+    IF (APPLE)
+        SET_TARGET_PROPERTIES(${_tgtName} PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+    ENDIF()
 ENDMACRO()
 
 MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
 
 ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
-TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS hiredis)
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS hiredis apistubs)
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)

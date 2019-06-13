@@ -20,7 +20,10 @@ const char *ClusterAlias_Get(const char *alias) {
 }
 
 static void stripPartition(std::string &s) {
-  s = s.substr(0, s.size() - 5);
+  auto pos = s.rfind('{');
+  if (pos != std::string::npos) {
+    s = s.substr(0, s.size() - pos);
+  }
 }
 
 static void hook_add(const char *alias, const IndexSpec *sp) {

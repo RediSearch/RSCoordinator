@@ -1,4 +1,5 @@
 #include "minunit.h"
+#include "redismodule.h"
 #include <search_cluster.h>
 #include <rmr/command.h>
 #include <crc16_tags.h>
@@ -31,7 +32,6 @@ void testCommandMux() {
 }
 
 int main(int argc, char **argv) {
-
   // MU_RUN_TEST(testTagFunc);
   MU_RUN_TEST(testCommandMux);
 

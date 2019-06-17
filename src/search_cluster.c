@@ -3,7 +3,7 @@
 #include <string.h>
 #include "search_cluster.h"
 #include "partition.h"
-#include "dist_alias.h"
+#include "alias.h"
 
 SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize) {
   SearchCluster ret = (SearchCluster){.size = size};
@@ -86,6 +86,25 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   return 1;
 }
 
+static const char *getUntaggedId(const char *id, size_t *outlen) {
+  const char *openBrace = rindex(id, '{');
+  if (openBrace) {
+    *outlen = openBrace - id;
+  } else {
+    *outlen = strlen(id);
+  }
+  return id;
+}
+
+static const char *lookupAlias(const char *orig, size_t *len) {
+  IndexSpec *sp = IndexAlias_Get(orig);
+  if (!sp) {
+    *len = strlen(orig);
+    return orig;
+  }
+  return getUntaggedId(sp->name, len);
+}
+
 int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx) {
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
@@ -110,10 +129,11 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx)
     size_t partId = PartitionForKey(&sc->part, partStr, partLen);
     const char *tag = PartitionTag(&sc->part, partId);
     if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
-      const char *alias = ClusterAlias_Get(target);
-      if (alias) {
-        target = alias;
-        targetLen = strlen(alias);
+      // 1:1 partition mapping
+      IndexSpec *spec = IndexAlias_Get(target);
+      if (spec) {
+        target = spec->name;
+        targetLen = rindex(spec->name, '{') - target;
       }
     }
 
@@ -140,11 +160,7 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
   size_t keylen = 0;
   const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
   if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
-    const char *alias = ClusterAlias_Get(key);
-    if (alias) {
-      key = alias;
-      keylen = strlen(alias);
-    }
+    key = lookupAlias(key, &keylen);
   }
 
   size_t taggedLen = 0;
@@ -185,24 +201,6 @@ int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
 
   ++it->offset;
 
-  return 1;
-}
-
-static int AliasIterator_Next(void *ctx, MRCommand *cmd) {
-  SCCommandMuxIterator *it = ctx;
-  // we need special handling if the command is:
-  if (!SearchCluster_Ready(it->cluster) || it->offset >= it->cluster->size) {
-    return 0;
-  }
-
-  *cmd = MRCommand_Copy(it->cmd);
-  SearchCluster_RewriteForPartition(it->cluster, cmd, 1, it->offset);
-  if (cmd->num > 2) {
-    // del or update
-    SearchCluster_RewriteForPartition(it->cluster, cmd, 2, it->offset);
-  }
-  MRCommand_Print(cmd);
-  ++it->offset;
   return 1;
 }
 
@@ -262,11 +260,6 @@ MRCommandGenerator spellCheckCommandGenerator = {.Next = SpellCheckMuxIterator_N
                                                  .Len = SCCommandMuxIterator_Len,
                                                  .ctx = NULL};
 
-MRCommandGenerator aliasCommandGenerator = {.Next = AliasIterator_Next,
-                                            .Free = SCCommandMuxIterator_Free,
-                                            .Len = SCCommandMuxIterator_Len,
-                                            .ctx = NULL};
-
 MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, MRCommand *cmd) {
   MRCommandGenerator *ptr = MRCommand_GetCommandGenerator(cmd);
   MRCommandGenerator ret;
@@ -288,9 +281,11 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
       .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
   if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
     if (mux->keyOffset > 0 && mux->keyOffset < cmd->num) {
-      const char *alias = ClusterAlias_Get(cmd->strs[mux->keyOffset]);
-      if (alias) {
-        mux->keyAlias = strdup(alias);
+      size_t oldlen = strlen(cmd->strs[mux->keyOffset]);
+      size_t newlen = 0;
+      const char *target = lookupAlias(cmd->strs[mux->keyOffset], &newlen);
+      if (oldlen != newlen) {
+        mux->keyAlias = strndup(target, newlen);
       }
     }
   }

@@ -1,6 +1,5 @@
 #include "minunit.h"
 #include "redismodule.h"
-#include "dist_alias.h"
 #include <search_cluster.h>
 #include <rmr/command.h>
 #include <crc16_tags.h>
@@ -38,7 +37,6 @@ int main(int argc, char **argv) {
   RedisModule_Calloc = calloc;
   RedisModule_Free = free;
   IndexAlias_InitGlobal();
-  ClusterAlias_Init();
   // MU_RUN_TEST(testTagFunc);
   MU_RUN_TEST(testCommandMux);
 

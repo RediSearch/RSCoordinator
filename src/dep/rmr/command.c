@@ -39,9 +39,9 @@ struct mrCommandConf __commandConfig[] = {
     {"_FT.TAGVALS", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
 
     // Alias commands
-    {"_FT.ALIASADD", MRCommand_Write | MRCommand_SingleKey, 1, 1, &aliasCommandGenerator},
-    {"_FT.ALIASDEL", MRCommand_Write | MRCommand_SingleKey, 1, 1, &aliasCommandGenerator},
-    {"_FT.ALIASUPDATE", MRCommand_Write | MRCommand_SingleKey, 1, 1, &aliasCommandGenerator},
+    {"_FT.ALIASADD", MRCommand_Write | MRCommand_SingleKey, 2, 2, NULL},
+    {"_FT.ALIASUPDATE", MRCommand_Write | MRCommand_SingleKey, 2, 2, NULL},
+    // Del is done using fanout/broadcast
 
     // Suggest commands
     {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},

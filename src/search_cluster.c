@@ -3,6 +3,7 @@
 #include <string.h>
 #include "search_cluster.h"
 #include "partition.h"
+#include "alias.h"
 
 SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize) {
   SearchCluster ret = (SearchCluster){.size = size};
@@ -25,7 +26,7 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
 }
 
 char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
-                           size_t *taggedLen) {
+                    size_t *taggedLen) {
   size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL
   char *tagged = malloc(total);
   tagged[total - 1] = 0;
@@ -85,6 +86,25 @@ int SearchCluster_RewriteCommandArg(SearchCluster *sc, MRCommand *cmd, int parti
   return 1;
 }
 
+static const char *getUntaggedId(const char *id, size_t *outlen) {
+  const char *openBrace = rindex(id, '{');
+  if (openBrace) {
+    *outlen = openBrace - id;
+  } else {
+    *outlen = strlen(id);
+  }
+  return id;
+}
+
+static const char *lookupAlias(const char *orig, size_t *len) {
+  IndexSpec *sp = IndexAlias_Get(orig);
+  if (!sp) {
+    *len = strlen(orig);
+    return orig;
+  }
+  return getUntaggedId(sp->name, len);
+}
+
 int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx) {
   // make sure we can actually calculate partitioning
   if (!SearchCluster_Ready(sc)) return 0;
@@ -108,6 +128,14 @@ int SearchCluster_RewriteCommand(SearchCluster *sc, MRCommand *cmd, int partIdx)
 
     size_t partId = PartitionForKey(&sc->part, partStr, partLen);
     const char *tag = PartitionTag(&sc->part, partId);
+    if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+      // 1:1 partition mapping
+      IndexSpec *spec = IndexAlias_Get(target);
+      if (spec) {
+        target = spec->name;
+        targetLen = rindex(spec->name, '{') - target;
+      }
+    }
 
     char *tagged = writeTaggedId(target, targetLen, tag, strlen(tag), &taggedLen);
     MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
@@ -131,6 +159,9 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
 
   size_t keylen = 0;
   const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
+  if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+    key = lookupAlias(key, &keylen);
+  }
 
   size_t taggedLen = 0;
   const char *tag = PartitionTag(&sc->part, 0);
@@ -187,7 +218,13 @@ int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
     size_t argLen;
-    const char *arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    const char *arg;
+    if (it->keyAlias) {
+      arg = it->keyAlias;
+      argLen = strlen(it->keyAlias);
+    } else {
+      arg = MRCommand_ArgStringPtrLen(cmd, it->keyOffset, &argLen);
+    }
     const char *tag = PartitionTag(&it->cluster->part, it->offset++);
 
     size_t taggedLen;
@@ -209,6 +246,7 @@ void SCCommandMuxIterator_Free(void *ctx) {
   SCCommandMuxIterator *it = ctx;
   if (it->cmd) MRCommand_Free(it->cmd);
   it->cmd = NULL;
+  free(it->keyAlias);
   free(it);
 }
 
@@ -241,7 +279,16 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
   SCCommandMuxIterator *mux = malloc(sizeof(SCCommandMuxIterator));
   *mux = (SCCommandMuxIterator){
       .cluster = c, .cmd = cmd, .keyOffset = MRCommand_GetShardingKey(cmd), .offset = 0};
-
+  if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
+    if (mux->keyOffset > 0 && mux->keyOffset < cmd->num) {
+      size_t oldlen = strlen(cmd->strs[mux->keyOffset]);
+      size_t newlen = 0;
+      const char *target = lookupAlias(cmd->strs[mux->keyOffset], &newlen);
+      if (oldlen != newlen) {
+        mux->keyAlias = strndup(target, newlen);
+      }
+    }
+  }
   return SearchCluster_GetCommandGenerator(mux, cmd);
 }
 
@@ -257,11 +304,11 @@ void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTo
   }
 }
 
-void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard){
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard *myShard) {
   SearchCluster *c = GetSearchCluster();
-  for (size_t i = 0 ; i < c->size ; ++i){
+  for (size_t i = 0; i < c->size; ++i) {
     int slot = GetSlotByPartition(&c->part, i);
-    if (myShard->startSlot <= slot && myShard->endSlot >= slot){
+    if (myShard->startSlot <= slot && myShard->endSlot >= slot) {
       c->myPartition = i;
       return;
     }

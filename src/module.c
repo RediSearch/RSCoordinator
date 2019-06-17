@@ -813,7 +813,8 @@ int SpellCheckCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   return REDISMODULE_OK;
 }
 
-int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+static int mastersCommandCommon(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                                int isSharded) {
   if (argc < 2) {
     return RedisModule_WrongArity(ctx);
   }
@@ -826,13 +827,25 @@ int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, i
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
-
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
-  MR_Map(mrctx, allOKReducer, cg, true);
-  cg.Free(cg.ctx);
+
+  if (isSharded) {
+    MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
+    MR_SetCoordinationStrategy(mrctx, MRCluster_MastersOnly | MRCluster_FlatCoordination);
+    MR_Map(mrctx, allOKReducer, cg, true);
+    cg.Free(cg.ctx);
+  } else {
+    MR_Fanout(mrctx, allOKReducer, cmd);
+  }
   return REDISMODULE_OK;
+}
+
+int MastersFanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  return mastersCommandCommon(ctx, argv, argc, 1);
+}
+
+static int MastersUnshardedHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  return mastersCommandCommon(ctx, argv, argc, 0);
 }
 
 int FanoutCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1312,19 +1325,20 @@ static void addIndexCursor(const IndexSpec *sp) {
     return REDISMODULE_ERR;                                           \
   }
 
-static void getRedisVersion(){
-    RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
-    RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
-    assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
-    size_t len;
-    const char* replyStr = RedisModule_CallReplyStringPtr(reply, &len);
+static void getRedisVersion() {
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
+  RedisModuleCallReply *reply = RedisModule_Call(ctx, "info", "c", "server");
+  assert(RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING);
+  size_t len;
+  const char *replyStr = RedisModule_CallReplyStringPtr(reply, &len);
 
-    int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion, &redisPatchVesion);
+  int n = sscanf(replyStr, "# Server\nredis_version:%d.%d.%d", &redisMajorVesion, &redisMinorVesion,
+                 &redisPatchVesion);
 
-    assert(n == 3);
+  assert(n == 3);
 
-    RedisModule_FreeCallReply(reply);
-    RedisModule_FreeThreadSafeContext(ctx);
+  RedisModule_FreeCallReply(reply);
+  RedisModule_FreeThreadSafeContext(ctx);
 }
 
 int __attribute__((visibility("default")))
@@ -1344,7 +1358,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   getRedisVersion();
-  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d", redisMajorVesion, redisMinorVesion, redisPatchVesion);
+  RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d",
+                  redisMajorVesion, redisMinorVesion, redisPatchVesion);
 
   // Chain the config into RediSearch's global config
   RSConfigOptions_AddConfigs(&RSGlobalConfigOptions, GetClusterConfigOptions());
@@ -1378,8 +1393,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(
       RedisModule_CreateCommand(ctx, "FT.MGET", SafeCmd(MGetCommandHandler), "readonly", 0, 0, -1));
 
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster),
-                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADDHASH", SafeCmd(UnsuportedOnCluster), "readonly", 0,
+                                   0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.EXPLAIN", SafeCmd(SingleShardCommandHandler),
                                    "readonly", 0, 0, -1));
 
@@ -1471,6 +1486,14 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
    * spell check
    */
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler),
+                                   "readonly", 0, 0, -1));
+
+  /* alias */
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASADD", SafeCmd(MastersFanoutCommandHandler),
+                                   "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASDEL", SafeCmd(MastersUnshardedHandler), "readonly",
+                                   0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALIASUPDATE", SafeCmd(MastersFanoutCommandHandler),
                                    "readonly", 0, 0, -1));
 
   return REDISMODULE_OK;

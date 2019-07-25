@@ -16,3 +16,17 @@ capabilities:
     - persistence_rdb
     - clustering
     - backup_restore
+exclude_commands:
+    - FT.ADDHASH
+overide_command:
+    - {"command_arity": -1, "command_name": "FT.SYNUPDATE", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.SYNADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.DICTADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.ADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.ALTER", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.SUGADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.DICTDEL", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.DEL", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.SUGDEL", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.DROP", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
+    - {"command_arity": -1, "command_name": "FT.CREATE", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}

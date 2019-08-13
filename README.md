@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/RedisLabsModules/RSCoordinator.svg?style=svg&circle-token=4efb4a933bf11a44c122d33d68cda6b8b4163e15)](https://circleci.com/gh/RedisLabsModules/RSCoordinator)
+
 # RSCoordinator - Distributed RediSearch
 
 RSCoordinator is an add-on module that enables scalable distributed search over [RediSearch](http://redisearch.io).

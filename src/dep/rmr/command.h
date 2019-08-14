@@ -53,6 +53,7 @@ typedef struct {
 
 void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char **args);
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...);
+void MRCommand_AppendArgsAtPos(MRCommand *cmd, int pos, int num, ...);
 
 /** Copy from an argument of an existing command */
 void MRCommand_AppendFrom(MRCommand *cmd, const MRCommand *srcCmd, size_t srcidx);

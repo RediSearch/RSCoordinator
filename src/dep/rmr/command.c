@@ -231,8 +231,8 @@ void MRCommand_AppendArgsAtPos(MRCommand *cmd, int pos, int num, ...) {
   extendCommandList(cmd, num);
 
   // shift right all arguments that comes after pos
-  memcpy(cmd->strs + pos + num, cmd->strs + pos, (oldNum - pos) * sizeof(char*));
-  memcpy(cmd->lens + pos + num, cmd->lens + pos, (oldNum - pos) * sizeof(size_t));
+  memmove(cmd->strs + pos + num, cmd->strs + pos, (oldNum - pos) * sizeof(char*));
+  memmove(cmd->lens + pos + num, cmd->lens + pos, (oldNum - pos) * sizeof(size_t));
 
   va_list(ap);
   va_start(ap, num);

@@ -979,12 +979,6 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  if (!req->withScores) {
-      MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
-  }
-  if (!req->withSortingKeys && req->withSortby) {
-      MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
-  }
 
   // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
   int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
@@ -994,6 +988,12 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
 
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
+
+  MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
+  if (!req->withSortingKeys && req->withSortby) {
+    MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
+  }
+
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
@@ -1095,9 +1095,8 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     return RedisModule_ReplyWithError(ctx, "Invalid search request");
   }
   // Internally we must have WITHSCORES set, even if the usr didn't set it
-  if (!req->withScores) {
-      MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
-  }
+  MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
+
   // MRCommand_Print(&cmd);
 
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);

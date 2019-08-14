@@ -989,8 +989,12 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   /* Replace our own DFT command with FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
 
+  // adding the WITHSCORES option anyway immediately after the query.
+  // Worst case it will appears twice.
   MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
-  if (!req->withSortingKeys && req->withSortby) {
+  if (req->withSortby) {
+    // if sort by requested we adding the WITHSORTKEYS option anyway immediately after the query.
+    // Worst case it will appears twice.
     MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
   }
 
@@ -1053,8 +1057,12 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   /* Replace our own FT command with _FT. command */
   MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
 
+  // adding the WITHSCORES option anyway immediately after the query.
+  // Worst case it will appears twice.
   MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
   if (req->withSortby) {
+    // if sort by requested we adding the WITHSORTKEYS option anyway immediately after the query.
+    // Worst case it will appears twice.
     MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
     // req->withSortingKeys = 1;
   }

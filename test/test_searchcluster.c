@@ -1,8 +1,9 @@
-#include "minunit.h"
 #include "redismodule.h"
-#include <search_cluster.h>
 #include <rmr/command.h>
 #include <crc16_tags.h>
+#include "search_cluster.h"
+#include "alias.h"
+#include "minunit.h"
 
 const char *FNVTagFunc(const char *key, size_t len, size_t k);
 // void testTagFunc() {
@@ -15,7 +16,6 @@ const char *FNVTagFunc(const char *key, size_t len, size_t k);
 // }
 
 void testCommandMux() {
-
   SearchCluster sc = NewSearchCluster(100, crc16_slot_table, 16384);
   MRCommand cmd = MR_NewCommand(3, "_FT.SEARCH", "idx", "foo");
 
@@ -33,6 +33,11 @@ void testCommandMux() {
 
 int main(int argc, char **argv) {
   // MU_RUN_TEST(testTagFunc);
+  RedisModule_Alloc = malloc;
+  RedisModule_Calloc = calloc;
+  RedisModule_Realloc = realloc;
+  RedisModule_Free = free;
+  IndexAlias_InitGlobal();
   MU_RUN_TEST(testCommandMux);
 
   MU_REPORT();

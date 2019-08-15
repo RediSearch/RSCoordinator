@@ -225,6 +225,23 @@ void MRCommand_AppendStringsArgs(MRCommand *cmd, int num, char **args) {
   }
 }
 
+void MRCommand_AppendArgsAtPos(MRCommand *cmd, int pos, int num, ...) {
+  if (num <= 0) return;
+  int oldNum = cmd->num;
+  extendCommandList(cmd, num);
+
+  // shift right all arguments that comes after pos
+  memmove(cmd->strs + pos + num, cmd->strs + pos, (oldNum - pos) * sizeof(char*));
+  memmove(cmd->lens + pos + num, cmd->lens + pos, (oldNum - pos) * sizeof(size_t));
+
+  va_list(ap);
+  va_start(ap, num);
+  for (int i = pos; i < pos + num; i++) {
+    assignCstr(cmd, i, va_arg(ap, const char *));
+  }
+  va_end(ap);
+}
+
 void MRCommand_AppendArgs(MRCommand *cmd, int num, ...) {
   if (num <= 0) return;
   int oldNum = cmd->num;

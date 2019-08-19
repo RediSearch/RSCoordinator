@@ -441,9 +441,9 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   searchResult *res = cached ? cached : malloc(sizeof(searchResult));
   res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
-  if (MRReply_Type(MRReply_ArrayElement(arr, j)) != MR_REPLY_STRING){
-      res->id = NULL;
-      return res;
+  if (MRReply_Type(MRReply_ArrayElement(arr, j)) != MR_REPLY_STRING) {
+    res->id = NULL;
+    return res;
   }
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), &res->idLen);
   // if the id contains curly braces, get rid of them now
@@ -459,7 +459,7 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
     return res;
   }
   // parse socre
-  if(!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)){
+  if (!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)) {
     res->id = NULL;
     return res;
   }
@@ -548,7 +548,7 @@ static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModule
   // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
   //         scoreOffset, fieldsOffset, sortKeyOffset);
   for (int j = 1; j < len; j += offsets.step) {
-    if (j + offsets.step > len){
+    if (j + offsets.step > len) {
       RedisModule_Log(ctx, "warning", "got a bad reply from redisearch, reply contains less parameters then expected");
       rCtx->errorOccured = true;
       break;
@@ -676,9 +676,9 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   // If some shards returned results and some errors - we prefer to show the results we got an not
   // return an error. This might change in the future
   if ((rCtx.totalReplies == 0 && rCtx.lastError != NULL) || rCtx.errorOccured) {
-    if(rCtx.lastError){
+    if (rCtx.lastError) {
       MR_ReplyWithMRReply(ctx, rCtx.lastError);
-    }else{
+    } else {
       RedisModule_ReplyWithError(ctx, "could not parse redisearch results");
     }
   } else {

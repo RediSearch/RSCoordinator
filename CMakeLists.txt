@@ -74,7 +74,7 @@ MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
 
 ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
-TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS redismock hiredis)
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS redismock hiredis dl)
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)

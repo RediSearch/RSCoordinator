@@ -441,6 +441,10 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   searchResult *res = cached ? cached : malloc(sizeof(searchResult));
   res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
+  if (MRReply_Type(MRReply_ArrayElement(arr, j)) != MR_REPLY_STRING) {
+    res->id = NULL;
+    return res;
+  }
   res->id = MRReply_String(MRReply_ArrayElement(arr, j), &res->idLen);
   // if the id contains curly braces, get rid of them now
   if (res->id) {
@@ -455,7 +459,10 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
     return res;
   }
   // parse socre
-  MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score);
+  if (!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)) {
+    res->id = NULL;
+    return res;
+  }
   // get fields
   res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
   // get payloads
@@ -484,6 +491,7 @@ typedef struct {
   searchRequestCtx *searchCtx;
   heap_t *pq;
   size_t totalReplies;
+  bool errorOccured;
 } searchReducerCtx;
 
 typedef struct {
@@ -518,7 +526,7 @@ static void getReplyOffsets(const searchRequestCtx *ctx, searchReplyOffsets *off
   }
 }
 
-static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx) {
+static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleCtx *ctx) {
   if (arr == NULL) {
     return;
   }
@@ -540,9 +548,16 @@ static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx) {
   // fprintf(stderr, "Step %d, scoreOffset %d, fieldsOffset %d, sortKeyOffset %d\n", step,
   //         scoreOffset, fieldsOffset, sortKeyOffset);
   for (int j = 1; j < len; j += offsets.step) {
+    if (j + offsets.step > len) {
+      RedisModule_Log(ctx, "warning", "got a bad reply from redisearch, reply contains less parameters then expected");
+      rCtx->errorOccured = true;
+      break;
+    }
     searchResult *res = newResult(rCtx->cachedResult, arr, j, offsets.score, offsets.payload,
                                   offsets.firstField, offsets.sortKey);
     if (!res || !res->id) {
+      RedisModule_Log(ctx, "warning", "got an unexpected argument when parsing redisearch results");
+      rCtx->errorOccured = true;
       // invalid result - usually means something is off with the response, and we should just
       // quit this response
       rCtx->cachedResult = res;
@@ -652,7 +667,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   rCtx.searchCtx = req;
 
   for (int i = 0; i < count; i++) {
-    processSearchReply(replies[i], &rCtx);
+    processSearchReply(replies[i], &rCtx, ctx);
   }
   if (rCtx.cachedResult) {
     free(rCtx.cachedResult);
@@ -660,8 +675,12 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   // If we didn't get any results and we got an error - return it.
   // If some shards returned results and some errors - we prefer to show the results we got an not
   // return an error. This might change in the future
-  if (rCtx.totalReplies == 0 && rCtx.lastError != NULL) {
-    MR_ReplyWithMRReply(ctx, rCtx.lastError);
+  if ((rCtx.totalReplies == 0 && rCtx.lastError != NULL) || rCtx.errorOccured) {
+    if (rCtx.lastError) {
+      MR_ReplyWithMRReply(ctx, rCtx.lastError);
+    } else {
+      RedisModule_ReplyWithError(ctx, "could not parse redisearch results");
+    }
   } else {
     sendSearchResults(ctx, &rCtx);
   }

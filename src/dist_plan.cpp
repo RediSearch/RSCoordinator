@@ -316,7 +316,7 @@ static int distributeAvg(ReducerDistCtx *rdctx, QueryError *status) {
   char *expr = strdup(ss.c_str());
   PLN_MapFilterStep *applyStep = PLNMapFilterStep_New(expr, PLN_T_APPLY);
   applyStep->shouldFreeRaw = 1;
-  applyStep->base.alias = src->alias;
+  applyStep->base.alias = strdup(src->alias);
 
   assert(rdctx->currentLocal);
   AGPLN_AddAfter(rdctx->localPlan, rdctx->currentLocal, &applyStep->base);

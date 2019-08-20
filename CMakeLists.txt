@@ -8,6 +8,7 @@ ADD_DEFINITIONS(-D_GNU_SOURCE)
 ADD_DEFINITIONS(-DREDIS_MODULE_TARGET)
 ADD_DEFINITIONS(-DRS_CMD_PREFIX="_FT")
 ADD_DEFINITIONS( -UNDEBUG )
+ADD_DEFINITIONS(-DRS_COORDINATOR)
 # Also remove /D NDEBUG to avoid MSVC warnings about conflicting defines.
 FOREACH (flags_var_to_scrub
     CMAKE_CXX_FLAGS_RELEASE
@@ -23,6 +24,8 @@ ENDFOREACH()
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${RS_C_FLAGS}")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RS_CXX_FLAGS}")
+SET(CMAKE_LINKER "${CMAKE_C_COMPILER}")
+
 # Specific to coordinator
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
@@ -33,6 +36,7 @@ SET(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Bsymbolic -Bsymboli
 SET(RS_DIR ${PROJECT_SOURCE_DIR}/src/dep/RediSearch)
 SET(RS_RUN_TESTS OFF CACHE BOOL "" FORCE) # Don't run RS' own tests
 SET(RS_ENABLE_MOCK ON CACHE BOOL "" FORCE) # But build mock so we can link our own tests
+SET(RS_BUILD_STATIC ON CACHE BOOL "" FORCE)
 ENABLE_TESTING() # Enable our own tests
 
 FIND_PATH(LIBUV_INCLUDE_DIR uv.h
@@ -70,7 +74,9 @@ MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
 
 ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
-TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS redismock hiredis)
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearchS redismock hiredis dl)
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)
+
+SET_TARGET_PROPERTIES(redismock PROPERTIES COMPILE_FLAGS "-fvisibility=default")

@@ -7,6 +7,7 @@
  * Forward declaration
  */
 extern MRCommandGenerator spellCheckCommandGenerator;
+extern MRCommandGenerator aliasCommandGenerator;
 
 struct mrCommandConf {
   const char *command;
@@ -19,22 +20,28 @@ struct mrCommandConf {
 struct mrCommandConf __commandConfig[] = {
 
     // document commands
-    {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey, 1, 2, NULL},
-    {"_FT.GET", MRCommand_Read | MRCommand_MultiKey, 1, 2, NULL},
-    {"_FT.MGET", MRCommand_Read | MRCommand_MultiKey, 1, 2, NULL},
+    {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.GET", MRCommand_Read | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.MGET", MRCommand_Read | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
 
-    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey, 1, 2, NULL},
-    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey, 1, 2, NULL},
+    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.AGGREGATE", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
 
     // index commands
     {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.ALTER", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey, 1, 1, NULL},
-    {"_FT.TAGVALS", MRCommand_Read | MRCommand_SingleKey, 1, 1, NULL},
+    {"_FT.ALTER", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.INFO", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.EXPLAIN", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+    {"_FT.TAGVALS", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
+
+    // Alias commands
+    {"_FT.ALIASADD", MRCommand_Write | MRCommand_SingleKey, 2, 2, NULL},
+    {"_FT.ALIASUPDATE", MRCommand_Write | MRCommand_SingleKey, 2, 2, NULL},
+    // Del is done using fanout/broadcast
 
     // Suggest commands
     {"_FT.SUGADD", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},

@@ -903,7 +903,7 @@ static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
 }
 
 static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (argc < 1) {
+  if (argc < 4) {
     return RedisModule_WrongArity(ctx);
   }
   if (!SearchCluster_Ready(GetSearchCluster())) {

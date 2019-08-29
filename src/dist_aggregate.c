@@ -67,7 +67,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
-      printf("Error is '%s'\n", MRReply_String(rep, NULL));
+//      printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);

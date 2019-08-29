@@ -56,7 +56,8 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 
   char buf[128];
   sprintf(buf, "%lld", cursorId);
-  const char *idx = MRCommand_ArgStringPtrLen(cmd, 1, NULL);
+  int shardingKey = MRCommand_GetShardingKey(cmd);
+  const char *idx = MRCommand_ArgStringPtrLen(cmd, shardingKey, NULL);
   MRCommand newCmd = MR_NewCommand(4, RS_CURSOR_CMD, "READ", idx, buf);
   MRCommand_Free(cmd);
   *cmd = newCmd;
@@ -66,7 +67,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
-      // printf("Error is '%s'\n", MRReply_String(rep, NULL));
+      printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);

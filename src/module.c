@@ -439,7 +439,8 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
 
 searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,
                         int payloadOffset, int fieldsOffset, int sortKeyOffset) {
-  searchResult *res = cached ? cached : calloc(1, sizeof(*res));
+  searchResult *res = cached ? cached : malloc(sizeof(searchResult));
+  res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
   if (MRReply_Type(MRReply_ArrayElement(arr, j)) != MR_REPLY_STRING) {
     res->id = NULL;
@@ -458,32 +459,17 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
   } else {  // this usually means an invalid result
     return res;
   }
-
-  fieldsOffset += j;
-  payloadOffset += j;
-  sortKeyOffset += j;
-  scoreOffset += j;
-
-  // Array length:
-  size_t arrlen = MRReply_Length(arr);
   // parse socre
-  if (arrlen > scoreOffset) {
-    if (!MRReply_ToDouble(MRReply_ArrayElement(arr, scoreOffset), &res->score)) {
-      res->id = NULL;
-      return res;
-    }
+  if (!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)) {
+    res->id = NULL;
+    return res;
   }
-
-  // get fields.. only applicable if there *are* fields..
-  if (arrlen > fieldsOffset) {
-    res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, fieldsOffset) : NULL;
-  }
+  // get fields
+  res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
   // get payloads
-  if (arrlen > payloadOffset) {
-    res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, payloadOffset) : NULL;
-  }
-  if (sortKeyOffset > 0 && sortKeyOffset < arrlen) {
-    res->sortKey = MRReply_String(MRReply_ArrayElement(arr, sortKeyOffset), &res->sortKeyLen);
+  res->payload = payloadOffset > 0 ? MRReply_ArrayElement(arr, j + payloadOffset) : NULL;
+  if (sortKeyOffset > 0) {
+    res->sortKey = MRReply_String(MRReply_ArrayElement(arr, j + sortKeyOffset), &res->sortKeyLen);
   } else {
     res->sortKey = NULL;
   }
@@ -919,7 +905,7 @@ static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
 }
 
 static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (argc < 1) {
+  if (argc < 4) {
     return RedisModule_WrongArity(ctx);
   }
   if (!SearchCluster_Ready(GetSearchCluster())) {

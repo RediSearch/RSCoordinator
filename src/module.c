@@ -550,7 +550,9 @@ static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModule
   //         scoreOffset, fieldsOffset, sortKeyOffset);
   for (int j = 1; j < len; j += offsets.step) {
     if (j + offsets.step > len) {
-      RedisModule_Log(ctx, "warning", "got a bad reply from redisearch, reply contains less parameters then expected");
+      RedisModule_Log(
+          ctx, "warning",
+          "got a bad reply from redisearch, reply contains less parameters then expected");
       rCtx->errorOccured = true;
       break;
     }

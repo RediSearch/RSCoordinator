@@ -6,9 +6,10 @@
 
 extern "C" {
 static int my_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (RedisModule_Init(ctx, "dummy", 0, REDISMODULE_APIVER_1) == REDISMODULE_ERR)
+  if (RedisModule_Init(ctx, "dummy", 0, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
+  }
+  return REDISMODULE_OK;
 }
 }
 
@@ -51,7 +52,7 @@ static void testAverage() {
   // AGPLN_Dump(dstp->plan);
   auto &v = *dstp->serialized;
   for (size_t ii = 0; ii < v.size(); ++ii) {
-    printf("Serialized[%llu]: %s\n", ii, v[ii]);
+    printf("Serialized[%lu]: %s\n", ii, v[ii]);
   }
 
   dstp = (PLN_DistributeStep *)AGPLN_FindStep(&r->ap, NULL, NULL, PLN_T_DISTRIBUTE);

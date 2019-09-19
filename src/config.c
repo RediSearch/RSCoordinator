@@ -66,7 +66,7 @@ CONFIG_SETTER(setTimeout) {
 CONFIG_GETTER(getTimeout) {
   SearchClusterConfig *realConfig = getOrCreateRealConfig((RSConfig *)config);
   sds ss = sdsempty();
-  return sdscatprintf(ss, "%ld", realConfig->timeoutMS);
+  return sdscatprintf(ss, "%d", realConfig->timeoutMS);
 }
 
 static RSConfigOptions clusterOptions_g = {

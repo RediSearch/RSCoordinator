@@ -94,10 +94,8 @@ int MRChannel_Push(MRChannel *chan, void *ptr) {
   }
   chan->size++;
 end:
-  pthread_mutex_unlock(&chan->lock);
-  // if (rc) {
   if (pthread_cond_broadcast(&chan->cond)) rc = 0;
-  //}
+  pthread_mutex_unlock(&chan->lock);
   return rc;
 }
 

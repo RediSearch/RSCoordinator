@@ -320,7 +320,7 @@ int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+                                          redisMajorVesion < 5 ? (void (*)(RedisModuleCtx*, void*))freePrivDataCB : freePrivDataCB_V5, timeout_g);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -348,7 +348,7 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds, boo
 
   if (block) {
     ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                            redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+                                            redisMajorVesion < 5 ? (void (*)(RedisModuleCtx*, void*))freePrivDataCB : freePrivDataCB_V5, timeout_g);
   }
 
   rc->cb = uvMapRequest;
@@ -366,7 +366,7 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
   ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+                                          redisMajorVesion < 5 ? (void (*)(RedisModuleCtx*, void*))freePrivDataCB : freePrivDataCB_V5, timeout_g);
 
   rc->cb = uvMapRequest;
   RQ_Push(rq_g, requestCb, rc);
@@ -467,8 +467,6 @@ int MRIteratorCallback_AddReply(MRIteratorCallbackCtx *ctx, MRReply *rep) {
 void iterStartCb(void *p) {
   MRIterator *it = p;
   for (size_t i = 0; i < it->len; i++) {
-    // fprintf(stderr, "Starting command %zd/%zd\n", i, it->len);
-    MRCommand_FPrint(stderr, &it->cbxs[i].cmd);
     if (MRCluster_SendCommand(it->ctx.cluster, MRCluster_MastersOnly, &it->cbxs[i].cmd,
                               mrIteratorRedisCB, &it->cbxs[i]) == REDIS_ERR) {
       // fprintf(stderr, "Could not send command!\n");

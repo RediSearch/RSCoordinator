@@ -234,7 +234,7 @@ static int distributeSingleArgSelf(ReducerDistCtx *rdctx, QueryError *status) {
   return REDISMODULE_OK;
 }
 
-#define RANDOM_SAMPLE_SIZE MAX_SAMPLE_SIZE
+#define RANDOM_SAMPLE_SIZE 500
 
 #define STRINGIFY_(a) STRINGIFY__(a)
 #define STRINGIFY__(a) #a

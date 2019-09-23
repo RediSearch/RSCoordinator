@@ -4,6 +4,7 @@
 #include <cluster.h>
 
 #include <hiredis/hiredis.h>
+#include "../../rmutil/alloc.h"
 
 void testEndpoint() {
 
@@ -112,6 +113,7 @@ void testClusterSharding() {
 }
 
 int main(int argc, char **argv) {
+  RMUTil_InitAlloc();
   MU_RUN_TEST(testEndpoint);
   MU_RUN_TEST(testShardingFunc);
   MU_RUN_TEST(testCluster);

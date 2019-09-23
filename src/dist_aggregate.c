@@ -95,7 +95,7 @@ RSValue *MRReply_ToValue(MRReply *r) {
       v = RS_NumVal((double)MRReply_Integer(r));
       break;
     case MR_REPLY_ARRAY: {
-      RSValue **arr = calloc(MRReply_Length(r), sizeof(*arr));
+      RSValue **arr = rm_calloc(MRReply_Length(r), sizeof(*arr));
       for (size_t i = 0; i < MRReply_Length(r); i++) {
         arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i));
       }

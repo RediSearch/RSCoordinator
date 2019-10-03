@@ -258,7 +258,7 @@ static int distributeQuantile(ReducerDistCtx *rdctx, QueryError *status) {
   return REDISMODULE_OK;
 }
 
-/* Distribute QUANTILE into remote RANDOM_SAMPLE and local QUANTILE */
+/* Distribute STDDEV into remote RANDOM_SAMPLE and local STDDEV */
 static int distributeStdDev(ReducerDistCtx *rdctx, QueryError *status) {
   PLN_Reducer *src = rdctx->srcReducer;
   const char *alias = NULL;

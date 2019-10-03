@@ -852,6 +852,13 @@ static int mastersCommandCommon(RedisModuleCtx *ctx, RedisModuleString **argv, i
   RedisModule_AutoMemory(ctx);
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
+
+  for (int i = 0 ; i < cmd.num ; ++i) {
+    if (strcasecmp(cmd.strs[i], "TEMPORARY") == 0) {
+      return RedisModule_ReplyWithError(ctx, "TEMPORARY is only supported with RediSearchLight");
+    }
+  }
+
   /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);

@@ -452,7 +452,7 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
     MRKey mk;
     MRKey_Parse(&mk, res->id, res->idLen);
     res->idLen = mk.baseLen;
-    res->id = mk.base;
+    res->id = (char *)mk.base;
     if (mk.shardLen) {
       res->id[res->idLen] = '\0';
     }

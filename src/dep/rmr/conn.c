@@ -349,7 +349,7 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     if (status == REDIS_OK) {
       // We need to free it here because we will not be getting a disconnect
       // callback.
-      redisAsyncFree(c);
+      redisAsyncFree((redisAsyncContext *)c);
     } else {
       // Will be freed anyway
     }

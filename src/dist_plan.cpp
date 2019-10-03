@@ -415,12 +415,10 @@ int AGGPLN_Distribute(AGGPlan *src, QueryError *status) {
   RLookup_Init(&dstp->lk, nullptr);
 
   // Find the bottom-most step with the current lookup and progress onwards
-  bool found = false;
   PLN_BaseStep *lastLkStep = DLLIST_ITEM(remote->steps.prev, PLN_BaseStep, llnodePln);
 
   while (&lastLkStep->llnodePln != &remote->steps) {
     if (lastLkStep->getLookup && lastLkStep->getLookup(lastLkStep)) {
-      found = true;
       break;
     }
     lastLkStep = PLN_PREV_STEP(lastLkStep);

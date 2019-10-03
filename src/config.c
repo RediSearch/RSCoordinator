@@ -43,7 +43,7 @@ CONFIG_SETTER(setNumPartitions) {
 CONFIG_GETTER(getNumPartitions) {
   SearchClusterConfig *realConfig = getOrCreateRealConfig((RSConfig *)config);
   sds ss = sdsempty();
-  return sdscatprintf(ss, "%lld", realConfig->numPartitions);
+  return sdscatprintf(ss, "%ld", realConfig->numPartitions);
 }
 
 // TIMEOUT
@@ -66,7 +66,7 @@ CONFIG_SETTER(setTimeout) {
 CONFIG_GETTER(getTimeout) {
   SearchClusterConfig *realConfig = getOrCreateRealConfig((RSConfig *)config);
   sds ss = sdsempty();
-  return sdscatprintf(ss, "%lld", realConfig->timeoutMS);
+  return sdscatprintf(ss, "%d", realConfig->timeoutMS);
 }
 
 static RSConfigOptions clusterOptions_g = {

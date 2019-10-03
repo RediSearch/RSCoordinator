@@ -664,7 +664,7 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   }
 
   size_t num = req->offset + req->limit;
-  rCtx.pq = malloc(heap_sizeof(num));
+  rCtx.pq = rm_malloc(heap_sizeof(num));
   heap_init(rCtx.pq, cmp_results, req, num);
 
   rCtx.searchCtx = req;

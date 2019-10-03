@@ -179,7 +179,7 @@ static void freeDistStep(PLN_BaseStep *bstp) {
   if (dstp->serialized) {
     auto &v = *dstp->serialized;
     for (auto s : v) {
-      free(s);
+      rm_free(s);
     }
     delete &v;
   }
@@ -234,7 +234,7 @@ static int distributeSingleArgSelf(ReducerDistCtx *rdctx, QueryError *status) {
   return REDISMODULE_OK;
 }
 
-#define RANDOM_SAMPLE_SIZE MAX_SAMPLE_SIZE
+#define RANDOM_SAMPLE_SIZE 500
 
 #define STRINGIFY_(a) STRINGIFY__(a)
 #define STRINGIFY__(a) #a
@@ -313,10 +313,10 @@ static int distributeAvg(ReducerDistCtx *rdctx, QueryError *status) {
     return REDISMODULE_ERR;
   }
   std::string ss = std::string("(@") + localSumSumAlias + "/@" + localCountSumAlias + ")";
-  char *expr = strdup(ss.c_str());
+  char *expr = rm_strdup(ss.c_str());
   PLN_MapFilterStep *applyStep = PLNMapFilterStep_New(expr, PLN_T_APPLY);
   applyStep->shouldFreeRaw = 1;
-  applyStep->base.alias = strdup(src->alias);
+  applyStep->base.alias = rm_strdup(src->alias);
 
   assert(rdctx->currentLocal);
   AGPLN_AddAfter(rdctx->localPlan, rdctx->currentLocal, &applyStep->base);
@@ -381,7 +381,7 @@ int AGGPLN_Distribute(AGGPlan *src, QueryError *status) {
       }
       case PLN_T_ARRANGE: {
         PLN_ArrangeStep *astp = (PLN_ArrangeStep *)current;
-        PLN_ArrangeStep *newStp = (PLN_ArrangeStep *)calloc(1, sizeof(*newStp));
+        PLN_ArrangeStep *newStp = (PLN_ArrangeStep *)rm_calloc(1, sizeof(*newStp));
 
         *newStp = *astp;
         AGPLN_AddStep(remote, &newStp->base);
@@ -500,12 +500,12 @@ int AREQ_BuildDistributedPipeline(AREQ *r, AREQDIST_UpstreamInfo *us, QueryError
 
   auto &serargs = *dstp->serialized;
   if (!loadFields.empty()) {
-    serargs.push_back(strdup("LOAD"));
+    serargs.push_back(rm_strdup("LOAD"));
     char *ldsze;
-    asprintf(&ldsze, "%lu", (unsigned long)loadFields.size());
+    rm_asprintf(&ldsze, "%lu", (unsigned long)loadFields.size());
     serargs.push_back(ldsze);
     for (auto kk : loadFields) {
-      serargs.push_back(strdup(kk->name));
+      serargs.push_back(rm_strdup(kk->name));
     }
   }
 

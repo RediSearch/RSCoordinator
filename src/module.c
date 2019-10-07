@@ -297,6 +297,7 @@ typedef struct {
   char *id;
   size_t idLen;
   double score;
+  MRReply *explainScores;
   MRReply *fields;
   MRReply *payload;
   const char *sortKey;
@@ -309,6 +310,7 @@ typedef struct {
   long long offset;
   long long limit;
   int withScores;
+  int withExplainScores;
   int withPayload;
   int withSortby;
   int sortAscending;
@@ -334,6 +336,7 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
   req->offset = 0;
   // marks the user set WITHSCORES. internally it's always set
   req->withScores = RMUtil_ArgExists("WITHSCORES", argv, argc, 3) != 0;
+  req->withExplainScores = RMUtil_ArgExists("EXPLAINSCORE", argv, argc, 3) != 0;
 
   // Parse SORTBY ... ASC
   int sortByIndex = RMUtil_ArgIndex("SORTBY", argv, argc);
@@ -438,7 +441,7 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
 }
 
 searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffset,
-                        int payloadOffset, int fieldsOffset, int sortKeyOffset) {
+                        int payloadOffset, int fieldsOffset, int sortKeyOffset, int explainScores) {
   searchResult *res = cached ? cached : malloc(sizeof(searchResult));
   res->sortKey = NULL;
   res->sortKeyNum = HUGE_VAL;
@@ -460,9 +463,26 @@ searchResult *newResult(searchResult *cached, MRReply *arr, int j, int scoreOffs
     return res;
   }
   // parse socre
-  if (!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)) {
-    res->id = NULL;
-    return res;
+  if (explainScores) {
+    MRReply *scoreReply = MRReply_ArrayElement(arr, j + scoreOffset);
+    if (MRReply_Type(scoreReply) != MR_REPLY_ARRAY) {
+      res->id = NULL;
+      return res;
+    }
+    if (MRReply_Length(scoreReply) != 2) {
+      res->id = NULL;
+      return res;
+    }
+    if (!MRReply_ToDouble(MRReply_ArrayElement(scoreReply, 0), &res->score)) {
+      res->id = NULL;
+      return res;
+    }
+    res->explainScores = MRReply_ArrayElement(scoreReply, 1);
+  } else {
+    if (!MRReply_ToDouble(MRReply_ArrayElement(arr, j + scoreOffset), &res->score)) {
+      res->id = NULL;
+      return res;
+    }
   }
   // get fields
   res->fields = fieldsOffset > 0 ? MRReply_ArrayElement(arr, j + fieldsOffset) : NULL;
@@ -557,7 +577,7 @@ static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModule
       break;
     }
     searchResult *res = newResult(rCtx->cachedResult, arr, j, offsets.score, offsets.payload,
-                                  offsets.firstField, offsets.sortKey);
+                                  offsets.firstField, offsets.sortKey, rCtx->searchCtx->withExplainScores);
     if (!res || !res->id) {
       RedisModule_Log(ctx, "warning", "got an unexpected argument when parsing redisearch results");
       rCtx->errorOccured = true;
@@ -624,7 +644,13 @@ static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
     RedisModule_ReplyWithStringBuffer(ctx, res->id, res->idLen);
     len++;
     if (req->withScores) {
+      if (req->withExplainScores) {
+        RedisModule_ReplyWithArray(ctx, 2);
+      }
       RedisModule_ReplyWithDouble(ctx, res->score);
+      if (req->withExplainScores) {
+          MR_ReplyWithMRReply(ctx, res->explainScores);
+      }
       len++;
     }
     if (req->withPayload) {

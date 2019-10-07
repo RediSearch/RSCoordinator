@@ -241,6 +241,8 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
 
   *xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);
   MRCommand_SetPrefix(xcmd, "_FT");
+
+  array_free(tmparr);
 }
 
 static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,

@@ -275,6 +275,7 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // CMD, index, expr, args...
   AREQ *r = AREQ_New();
   QueryError status = {0};
+  r->qiter.err = &status;
   int rc = AREQ_Compile(r, argv + 2, argc - 2, &status);
   if (rc != REDISMODULE_OK) {
     assert(QueryError_HasError(&status));

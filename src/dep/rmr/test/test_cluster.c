@@ -112,6 +112,10 @@ void testClusterSharding() {
 }
 
 int main(int argc, char **argv) {
+  RedisModule_Alloc = malloc;
+  RedisModule_Realloc = realloc;
+  RedisModule_Calloc = calloc;
+  RedisModule_Free = free;
   MU_RUN_TEST(testEndpoint);
   MU_RUN_TEST(testShardingFunc);
   MU_RUN_TEST(testCluster);

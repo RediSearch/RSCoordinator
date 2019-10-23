@@ -97,7 +97,7 @@ static AggregateStep *distributeLimitStep(AggregateStep *step, AggregatePlan *di
 }
 
 AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
-  AggregatePlan *dist = malloc(sizeof(*dist));
+  AggregatePlan *dist = rm_malloc(sizeof(*dist));
   AggregateStep *current = src->head;
   AggregatePlan_Init(dist);
   dist->cursor.count = 1000;

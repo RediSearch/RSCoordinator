@@ -127,7 +127,7 @@ RSValue *MRReply_ToValue(MRReply *r, RSValueType convertType) {
       v = RS_NumVal((double)MRReply_Integer(r));
       break;
     case MR_REPLY_ARRAY: {
-      RSValue **arr = calloc(MRReply_Length(r), sizeof(*arr));
+      RSValue **arr = rm_calloc(MRReply_Length(r), sizeof(*arr));
       for (size_t i = 0; i < MRReply_Length(r); i++) {
         arr[i] = MRReply_ToValue(MRReply_ArrayElement(r, i), RSValue_String);
       }
@@ -257,7 +257,7 @@ void net_Free(ResultProcessor *rp) {
 
   if (nc->it) MRIterator_Free(nc->it);
   free(nc);
-  free(rp);
+  rm_free(rp);
 }
 ResultProcessor *NewNetworkFetcher(RedisSearchCtx *sctx, MRCommand cmd, SearchCluster *sc) {
 
@@ -315,7 +315,7 @@ static ResultProcessor *buildDistributedProcessorChain(QueryPlan *plan, void *ct
   char **args = AggregatePlan_Serialize(remote);
   MRCommand xcmd = MR_NewCommandArgv(array_len(args), args);
   MRCommand_SetPrefix(&xcmd, "_FT");
-  array_free_ex(args, free(*(void **)ptr));
+  array_free_ex(args, rm_free(*(void **)ptr));
 
   ResultProcessor *root = NewNetworkFetcher(plan->ctx, xcmd, GetSearchCluster());
   root->ctx.qxc = &plan->execCtx;

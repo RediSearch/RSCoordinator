@@ -8,7 +8,7 @@
 #include "dep/rmr/hiredis/hiredis.h"
 
 #define CONFIG_SETTER(name) \
-  static int name(RSConfig *config, RedisModuleString **argv, size_t argc, size_t *offset)
+  static int name(RSConfig *config, ArgsCursor *ac, QueryError *status)
 
 #define CONFIG_GETTER(name) static sds name(const RSConfig *config)
 #define CONFIG_FROM_RSCONFIG(c) ((SearchClusterConfig *)(c)->chainedConfig)
@@ -22,17 +22,20 @@ static SearchClusterConfig* getOrCreateRealConfig(RSConfig *config){
 
 // PARTITIONS
 CONFIG_SETTER(setNumPartitions) {
-  if (*offset == argc) {
+  RedisModuleString *s;
+  int acrc = AC_GetRString(ac, &s, 0);
+  if (acrc != AC_OK) {
+    QueryError_SetError(status, QUERY_EPARSEARGS, AC_Strerror(acrc));
     return REDISMODULE_ERR;
   }
   SearchClusterConfig *realConfig = getOrCreateRealConfig(config);
-  RedisModuleString *s = argv[(*offset)++];
   const char *sstr = RedisModule_StringPtrLen(s, NULL);
   if (!strcasecmp(sstr, "AUTO")) {
     realConfig->numPartitions = 0;
   } else {
     long long ll = 0;
     if (RedisModule_StringToLongLong(s, &ll) != REDISMODULE_OK || ll < 0) {
+      QueryError_SetError(status, QUERY_EPARSEARGS, NULL);
       return REDISMODULE_ERR;
     }
     realConfig->numPartitions = ll;
@@ -48,13 +51,15 @@ CONFIG_GETTER(getNumPartitions) {
 
 // TIMEOUT
 CONFIG_SETTER(setTimeout) {
-  if (*offset == argc) {
+  long long ll;
+  int acrc = AC_GetLongLong(ac, &ll, 0);
+  if (acrc != AC_OK) {
+    QueryError_SetError(status, QUERY_EPARSEARGS, AC_Strerror(acrc));
     return REDISMODULE_ERR;
   }
   SearchClusterConfig *realConfig = getOrCreateRealConfig(config);
-  RedisModuleString *s = argv[(*offset)++];
-  long long ll;
-  if (RedisModule_StringToLongLong(s, &ll) != REDISMODULE_OK || ll < 0) {
+  if (ll < 0) {
+    QueryError_SetError(status, QUERY_EPARSEARGS, NULL);
     return REDISMODULE_ERR;
   }
   if (ll > 0) {

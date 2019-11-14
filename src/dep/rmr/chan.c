@@ -134,15 +134,14 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
         return ret;
       }
     } else {
-      if (pthread_cond_wait(&chan->cond, &chan->lock) == EINVAL) {
-        printf("cond_wait returns EINVAL!\n");
-        pthread_mutex_unlock(&chan->lock);
-        return NULL;
-      }
+      int rc = pthread_cond_wait(&chan->cond, &chan->lock);
+      assert(rc == 0 && "cond_wait failed");
     }
-    if (chan->size) {
-      break;
-    }  // otherwise, spurious wakeup
+    if (!chan->size) {
+      // otherwise, spurious wakeup
+      printf("spurious cond_wait wakeup\n");
+      // continue..
+    }
   }
 
   chanItem *item = chan->head;

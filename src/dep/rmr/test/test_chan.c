@@ -17,7 +17,7 @@ void testChan() {
 
   int count = 0;
   void *p;
-  while (NULL != (p = MRChannel_PopWait(c, 10))) {
+  while (MRChannel_Size(c) && (p = MRChannel_Pop(c))) {
     mu_assert_int_eq(*(int *)p, count);
     count++;
     free(p);

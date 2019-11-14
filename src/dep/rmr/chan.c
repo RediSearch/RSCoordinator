@@ -103,21 +103,8 @@ end:
 }
 
 // todo wait is not actually used anywhere...
-void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
-  struct timeval tv;
-  struct timespec ts;
+void *MRChannel_Pop(MRChannel *chan) {
   void *ret = NULL;
-  // calculate sleep time
-  if (waitMS > 0) {
-    gettimeofday(&tv, NULL);
-    tv.tv_usec += waitMS * 1000;
-    if (tv.tv_usec > 1000000) {
-      tv.tv_sec += tv.tv_usec / 1000000;
-      tv.tv_usec = tv.tv_usec % 1000000;
-    }
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
-  }
 
   pthread_mutex_lock(&chan->lock);
   while (!chan->size) {
@@ -126,17 +113,8 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
       return MRCHANNEL_CLOSED;
     }
 
-    if (waitMS) {
-      if (pthread_cond_timedwait(&chan->cond, &chan->lock, &ts) == ETIMEDOUT) {
-        // return CLOSED if we need to return NULL and the channel is closed
-        if (!chan->open) ret = MRCHANNEL_CLOSED;
-        pthread_mutex_unlock(&chan->lock);
-        return ret;
-      }
-    } else {
-      int rc = pthread_cond_wait(&chan->cond, &chan->lock);
-      assert(rc == 0 && "cond_wait failed");
-    }
+    int rc = pthread_cond_wait(&chan->cond, &chan->lock);
+    assert(rc == 0 && "cond_wait failed");
     if (!chan->size) {
       // otherwise, spurious wakeup
       printf("spurious cond_wait wakeup\n");
@@ -165,8 +143,4 @@ void MRChannel_Close(MRChannel *chan) {
   pthread_cond_broadcast(&chan->closeCond);
 
   pthread_mutex_unlock(&chan->lock);
-}
-
-void *MRChannel_Pop(MRChannel *chan) {
-  return MRChannel_PopWait(chan, 0);
 }

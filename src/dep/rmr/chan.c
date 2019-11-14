@@ -3,6 +3,8 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdio.h>
+#include <assert.h>
 
 void *MRCHANNEL_CLOSED = (void *)"MRCHANNEL_CLOSED";
 
@@ -44,11 +46,12 @@ MRChannel *MR_NewChannel(size_t max) {
 /* Safely wait until the channel is closed */
 void MRChannel_WaitClose(MRChannel *chan) {
   pthread_mutex_lock(&chan->lock);
-  if (chan->open) {
+  while (chan->open) {
     pthread_cond_wait(&chan->closeCond, &chan->lock);
   }
   pthread_mutex_unlock(&chan->lock);
 }
+
 void MRChannel_Free(MRChannel *chan) {
 
   // TODO: proper drain and stop routine
@@ -101,43 +104,28 @@ end:
   return rc;
 }
 
-void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
-  struct timeval tv;
-  struct timespec ts;
+// todo wait is not actually used anywhere...
+void *MRChannel_Pop(MRChannel *chan) {
   void *ret = NULL;
-  // calculate sleep time
-  if (waitMS > 0) {
-    gettimeofday(&tv, NULL);
-    tv.tv_usec += waitMS * 1000;
-    if (tv.tv_usec > 1000000) {
-      tv.tv_sec += tv.tv_usec / 1000000;
-      tv.tv_usec = tv.tv_usec % 1000000;
-    }
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
-  }
-  pthread_mutex_lock(&chan->lock);
 
-  if (chan->size == 0) {
+  pthread_mutex_lock(&chan->lock);
+  while (!chan->size) {
     if (!chan->open) {
       pthread_mutex_unlock(&chan->lock);
       return MRCHANNEL_CLOSED;
     }
-    if (waitMS) {
-      // exit on timeout
-      if (pthread_cond_timedwait(&chan->cond, &chan->lock, &ts) == ETIMEDOUT) {
-        goto return_null;
-      }
-    } else {
-      if (pthread_cond_wait(&chan->cond, &chan->lock) == EINVAL) {
-        goto return_null;
-      }
+
+    int rc = pthread_cond_wait(&chan->cond, &chan->lock);
+    assert(rc == 0 && "cond_wait failed");
+    if (!chan->size) {
+      // otherwise, spurious wakeup
+      printf("spurious cond_wait wakeup\n");
+      // continue..
     }
   }
-  chanItem *item = chan->head;
-  // this might happen if we got triggered by destroying the queue
-  if (!item) goto return_null;
 
+  chanItem *item = chan->head;
+  assert(item);
   chan->head = item->next;
   // empty queue...
   if (!chan->head) chan->tail = NULL;
@@ -146,12 +134,6 @@ void *MRChannel_PopWait(MRChannel *chan, int waitMS) {
   // discard the item (TODO: recycle items)
   ret = item->ptr;
   free(item);
-  return ret;
-
-return_null:
-  // return CLOSED if we need to return NULL and the channel is closed
-  if (!chan->open) ret = MRCHANNEL_CLOSED;
-  pthread_mutex_unlock(&chan->lock);
   return ret;
 }
 
@@ -163,8 +145,4 @@ void MRChannel_Close(MRChannel *chan) {
   pthread_cond_broadcast(&chan->closeCond);
 
   pthread_mutex_unlock(&chan->lock);
-}
-
-void *MRChannel_Pop(MRChannel *chan) {
-  return MRChannel_PopWait(chan, 0);
 }

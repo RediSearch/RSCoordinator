@@ -140,8 +140,8 @@ static void freePrivDataCB(void *p) {
   }
 }
 
-static void freePrivDataCB_V5(RedisModuleCtx* ctx, void *p) {
-    freePrivDataCB(p);
+static void freePrivDataCB_V5(RedisModuleCtx *ctx, void *p) {
+  freePrivDataCB(p);
 }
 
 static int timeoutHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -319,8 +319,9 @@ void MR_requestCompleted() {
 int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
 
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+  ctx->redisCtx = RedisModule_BlockClient(
+      ctx->redisCtx, unblockHandler, timeoutHandler,
+      redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void *))freePrivDataCB_V5, timeout_g);
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));
@@ -347,8 +348,9 @@ int MR_Map(struct MRCtx *ctx, MRReduceFunc reducer, MRCommandGenerator cmds, boo
   }
 
   if (block) {
-    ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                            redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+    ctx->redisCtx = RedisModule_BlockClient(
+        ctx->redisCtx, unblockHandler, timeoutHandler,
+        redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void *))freePrivDataCB_V5, timeout_g);
   }
 
   rc->cb = uvMapRequest;
@@ -365,8 +367,9 @@ int MR_MapSingle(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
   rc->cmds = calloc(1, sizeof(MRCommand));
   rc->numCmds = 1;
   rc->cmds[0] = cmd;
-  ctx->redisCtx = RedisModule_BlockClient(ctx->redisCtx, unblockHandler, timeoutHandler,
-                                          redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void*))freePrivDataCB_V5, timeout_g);
+  ctx->redisCtx = RedisModule_BlockClient(
+      ctx->redisCtx, unblockHandler, timeoutHandler,
+      redisMajorVesion < 5 ? freePrivDataCB : (void (*)(void *))freePrivDataCB_V5, timeout_g);
 
   rc->cb = uvMapRequest;
   RQ_Push(rq_g, requestCb, rc);
@@ -378,8 +381,7 @@ size_t MR_NumHosts() {
   return cluster_g ? MRCluster_NumHosts(cluster_g) : 0;
 }
 
-
-void SetMyPartition(MRClusterTopology *ct, MRClusterShard* myShard);
+void SetMyPartition(MRClusterTopology *ct, MRClusterShard *myShard);
 /* on-loop update topology request. This can't be done from the main thread */
 static void uvUpdateTopologyRequest(struct MRRequestCtx *mc) {
   MRCLuster_UpdateTopology(cluster_g, (MRClusterTopology *)mc->ctx);

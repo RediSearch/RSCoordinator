@@ -18,7 +18,7 @@ typedef struct MRChannel {
   chanItem *tail;
   size_t size;
   size_t maxSize;
-  int open;
+  volatile int open;
   pthread_mutex_t lock;
   pthread_cond_t cond;
   // condition used to wait for closing

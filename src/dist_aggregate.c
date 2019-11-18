@@ -224,14 +224,19 @@ static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
 }
 
 static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_UpstreamInfo *us,
-                           MRCommand *xcmd) {
+                           MRCommand *xcmd, unsigned cursorMaxIdle) {
   // We need to prepend the array with the command, index, and query that
   // we want to use.
+  char *maxIdleStr = NULL;
   const char **tmparr = array_new(const char *, us->nserialized);
   tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
   tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Query
   tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
   tmparr = array_append(tmparr, "WITHCURSOR");
+  if(cursorMaxIdle > 0){
+      rm_asprintf(&maxIdleStr, "%lu", (unsigned long)cursorMaxIdle);
+      tmparr = array_append(tmparr, maxIdleStr);
+  }
   // Numeric responses are encoded as simple strings.
   tmparr = array_append(tmparr, "_NUM_SSTRING");
 
@@ -243,6 +248,9 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
   MRCommand_SetPrefix(xcmd, "_FT");
 
   array_free(tmparr);
+  if(maxIdleStr){
+      rm_free(maxIdleStr);
+  }
 }
 
 static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
@@ -297,7 +305,7 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   // Construct the command string
   MRCommand xcmd;
-  buildMRCommand(argv, argc, &us, &xcmd);
+  buildMRCommand(argv, argc, &us, &xcmd, r->cursorMaxIdle);
 
   // Build the result processor chain
   buildDistRPChain(r, &xcmd, sc, &us);

@@ -234,6 +234,7 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
   tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
   tmparr = array_append(tmparr, "WITHCURSOR");
   if(cursorMaxIdle > 0){
+      tmparr = array_append(tmparr, "MAXIDLE");
       rm_asprintf(&maxIdleStr, "%lu", (unsigned long)cursorMaxIdle);
       tmparr = array_append(tmparr, maxIdleStr);
   }

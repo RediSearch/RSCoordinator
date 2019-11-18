@@ -117,9 +117,9 @@ void *MRChannel_Pop(MRChannel *chan) {
 
     int rc = pthread_cond_wait(&chan->cond, &chan->lock);
     assert(rc == 0 && "cond_wait failed");
-    if (!chan->size) {
+    if (!chan->size && chan->open) {
       // otherwise, spurious wakeup
-      printf("spurious cond_wait wakeup\n");
+      printf("spurious cond_wait wakeup: size=%lu. open=%d\n", chan->size, chan->open);
       // continue..
     }
   }

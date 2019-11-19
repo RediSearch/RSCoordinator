@@ -15,10 +15,13 @@ ap.add_argument('--enable-debug', help="Build unoptimized with debug symbols", a
 ap.add_argument('--concurrency', '-j', help='Concurrent make build',
                 default=multiprocessing.cpu_count() * 2)
 ap.add_argument('--with-cmake', help='Path to cmake', default='cmake')
+ap.add_argument('--with-sanitizer', help='Sanitizer to use', choices=('asan', 'tsan', 'msan'))
 
 options = ap.parse_args()
 # Determine the build directory
 BUILD_DIR = options.build_dir
+SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 if not BUILD_DIR:
     cwd = os.path.abspath(os.getcwd())
     self_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,6 +50,16 @@ def build_uv(uv_src, uv_dst, build_dir):
     copy_dst = os.path.join(build_dir, 'libuv-src')
     if not os.path.exists(copy_dst):
         shutil.copytree(uv_src, copy_dst)
+    if options.with_sanitizer == 'msan':
+        os.environ['CFLAGS'] = '-fsanitize=memory'
+        os.environ['LDFLAGS'] = '-fsanitize=memory'
+    elif options.with_sanitizer == 'asan':
+        os.environ['CFLAGS'] = os.environ['LDFLAGS'] = '-fsanitize=address'
+    elif options.with_sanitizer == 'thread':
+        os.environ['CFLAGS'] = os.environ['LDFLAGS'] = '-fsanitize=thread'
+    if options.with_sanitizer:
+        os.environ['CC'] = 'clang'
+        os.environ['CXX'] = 'clang++'
 
     uv_src = copy_dst
     po = Popen(['sh', os.path.join(uv_src, 'autogen.sh')])
@@ -76,8 +89,17 @@ if not os.path.exists(UV_A):
     build_uv(UV_SRC, UV_DIR, uv_build_dir)
 
 os.chdir(BUILD_DIR)
-args = [CMAKE, '..', '-DLIBUV_ROOT=' + UV_DIR,
+args = [CMAKE, SOURCE_DIR, '-DLIBUV_ROOT=' + UV_DIR,
         '-DCMAKE_BUILD_TYPE={}'.format('DEBUG' if options.enable_debug else 'RELWITHDEBINFO')]
+if options.with_sanitizer == 'asan':
+    args += ['-DUSE_ASAN=ON']
+elif options.with_sanitizer == 'msan':
+    args += ['-DUSE_MSAN=ON']
+elif options.with_sanitizer == 'tsan':
+    args += ['-DRUSE_TSAN=ON']
+if options.with_sanitizer:
+    args += ['-DCMAKE_C_COMPILER=clang', '-DCMAKE_CXX_COMPILER=clang++']
+
 print("Running: " + " ".join(args))
 if Popen(args).wait() != 0:
     raise Exception("Couldn't execute CMake!")

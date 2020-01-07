@@ -115,6 +115,7 @@ AggregatePlan *AggregatePlan_MakeDistributed(AggregatePlan *src) {
       case AggregateStep_Query:
       case AggregateStep_Apply:
       case AggregateStep_Load:
+      case AggregateStep_Filter:
 
         current = AggregatePlan_MoveStep(src, dist, current);
         break;

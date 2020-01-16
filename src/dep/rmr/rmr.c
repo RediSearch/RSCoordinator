@@ -534,6 +534,10 @@ void MRIterator_Free(MRIterator *it) {
   for (size_t i = 0; i < it->len; i++) {
     MRCommand_Free(&it->cbxs[i].cmd);
   }
+  MRReply *reply;
+  while((reply = MRChannel_ForcePop(it->ctx.chan))){
+      MRReply_Free(reply);
+  }
   MRChannel_Free(it->ctx.chan);
   free(it->cbxs);
   free(it);

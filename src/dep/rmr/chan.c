@@ -106,6 +106,7 @@ void *MRChannel_ForcePop(MRChannel *chan) {
   pthread_mutex_lock(&chan->lock);
   chanItem *item = chan->head;
   if(!item){
+      pthread_mutex_unlock(&chan->lock);
       return NULL;
   }
   chan->head = item->next;

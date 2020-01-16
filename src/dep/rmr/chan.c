@@ -102,6 +102,23 @@ end:
   return rc;
 }
 
+void *MRChannel_ForcePop(MRChannel *chan) {
+  pthread_mutex_lock(&chan->lock);
+  chanItem *item = chan->head;
+  if(!item){
+      return NULL;
+  }
+  chan->head = item->next;
+  // empty queue...
+  if (!chan->head) chan->tail = NULL;
+  chan->size--;
+  pthread_mutex_unlock(&chan->lock);
+  // discard the item (TODO: recycle items)
+  void* ret = item->ptr;
+  free(item);
+  return ret;
+}
+
 // todo wait is not actually used anywhere...
 void *MRChannel_Pop(MRChannel *chan) {
   void *ret = NULL;

@@ -14,6 +14,8 @@ int MRChannel_Push(MRChannel *chan, void *ptr);
  * Return MRCHANNEL_CLOSED if the channel is closed*/
 void *MRChannel_Pop(MRChannel *chan);
 
+void *MRChannel_ForcePop(MRChannel *chan);
+
 /* Safely wait until the channel is closed */
 void MRChannel_WaitClose(MRChannel *chan);
 

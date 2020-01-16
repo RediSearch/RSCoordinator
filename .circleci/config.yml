@@ -124,7 +124,6 @@ workflows:
               only:
                 - master
                 - circle-sandbox
-                - fix_leak_if_cursor_is_not_totally_consumed
       - deploy_release:
           requires: *default_jobs
           filters:

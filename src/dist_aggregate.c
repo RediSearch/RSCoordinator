@@ -35,7 +35,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 static int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
-//      printf("Error is '%s'\n", MRReply_String(rep, NULL));
+      //      printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
@@ -311,9 +311,16 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     // Keep the original concurrent context
     ConcurrentCmdCtx_KeepRedisCtx(cmdCtx);
 
-    // Assign the context to the AREQ, so that when the AREQ is freed, the
-    // search context is released as well.
+    /**
+     * The next three lines are a hack to ensure that the cursor retains a valid
+     * RedisModuleCtx object. We rely on the existing mechanism of AREQ to free
+     * the Ctx object used by NewSearchCtx. We don't actually read the spec
+     * at all.
+     */
+    RedisModule_ThreadSafeContextLock(ctx);
     r->sctx = NewSearchCtxC(ctx, tagged, true);
+    RedisModule_ThreadSafeContextUnlock(ctx);
+
     rc = AREQ_StartCursor(r, ctx, tagged, &status);
 
     free(tagged);

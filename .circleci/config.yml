@@ -146,10 +146,11 @@ workflows:
             tags:
               only: /^v[0-9].*/
       - run_automation:
-          requires:
-            - deploy_release
           filters:
             branches:
-              ignore: /.*/
+              only: /.*/
             tags:
-              only: /^v[0-9].*/
+              only: /.*/
+          requires:
+            - deploy_release
+        

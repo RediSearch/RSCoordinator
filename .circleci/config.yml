@@ -151,6 +151,4 @@ workflows:
               only: /.*/
             tags:
               only: /.*/
-          requires:
-            - deploy_release
-        
+      

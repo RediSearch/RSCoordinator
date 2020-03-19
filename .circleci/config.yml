@@ -6,7 +6,7 @@ defaults:
         name: Python Dependencies
         command: >-
           pip install --upgrade setuptools
-          git+https://github.com/RedisLabsModules/RLTest.git@master
+          git+https://github.com/RedisLabsModules/RLTest.git@24401d52f39378142f7cbfe3ad42bf7379c032be
           git+https://github.com/mnunberg/RAMP@print_version;pip install redis-py-cluster==1.3.6
   
     - run:

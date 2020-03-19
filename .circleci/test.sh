@@ -4,7 +4,7 @@ set -x
 set -e
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT=$(realpath $HERE/..)
+ROOT=$(readlink -f $HERE/..)
 
 MODULE_OSS_SO=$BUILD_DIR/module-oss.so
 

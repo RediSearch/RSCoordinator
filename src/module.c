@@ -1045,14 +1045,16 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
     MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
   }
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
+//  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
   MR_SetCoordinationStrategy(mrctx, MRCluster_LocalCoordination | MRCluster_MastersOnly);
 
-  MR_Map(mrctx, searchResultReducer, cg, true);
-  cg.Free(cg.ctx);
+//  MR_Map(mrctx, searchResultReducer, cg, true);
+//  cg.Free(cg.ctx);
+
+  MR_Fanout(mrctx, searchResultReducer, cmd);
   return REDISMODULE_OK;
 }
 
@@ -1114,14 +1116,16 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     // req->withSortingKeys = 1;
   }
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
+//  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
   MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
 
-  MR_Map(mrctx, searchResultReducer, cg, true);
-  cg.Free(cg.ctx);
+//  MR_Map(mrctx, searchResultReducer, cg, true);
+//  cg.Free(cg.ctx);
+
+  MR_Fanout(mrctx, searchResultReducer, cmd);
   return REDISMODULE_OK;
 }
 
@@ -1471,11 +1475,11 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                                      0, 0, -1));
   }
 
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersUnshardedHandler),
                                    "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALTER", SafeCmd(MastersFanoutCommandHandler),
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.ALTER", SafeCmd(MastersUnshardedHandler),
                                    "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersFanoutCommandHandler), "readonly",
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersUnshardedHandler), "readonly",
                                    0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.BROADCAST", SafeCmd(BroadcastCommand), "readonly", 0, 0,
                                    -1));

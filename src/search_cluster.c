@@ -204,6 +204,37 @@ int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
   return 1;
 }
 
+int SCNoPartitionMuxIterator_Next(void *ctx, MRCommand *cmd) {
+  SCCommandMuxIterator *it = ctx;
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(it->cluster)) return 0;
+
+  /* at end */
+  if (it->offset >= it->cluster->size) {
+    return 0;
+  }
+
+  *cmd = MRCommand_Copy(it->cmd);
+  if (it->keyAlias) {
+      MRCommand_ReplaceArg(cmd, it->keyOffset, it->keyAlias, strlen(it->keyAlias));
+  }
+  return 1;
+}
+
+/* Return the size of the command generator */
+size_t SCNoPartitionMuxIterator_Len(void *ctx) {
+  SCCommandMuxIterator *it = ctx;
+  return it->cluster->size;
+}
+
+void SCNoPartitionMuxIterator_Free(void *ctx) {
+  SCCommandMuxIterator *it = ctx;
+  if (it->cmd) MRCommand_Free(it->cmd);
+  it->cmd = NULL;
+  free(it->keyAlias);
+  free(it);
+}
+
 /* Get the next multiplexed command from the iterator. Return 1 if we are not done, else 0 */
 int SCCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
   SCCommandMuxIterator *it = ctx;
@@ -250,6 +281,11 @@ void SCCommandMuxIterator_Free(void *ctx) {
   free(it);
 }
 
+MRCommandGenerator noPartitionCommandGenerator = {.Next = SCNoPartitionMuxIterator_Next,
+                                                  .Free = SCNoPartitionMuxIterator_Free,
+                                                  .Len = SCNoPartitionMuxIterator_Len,
+                                                  .ctx = NULL};
+
 MRCommandGenerator defaultCommandGenerator = {.Next = SCCommandMuxIterator_Next,
                                               .Free = SCCommandMuxIterator_Free,
                                               .Len = SCCommandMuxIterator_Len,
@@ -266,7 +302,7 @@ MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, 
   if (ptr) {
     ret = *ptr;
   } else {
-    ret = defaultCommandGenerator;
+    ret = noPartitionCommandGenerator;
   }
   ret.ctx = mux;
   return ret;

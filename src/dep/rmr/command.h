@@ -13,6 +13,9 @@ typedef struct {
 
   /* Internal id used to get the command configuration */
   int id;
+
+  // this value (if greater then zero), overide the slot calculation of the command
+  int slotToSend;
 } MRCommand;
 
 /* Free the command and all its strings. Doesn't free the actual commmand struct, as it is usually

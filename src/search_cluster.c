@@ -218,6 +218,9 @@ int SCNoPartitionMuxIterator_Next(void *ctx, MRCommand *cmd) {
   if (it->keyAlias) {
       MRCommand_ReplaceArg(cmd, it->keyOffset, it->keyAlias, strlen(it->keyAlias));
   }
+
+  cmd->slotToSend = GetSlotByPartition(&it->cluster->part, it->offset++);
+
   return 1;
 }
 

@@ -1496,6 +1496,15 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly",
                                    0, 0, -1));
 
+
+  /*********************************************************
+   * Rules commands
+   **********************************************************/
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.RULEADD", SafeCmd(MastersFanoutCommandHandler), "readonly",
+                                     0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.RULESET", SafeCmd(MastersFanoutCommandHandler), "readonly",
+                                     0, 0, -1));
+
   /*********************************************************
    * RS Cluster specific commands
    **********************************************************/

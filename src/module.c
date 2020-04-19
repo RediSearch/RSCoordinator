@@ -792,20 +792,20 @@ int SingleShardCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
-  int partPos = MRCommand_GetPartitioningKey(&cmd);
-
-  /* Rewrite the sharding key based on the partitioning key */
-  if (partPos > 0) {
-    SearchCluster_RewriteCommand(GetSearchCluster(), &cmd, partPos);
-  }
-
-  /* Rewrite the partitioning key as well */
-
-  if (MRCommand_GetFlags(&cmd) & MRCommand_MultiKey) {
-    if (partPos > 0) {
-      SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, partPos, partPos);
-    }
-  }
+//  int partPos = MRCommand_GetPartitioningKey(&cmd);
+//
+//  /* Rewrite the sharding key based on the partitioning key */
+//  if (partPos > 0) {
+//    SearchCluster_RewriteCommand(GetSearchCluster(), &cmd, partPos);
+//  }
+//
+//  /* Rewrite the partitioning key as well */
+//
+//  if (MRCommand_GetFlags(&cmd) & MRCommand_MultiKey) {
+//    if (partPos > 0) {
+//      SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, partPos, partPos);
+//    }
+//  }
   // MRCommand_Print(&cmd);
   MR_MapSingle(MR_CreateCtx(ctx, NULL), singleReplyReducer, cmd);
 
@@ -827,9 +827,9 @@ int MGetCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
   /* Replace our own FT command with _FT. command */
   MRCommand_SetPrefix(&cmd, "_FT");
-  for (int i = 2; i < argc; i++) {
-    SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, i, i);
-  }
+//  for (int i = 2; i < argc; i++) {
+//    SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, i, i);
+//  }
 
   MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, NULL);
@@ -1085,20 +1085,20 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   }
 
   // Tag the InKeys arguments
-  int inKeysPos = RMUtil_ArgIndex("INKEYS", argv, argc);
-
-  if (inKeysPos > 2) {
-    long long numFilteredIds = 0;
-    // Get the number of INKEYS args
-    RMUtil_ParseArgsAfter("INKEYS", &argv[inKeysPos], argc - inKeysPos, "l", &numFilteredIds);
-    // If we won't overflow - tag each key
-    if (numFilteredIds > 0 && numFilteredIds + inKeysPos + 1 < argc) {
-      inKeysPos += 2;  // the start of the actual keys
-      for (int x = inKeysPos; x < inKeysPos + numFilteredIds && x < argc; x++) {
-        SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, x, x);
-      }
-    }
-  }
+//  int inKeysPos = RMUtil_ArgIndex("INKEYS", argv, argc);
+//
+//  if (inKeysPos > 2) {
+//    long long numFilteredIds = 0;
+//    // Get the number of INKEYS args
+//    RMUtil_ParseArgsAfter("INKEYS", &argv[inKeysPos], argc - inKeysPos, "l", &numFilteredIds);
+//    // If we won't overflow - tag each key
+//    if (numFilteredIds > 0 && numFilteredIds + inKeysPos + 1 < argc) {
+//      inKeysPos += 2;  // the start of the actual keys
+//      for (int x = inKeysPos; x < inKeysPos + numFilteredIds && x < argc; x++) {
+//        SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, x, x);
+//      }
+//    }
+//  }
   // MRCommand_Print(&cmd);
 
   /* Replace our own FT command with _FT. command */
@@ -1470,6 +1470,11 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.AGGREGATE", SafeCmd(DistAggregateCommand), "readonly",
                                      0, 0, -1));
   }
+
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.RULEADD", SafeCmd(MastersFanoutCommandHandler),
+                                     "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.RULESET", SafeCmd(MastersFanoutCommandHandler),
+                                     "readonly", 0, 0, -1));
 
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.CREATE", SafeCmd(MastersFanoutCommandHandler),
                                    "readonly", 0, 0, -1));

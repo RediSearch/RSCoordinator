@@ -160,13 +160,11 @@ int SearchCluster_RewriteCommandToFirstPartition(SearchCluster *sc, MRCommand *c
   size_t keylen = 0;
   const char *key = MRCommand_ArgStringPtrLen(cmd, sk, &keylen);
   if (MRCommand_GetFlags(cmd) & MRCommand_Aliased) {
-    key = lookupAlias(key, &keylen);
+    const char* alias = lookupAlias(key, &keylen);
+    MRCommand_ReplaceArg(cmd, sk, alias, strlen(alias));
   }
 
-  size_t taggedLen = 0;
-  const char *tag = PartitionTag(&sc->part, 0);
-  char *tagged = writeTaggedId(key, keylen, tag, strlen(tag), &taggedLen);
-  MRCommand_ReplaceArgNoDup(cmd, sk, tagged, taggedLen);
+  cmd->targetSlot = GetSlotByPartition(&sc->part, 0);
   return 1;
 }
 
@@ -183,23 +181,36 @@ int SpellCheckMuxIterator_Next(void *ctx, MRCommand *cmd) {
 
   *cmd = MRCommand_Copy(it->cmd);
   if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
-    SearchCluster_RewriteForPartition(it->cluster, cmd, it->keyOffset, it->offset);
-  }
-
-  for (size_t i = 0; i < it->cmd->num; ++i) {
-    size_t argLen;
-    const char *arg = MRCommand_ArgStringPtrLen(it->cmd, i, &argLen);
-    if (!strncasecmp("terms", arg, argLen)) {
-      if (i + 2 < it->cmd->num) {
-        SearchCluster_RewriteForPartition(it->cluster, cmd, i + 2, it->offset);
-      }
+    if (it->keyAlias) {
+      MRCommand_ReplaceArg(cmd, it->keyOffset, it->keyAlias, strlen(it->keyAlias));
     }
   }
 
-  // we ask for full score info so we can aggregate correctly
+  cmd->targetSlot = GetSlotByPartition(&it->cluster->part, it->offset++);
+
   MRCommand_AppendArgs(cmd, 1, "FULLSCOREINFO");
 
-  ++it->offset;
+  return 1;
+}
+
+int NoPartitionCommandMuxIterator_Next(void *ctx, MRCommand *cmd) {
+  SCCommandMuxIterator *it = ctx;
+  // make sure we can actually calculate partitioning
+  if (!SearchCluster_Ready(it->cluster)) return 0;
+
+  /* at end */
+  if (it->offset >= it->cluster->size) {
+    return 0;
+  }
+
+  *cmd = MRCommand_Copy(it->cmd);
+  if (it->keyOffset >= 0 && it->keyOffset < it->cmd->num) {
+    if (it->keyAlias) {
+      MRCommand_ReplaceArg(cmd, it->keyOffset, it->keyAlias, strlen(it->keyAlias));
+    }
+  }
+
+  cmd->targetSlot = GetSlotByPartition(&it->cluster->part, it->offset++);
 
   return 1;
 }
@@ -242,6 +253,11 @@ size_t SCCommandMuxIterator_Len(void *ctx) {
   return it->cluster->size;
 }
 
+size_t NoPartitionCommandMuxIterator_Len(void *ctx) {
+  SCCommandMuxIterator *it = ctx;
+  return it->cluster->size;
+}
+
 void SCCommandMuxIterator_Free(void *ctx) {
   SCCommandMuxIterator *it = ctx;
   if (it->cmd) MRCommand_Free(it->cmd);
@@ -249,6 +265,19 @@ void SCCommandMuxIterator_Free(void *ctx) {
   free(it->keyAlias);
   free(it);
 }
+
+void NoPartitionCommandMuxIterator_Free(void *ctx) {
+  SCCommandMuxIterator *it = ctx;
+  if (it->cmd) MRCommand_Free(it->cmd);
+  it->cmd = NULL;
+  free(it->keyAlias);
+  free(it);
+}
+
+MRCommandGenerator noPartitionCommandGenerator = {.Next = NoPartitionCommandMuxIterator_Next,
+                                              .Free = NoPartitionCommandMuxIterator_Free,
+                                              .Len = NoPartitionCommandMuxIterator_Len,
+                                              .ctx = NULL};
 
 MRCommandGenerator defaultCommandGenerator = {.Next = SCCommandMuxIterator_Next,
                                               .Free = SCCommandMuxIterator_Free,
@@ -266,7 +295,7 @@ MRCommandGenerator SearchCluster_GetCommandGenerator(SCCommandMuxIterator *mux, 
   if (ptr) {
     ret = *ptr;
   } else {
-    ret = defaultCommandGenerator;
+    ret = noPartitionCommandGenerator;
   }
   ret.ctx = mux;
   return ret;
@@ -297,7 +326,7 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
  * first topology update and get a fix on that */
 void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo) {
   // If the cluster doesn't have a size yet - set the partition number aligned to the shard number
-  if (c->size == 0 && MRClusterTopology_IsValid(topo)) {
+  if (MRClusterTopology_IsValid(topo)) {
     RedisModule_Log(ctx, "notice", "Setting number of partitions to %d", topo->numShards);
     c->size = topo->numShards;
     PartitionCtx_SetSize(&c->part, topo->numShards);

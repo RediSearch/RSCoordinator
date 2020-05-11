@@ -16,4 +16,3 @@ capabilities:
     - persistence_aof
     - persistence_rdb
     - clustering
-    - replica_of

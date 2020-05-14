@@ -3,7 +3,7 @@
 # Now let's also handle ftl..
 mkdir -p build-ftl
 cd build-ftl
-cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DRS_MODULE_NAME=ftl ../src/dep/RediSearch
+cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DRS_MODULE_NAME=ftl -DFORCE_CROS_SLOT=ON ../src/dep/RediSearch
 make -sj20
 # do we need to test?
 

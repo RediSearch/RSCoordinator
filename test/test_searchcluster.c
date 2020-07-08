@@ -44,4 +44,4 @@ int main(int argc, char **argv) {
   return minunit_status;
 }
 
-REDISMODULE_INIT_SYMBOLS()
+//REDISMODULE_INIT_SYMBOLS()

@@ -33,7 +33,7 @@
 int redisMajorVesion = 0;
 int redisMinorVesion = 0;
 int redisPatchVesion = 0;
-REDISMODULE_INIT_SYMBOLS();
+//REDISMODULE_INIT_SYMBOLS();
 
 // forward declaration
 int allOKReducer(struct MRCtx *mc, int count, MRReply **replies);

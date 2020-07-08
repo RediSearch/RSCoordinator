@@ -157,4 +157,4 @@ int main(int, char **) {
   testCountDistinct();
 }
 
-REDISMODULE_INIT_SYMBOLS();
+//REDISMODULE_INIT_SYMBOLS();

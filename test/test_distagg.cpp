@@ -153,6 +153,7 @@ static void testSplit() {
 
 int main(int, char **) {
   RMCK_Bootstrap(my_OnLoad, NULL, 0);
+  RMCK::init();
   // testAverage();
   testCountDistinct();
 }

@@ -54,7 +54,7 @@ defaults:
 jobs:
   xenial:
     docker:
-      - image: redisfab/rmbuilder:6.0.1-x64-xenial
+      - image: redisfab/rmbuilder:6.0.5-x64-xenial
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04

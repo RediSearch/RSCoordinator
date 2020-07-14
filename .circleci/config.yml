@@ -15,7 +15,7 @@ defaults:
           python -m pip install --no-cache-dir git+https://github.com/RedisLabs/RAMP@master        
     - run:
         name: Redis_5_upgrade
-        command: cd ..;rm -rf ./redis; git clone https://github.com/antirez/redis.git; cd ./redis; git fetch; git checkout 5.0.8; make; make install
+        command: cd ..;rm -rf ./redis; git clone https://github.com/antirez/redis.git; cd ./redis; git fetch; git checkout 6.0.5; make; make install
     - run:
         name: Submodule checkout
         command: |

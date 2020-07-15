@@ -18,7 +18,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git cmake wget awscli lcov")
+        self.install("git cmake wget lcov") # awscli
 
     def debian_compat(self):
         self.install("libatomic1")
@@ -44,9 +44,11 @@ class RedisRSCoordinatorSetup(paella.Setup):
 
     def common_last(self):
         # redis-py-cluster should be installed from git due to redis-py dependency
+        self.run("python2 -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest rmtest semantic-version")
         self.pip_install("--no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master")
-        self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@fix.tests.tls") # master
+        self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
+        
         self.pip_install("pudb")
 
 #----------------------------------------------------------------------------------------------

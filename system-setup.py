@@ -18,7 +18,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git cmake wget lcov") # awscli
+        self.install("git cmake wget lcov")
 
     def debian_compat(self):
         self.install("libatomic1")
@@ -30,10 +30,9 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.group_install("'Development Tools'")
         self.install("redhat-lsb-core")
 
-        # uninstall and install psutil (order is important), otherwise RLTest fails
-        self.run("pip uninstall -y psutil || true")
-        self.install("python2-psutil")
-
+        # self.run("yum remove -y python-setuptools || true")
+        # self.pip_install("-IU --force-reinstall setuptools")
+        
     def fedora(self):
         self.install("libatomic")
         self.group_install("'Development Tools'")
@@ -49,7 +48,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
         
-        self.pip_install("pudb")
+        self.pip_install("awscli pudb")
 
 #----------------------------------------------------------------------------------------------
 

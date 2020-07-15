@@ -44,7 +44,8 @@ jobs:
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
-    steps: build-steps
+    steps:
+      - build-steps
 
   trusty:
     docker:
@@ -52,7 +53,8 @@ jobs:
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
-    steps: build-steps
+    steps:
+      - build-steps
   
   centos7:
     docker:
@@ -60,7 +62,8 @@ jobs:
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
-    steps: build-steps
+    steps:
+      - build-steps
 
   deploy_snapshots:
     docker:

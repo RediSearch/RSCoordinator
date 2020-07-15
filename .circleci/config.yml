@@ -7,15 +7,17 @@ defaults:
         name: Setup automation
         command: |
           (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-    - run:
-        name: Setup Python & Dependencies
-        command: |
           PIP=1 FORCE=1 ./deps/readies/bin/getpy2
-          python2 -m pip install --upgrade setuptools
-          python2 -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest rmtest semantic-version
-          python2 -m pip install --no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master
-          python2 -m pip install --no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master
-          python2 -m pip install --no-cache-dir git+https://github.com/RedisLabs/RAMP@master
+          ./system-setup.py
+#    - run:
+#        name: Setup Python & Dependencies
+#        command: |
+#          PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+#          python2 -m pip install --upgrade setuptools
+#          python2 -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest rmtest semantic-version
+#          python2 -m pip install --no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master
+#          python2 -m pip install --no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master
+#          python2 -m pip install --no-cache-dir git+https://github.com/RedisLabs/RAMP@master
     - run:
         name: Install Redis
         command: python2 ./deps/readies/bin/getredis -v 6

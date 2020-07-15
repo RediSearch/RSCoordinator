@@ -144,8 +144,8 @@ on-master-and-version-tags: &on-master-and-version-tags
 after-platform-builds: &after-platform-builds
   requires:
     - centos7
-    - bionic
     - xenial
+    - trusty
  
 
 workflows:

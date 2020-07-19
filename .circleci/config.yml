@@ -38,6 +38,15 @@ commands:
             - release
 
 jobs:
+  bionic:
+    docker:
+      - image: redisfab/rmbuilder:6.0.5-x64-bionic
+    environment:
+      - BUILD_DIR: build-bionic
+      - DIST_SUFFIX: -ubuntu18.04
+    steps:
+      - build-steps
+
   xenial:
     docker:
       - image: redisfab/rmbuilder:6.0.5-x64-xenial
@@ -144,6 +153,7 @@ on-master-and-version-tags: &on-master-and-version-tags
 after-platform-builds: &after-platform-builds
   requires:
     - centos7
+    - bionic
     - xenial
     - trusty
  
@@ -152,6 +162,8 @@ workflows:
   version: 2
   default_flow:
     jobs:
+      - bionic:
+          <<: *on-any-branch
       - xenial:
           <<: *on-any-branch
       - centos7:

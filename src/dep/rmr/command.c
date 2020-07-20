@@ -7,7 +7,6 @@
  * Forward declaration
  */
 extern MRCommandGenerator spellCheckCommandGenerator;
-extern MRCommandGenerator aliasCommandGenerator;
 
 struct mrCommandConf {
   const char *command;
@@ -21,16 +20,18 @@ struct mrCommandConf __commandConfig[] = {
 
     // document commands
     {"_FT.SEARCH", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
-    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
-    {"_FT.GET", MRCommand_Read | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.DEL", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 2, 2, NULL},
+    {"_FT.GET", MRCommand_Read | MRCommand_MultiKey | MRCommand_Aliased, 2, 2, NULL},
     {"_FT.MGET", MRCommand_Read | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
 
-    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
-    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 1, 2, NULL},
+    {"_FT.ADD", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 2, 2, NULL},
+    {"_FT.ADDHASH", MRCommand_Write | MRCommand_MultiKey | MRCommand_Aliased, 2, 2, NULL},
     {"_FT.AGGREGATE", MRCommand_Read | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
 
     // index commands
     {"_FT.CREATE", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
+    {"_FT.RULEADD", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
+    {"_FT.RULESET", MRCommand_Write | MRCommand_SingleKey, 1, 1, NULL},
     {"_FT.ALTER", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
     {"_FT.DROP", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
     {"_FT.OPTIMIZE", MRCommand_Write | MRCommand_SingleKey | MRCommand_Aliased, 1, 1, NULL},
@@ -65,6 +66,8 @@ struct mrCommandConf __commandConfig[] = {
 
     {"FT.FSEARCH", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
+    {"FT.RULEADD", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
+    {"FT.RULESET", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1, -1, NULL},
     {"FT.INFO", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1, 2, NULL},
@@ -150,6 +153,7 @@ static void MRCommand_Init(MRCommand *cmd, size_t len) {
   cmd->strs = malloc(sizeof(*cmd->strs) * len);
   cmd->lens = malloc(sizeof(*cmd->lens) * len);
   cmd->id = 0;
+  cmd->targetSlot = -1;
 }
 
 MRCommand MR_NewCommandArgv(int argc, const char **argv) {

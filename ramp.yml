@@ -16,6 +16,7 @@ capabilities:
     - persistence_rdb
     - clustering
     - backup_restore
+    - reshard_rebalance
 exclude_commands:
     - FT.ADDHASH
 overide_command:

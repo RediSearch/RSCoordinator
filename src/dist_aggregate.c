@@ -27,8 +27,10 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
   int shardingKey = MRCommand_GetShardingKey(cmd);
   const char *idx = MRCommand_ArgStringPtrLen(cmd, shardingKey, NULL);
   MRCommand newCmd = MR_NewCommand(4, RS_CURSOR_CMD, "READ", idx, buf);
+  newCmd.targetSlot = cmd->targetSlot;
   MRCommand_Free(cmd);
   *cmd = newCmd;
+
   return 1;
 }
 
@@ -304,9 +306,9 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   if (r->reqflags & QEXEC_F_IS_CURSOR) {
     const char *ixname = RedisModule_StringPtrLen(argv[1], NULL);
-    const char *partTag = PartitionTag(&sc->part, sc->myPartition);
-    size_t dummy;
-    char *tagged = writeTaggedId(ixname, strlen(ixname), partTag, strlen(partTag), &dummy);
+//    const char *partTag = PartitionTag(&sc->part, sc->myPartition);
+//    size_t dummy;
+//    char *tagged = writeTaggedId(ixname, strlen(ixname), partTag, strlen(partTag), &dummy);
 
     // Keep the original concurrent context
     ConcurrentCmdCtx_KeepRedisCtx(cmdCtx);
@@ -318,12 +320,12 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
      * at all.
      */
     RedisModule_ThreadSafeContextLock(ctx);
-    r->sctx = NewSearchCtxC(ctx, tagged, true);
+    r->sctx = NewSearchCtxC(ctx, ixname, true);
     RedisModule_ThreadSafeContextUnlock(ctx);
 
-    rc = AREQ_StartCursor(r, ctx, tagged, &status);
+    rc = AREQ_StartCursor(r, ctx, ixname, &status);
 
-    free(tagged);
+//    free(tagged);
     if (rc != REDISMODULE_OK) {
       assert(QueryError_HasError(&status));
       goto err;

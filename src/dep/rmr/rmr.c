@@ -400,6 +400,8 @@ int MR_UpdateTopology(MRClusterTopology *newTopo) {
   if (cluster_g == NULL) {
     return REDIS_ERR;
   }
+
+
   // enqueue a request on the io thread, this can't be done from the main thread
   struct MRRequestCtx *rc = calloc(1, sizeof(*rc));
   rc->ctx = newTopo;

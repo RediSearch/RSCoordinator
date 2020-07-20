@@ -255,6 +255,10 @@ mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
 
   size_t len;
 
+  if(cmd->targetSlot >= 0){
+    return cmd->targetSlot;
+  }
+
   const char *k = MRGetShardKey(cmd, &len);
   if (!k) return 0;
   uint16_t crc = crc16(k, len);
@@ -263,6 +267,10 @@ mr_slot_t CRC16ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
 
 mr_slot_t CRC12ShardFunc(MRCommand *cmd, mr_slot_t numSlots) {
   size_t len;
+
+  if(cmd->targetSlot >= 0){
+    return cmd->targetSlot;
+  }
 
   const char *k = MRGetShardKey(cmd, &len);
   if (!k) return 0;

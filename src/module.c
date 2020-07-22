@@ -1479,6 +1479,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
                                    "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.DROP", SafeCmd(MastersFanoutCommandHandler), "readonly",
                                    0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.DELETE", SafeCmd(MastersFanoutCommandHandler), "readonly",
+                                   0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.BROADCAST", SafeCmd(BroadcastCommand), "readonly", 0, 0,
                                    -1));
   RM_TRY(

@@ -289,24 +289,22 @@ Integer Reply: 1 if the document was deleted, 0 if not.
 
 ---
 
-## DFT.DROP
+## DFT.DELETE
 
 ### Format
 
 ```
-DFT.DROP {index}
+DFT.DELETE {index} [DD]
 ```
 
 ### Description
 
-Deletes all the keys associated with the index. 
-
-If no other data is on the redis instance, this is equivalent to FLUSHDB, apart from the fact
-that the index specification is not deleted.
+Deletes the index.
 
 ### Parameters
 
 - **index**: The Fulltext index name. The index must be first created with DFT.CREATE
+- **DD**:  All documents associated with the index will be deleted.
 
 ### Returns
 
@@ -314,6 +312,33 @@ Status Reply: OK on success.
 
 ---
 
+## DFT.DROP
+
+### Format
+
+```
+DFT.DROP {index} [KEEPDOCS]
+```
+
+### Description
+
+!!! warning "This command is deprecated"
+
+Deletes the index and all the keys associated with it. 
+
+If no other data is on the redis instance, this is equivalent to FLUSHDB, apart from the fact
+that the index specification is not deleted.
+
+### Parameters
+
+- **index**: The Fulltext index name. The index must be first created with DFT.CREATE
+- **KEEPDOCS**: Documents associated with the index will not be deleted.
+
+### Returns
+
+Status Reply: OK on success.
+
+---
 
 ## DFT.BROADCAST
 

@@ -26,7 +26,9 @@ static InfoFieldSpec toplevelSpecs_g[] = {
     {.name = "records_per_doc_avg", .type = InfoField_DoubleAverage},
     {.name = "bytes_per_record_avg", .type = InfoField_DoubleAverage},
     {.name = "offsets_per_term_avg", .type = InfoField_DoubleAverage},
-    {.name = "offset_bits_per_record_avg", .type = InfoField_DoubleAverage}};
+    {.name = "offset_bits_per_record_avg", .type = InfoField_DoubleAverage},
+    {.name = "indexing", .type = InfoField_WholeSum},
+    {.name = "percent_indexed", .type = InfoField_WholeSum}};
 
 static InfoFieldSpec gcSpecs[] = {
     {.name = "current_hz", .type = InfoField_DoubleAverage},

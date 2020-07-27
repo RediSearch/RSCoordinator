@@ -46,7 +46,7 @@ $ make
 
 ```
 
-This creates two file called `module-oss.so` and `module-enterprise.so` in /build, and from here on, you can run it inside redis oss cluster.
+This creates two files called `module-oss.so` and `module-enterprise.so` in /build, and from here on, you can run it inside redis oss cluster.
 
 ## Running RSCoordinator
 
@@ -56,8 +56,9 @@ To load the module just add the loadmodule parameter:
 loadmodule /path/to/oss-module.so
 ```
 
-The module automatically descover the Redis cluster topology and distribute the search commands accordingly.
+The module automatically discovers the Redis cluster topology and distributes the search commands accordingly.
 
 # Commands
 
 See http://redisearch.io/Commands/
+

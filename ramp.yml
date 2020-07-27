@@ -1,9 +1,9 @@
-display_name: redisearch-enterprise
+display_name: RediSearch Coordinator
 author: RedisLabs
-email: dvir@redislabs.com
-description: High performance search index on top of redis - enterprise version
+email: meir@redislabs.com
+description: High performance search index on top of Redis (with clustering) 
 homepage: 'http://redisearch.io'
-license: Commercial
+license: Redis Source Available License Agreement
 command_line_args: PARTITIONS AUTO
 min_redis_version: '4.0'
 min_redis_pack_version: '5.0'

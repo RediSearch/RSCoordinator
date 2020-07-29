@@ -1,24 +1,33 @@
+
+ROOT:=$(shell pwd)
+
 all: build
 
+export BUILD_DIR ?= build
+
+configure:
+	mkdir -p $(BUILD_DIR)
+	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8
+
 build:
-	$(MAKE) -C ./src module.so
+	$(MAKE) -C $(BUILD_DIR)
 .PHONY: build
 
 test: build
-	$(MAKE) -C ./test
-	$(MAKE) -C ./src/dep/rmr/test test
-	$(MAKE) -C ./src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
-	$(MAKE) -C ./src module-oss.so
-	$(MAKE) -C ./pytest 
-	
+	$(MAKE) -C test
+	$(MAKE) -C src/dep/rmr/test test
+	$(MAKE) -C src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
+	$(MAKE) -C src module-oss.so
+	# $(MAKE) -C pytest
+
 clean:
-	$(MAKE) -C ./src clean
+	$(MAKE) -C src clean
 .PHONY: clean
 
 deepclean:
-	$(MAKE) -C ./src deepclean
+	$(MAKE) -C src deepclean
 
-BRANCH=$(shell git branch | awk '/\*/{print $$2}')
+BRANCH:=$(shell git branch | awk '/\*/{print $$2}')
 docker:
 	docker build . -t rscoordinator
 

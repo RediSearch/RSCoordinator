@@ -17,6 +17,7 @@ capabilities:
     - clustering
     - backup_restore
     - reshard_rebalance
+    - flash
 exclude_commands:
     - FT.ADDHASH
 overide_command:

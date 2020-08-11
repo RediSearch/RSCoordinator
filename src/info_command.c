@@ -63,6 +63,7 @@ typedef struct {
 typedef struct {
   const char *indexName;
   size_t indexNameLen;
+  MRReply *indexDef;
   MRReply *indexSchema;
   MRReply *indexOptions;
   size_t *errorIndexes;
@@ -127,6 +128,10 @@ static void handleSpecialField(InfoFields *fields, const char *name, MRReply *va
   } else if (!strcmp(name, "fields")) {
     if (!fields->indexSchema) {
       fields->indexSchema = value;
+    }
+  } else if (!strcmp(name, "index_definition")) {
+    if (!fields->indexDef) {
+      fields->indexDef = value;
     }
   } else if (!strcmp(name, "index_options")) {
     if (!fields->indexOptions) {
@@ -212,6 +217,11 @@ static void generateFieldsReply(InfoFields *fields, RedisModuleCtx *ctx) {
   if (fields->indexName) {
     RedisModule_ReplyWithSimpleString(ctx, "index_name");
     RedisModule_ReplyWithStringBuffer(ctx, fields->indexName, fields->indexNameLen);
+    n += 2;
+  }
+  if (fields->indexDef) {
+    RedisModule_ReplyWithSimpleString(ctx, "index_definition");
+    MR_ReplyWithMRReply(ctx, fields->indexDef);
     n += 2;
   }
   if (fields->indexSchema) {

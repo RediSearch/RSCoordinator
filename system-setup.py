@@ -18,17 +18,23 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git cmake wget lcov")
+        self.install("git wget lcov")
 
     def debian_compat(self):
         self.install("libatomic1")
         self.install("build-essential")
+        if self.osnick == 'trusty':
+            self.install("cmake3")
+        else:
+            self.install("cmake")
         self.install("python-psutil")
 
     def redhat_compat(self):
+        self.install("redhat-lsb-core")
         self.install("libatomic")
         self.group_install("'Development Tools'")
-        self.install("redhat-lsb-core")
+        self.install("cmake3")
+        self.run("ln -s `command -v cmake3` /usr/local/bin/cmake")
 
         # self.run("yum remove -y python-setuptools || true")
         # self.pip_install("-IU --force-reinstall setuptools")
@@ -36,10 +42,12 @@ class RedisRSCoordinatorSetup(paella.Setup):
     def fedora(self):
         self.install("libatomic")
         self.group_install("'Development Tools'")
+        self.install("cmake")
 
     def macosx(self):
         if sh('xcode-select -p') == '':
             fatal("Xcode tools are not installed. Please run xcode-select --install.")
+        self.install("cmake")
 
     def common_last(self):
         # redis-py-cluster should be installed from git due to redis-py dependency

@@ -1,7 +1,6 @@
-#include <stdlib.h>
-#include <string.h>
-
+#define REDISMODULE_MAIN
 #include "redismodule.h"
+
 #include "dep/rmr/rmr.h"
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
@@ -16,17 +15,20 @@
 #include "search_cluster.h"
 #include "config.h"
 #include "dep/RediSearch/src/module.h"
-#include <math.h>
 #include "info_command.h"
 #include "version.h"
 #include "cursor.h"
 #include "build-info/info.h"
+#include "aggregate/aggregate.h"
+#include "value.h"
+#include "cluster_spell_check.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 #include <sys/param.h>
 #include <pthread.h>
-#include <aggregate/aggregate.h>
-#include <value.h>
 #include <stdbool.h>
-#include "cluster_spell_check.h"
 
 #define CLUSTERDOWN_ERR "ERRCLUSTER Uninitialized cluster state, could not perform command"
 

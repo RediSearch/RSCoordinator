@@ -70,7 +70,7 @@ SET(FINAL_OBJECTS
 MACRO(MODULE_TARGET SUFFIX)
     SET(_moduleName module-${SUFFIX})
     ADD_LIBRARY(${_moduleName} SHARED ${FINAL_OBJECTS} src/build-info/info-${SUFFIX}.c)
-	TARGET_LINK_LIBRARIES(${_moduleName} redisearch-${SUFFIX} ${LIBUV_LIBRARIES} hiredis)
+    TARGET_LINK_LIBRARIES(${_moduleName} redisearch-${SUFFIX} ${LIBUV_LIBRARIES} hiredis)
 
     IF (${SUFFIX} STREQUAL "oss")
         SET(_moduleDefs "RS_CLUSTER_OSS")

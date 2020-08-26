@@ -23,6 +23,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
     def debian_compat(self):
         self.install("libatomic1")
         self.install("build-essential")
+        self.install("libtool m4 automake")
         if self.osnick == 'trusty':
             self.install("cmake3")
         else:
@@ -33,6 +34,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("redhat-lsb-core")
         self.install("libatomic")
         self.group_install("'Development Tools'")
+        self.install("libtool m4 automake")
         self.install("cmake3")
         self.run("ln -s `command -v cmake3` /usr/local/bin/cmake")
 

@@ -2,6 +2,10 @@ version: 2.1
 
 commands:
   build-steps:
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
     steps:
       - checkout
       - run:
@@ -18,6 +22,12 @@ commands:
           command: |
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
+            fi
+            if [[ <<parameters.search-from-master>> == true ]]; then
+              pushd src/dep/RediSearch
+              git checkout master
+              git pull
+              popd > /dev/null
             fi
       - run:
           name: Configuration & UV Build
@@ -179,4 +189,15 @@ workflows:
       - run_automation:
           requires:
             - deploy_release
-          <<: *on-version-tags
+          # <<: *on-version-tags
+          <<: *never
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "17 30 * * *"
+          <<: *on-master
+    jobs:
+      - bionic
+      - centos7
+          search-from-master: true

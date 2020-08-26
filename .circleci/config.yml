@@ -54,8 +54,13 @@ jobs:
     environment:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
   xenial:
     docker:
@@ -81,8 +86,13 @@ jobs:
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
   deploy_snapshots:
     docker:
@@ -189,8 +199,8 @@ workflows:
       - run_automation:
           requires:
             - deploy_release
-          # <<: *on-version-tags
-          <<: *never
+          <<: *on-version-tags
+          # <<: *never
 
   nightly:
     triggers:
@@ -198,6 +208,7 @@ workflows:
           cron: "17 30 * * *"
           <<: *on-master
     jobs:
-      - bionic
+      - bionic:
+          search-from-master: true
       - centos7:
           search-from-master: true

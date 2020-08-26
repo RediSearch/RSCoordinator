@@ -4,7 +4,8 @@ import sys
 import os
 import argparse
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "deps/readies"))
+ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(ROOT, "deps/readies"))
 import paella
 
 #----------------------------------------------------------------------------------------------
@@ -18,7 +19,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget lcov")
+        self.install("git wget lcov jq")
 
     def debian_compat(self):
         self.install("libatomic1")
@@ -40,7 +41,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
 
         # self.run("yum remove -y python-setuptools || true")
         # self.pip_install("-IU --force-reinstall setuptools")
-        
+
     def fedora(self):
         self.install("libatomic")
         self.group_install("'Development Tools'")
@@ -57,7 +58,8 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("--no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
-        
+
+        self.pip_install("-r %s/readies/paella/requirements.txt" % HERE)
         self.pip_install("awscli pudb")
 
 #----------------------------------------------------------------------------------------------

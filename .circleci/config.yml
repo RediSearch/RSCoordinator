@@ -1,15 +1,19 @@
 version: 2.1
 
 commands:
-  build-steps:
+  setup-automation:
     steps:
-      - checkout
       - run:
           name: Setup automation and install dependencies
           command: |
             (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
             PIP=1 FORCE=1 ./deps/readies/bin/getpy2
             ./system-setup.py
+
+  build-steps:
+    steps:
+      - checkout
+      - setup-automation
       - run:
           name: Install Redis
           command: python2 ./deps/readies/bin/getredis -v 6
@@ -104,15 +108,11 @@ jobs:
     docker:
       - image: redisfab/rmbuilder:6.0.5-x64-buster
     steps:
+      - checkout
+      - setup-automation
       - run:
           name: Run QA Automation
-          command: |
-            apt-get -qq update
-            apt-get -y install ca-certificates curl
-            curl -k -u $QA_AUTOMATION_USERNAME:$QA_AUTOMATION_PASS -X POST \
-                -H "Content-Type: application/json" \
-                -d '{"service_id":"modules_multiple_rs_versions_cycle", "name":"redisearch automation-testing", "properties":{"sut_version":"5.4.4-7", "email_recipients":"s5i1u4h5a8c8w2d7@redislabs.slack.com", "sut_environments":[], "tools_environment":{}, "module_name": "ft", "modules_version":"$CIRCLE_TAG", "cycle_environments_setup":[{"teardown":true, "name":"trusty-amd64-aws", "concurrency":4}, {"teardown":true, "name":"xenial-amd64-aws", "concurrency":4}, {"teardown":true, "name":"rhel7.5-x86_64-aws", "concurrency":4}]}}' \
-                https://qa-automation-center.redislabs.com/processes
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 ./tests/qa/run
 
 
 on-any-branch: &on-any-branch
@@ -164,19 +164,20 @@ workflows:
     jobs:
       - bionic:
           <<: *on-any-branch
-      - xenial:
-          <<: *on-any-branch
-      - centos7:
-          <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
-      - deploy_snapshots:
-          <<: *after-platform-builds
-          <<: *on-master
-      - deploy_release:
-          <<: *after-platform-builds
-          <<: *on-version-tags
+#      - xenial:
+#          <<: *on-any-branch
+#      - centos7:
+#          <<: *on-any-branch
+#      - trusty:
+#          <<: *on-any-branch
+#      - deploy_snapshots:
+#          <<: *after-platform-builds
+#          <<: *on-master
+#      - deploy_release:
+#          <<: *after-platform-builds
+#          <<: *on-version-tags
       - run_automation:
-          requires:
-            - deploy_release
-          <<: *on-version-tags
+#          requires:
+#            - deploy_release
+#         <<: *on-version-tags
+          <<: *on-any-branch

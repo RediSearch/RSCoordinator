@@ -199,5 +199,5 @@ workflows:
           <<: *on-master
     jobs:
       - bionic
-      - centos7
+      - centos7:
           search-from-master: true

@@ -74,19 +74,19 @@ MACRO(MODULE_TARGET SUFFIX)
 
     IF (${SUFFIX} STREQUAL "oss")
         SET(_moduleDefs "RS_CLUSTER_OSS")
-	ELSEIF (${SUFFIX} STREQUAL "enterprise")
-		SET(_moduleDefs "RS_CLUSTER_ENTERPRISE")
+    ELSEIF (${SUFFIX} STREQUAL "enterprise")
+        SET(_moduleDefs "RS_CLUSTER_ENTERPRISE")
     ENDIF()
-	target_compile_definitions(${_moduleName} PRIVATE ${_moduleDefs})
-	
+    target_compile_definitions(${_moduleName} PRIVATE ${_moduleDefs})
+    
     SET_TARGET_PROPERTIES(${_moduleName} PROPERTIES PREFIX "")
     SET_TARGET_PROPERTIES(${_moduleName} PROPERTIES SUFFIX ".so")
 ENDMACRO()
 
 # IF (RS_ENTERPRISE_BUILD)
-# 	MODULE_TARGET(enterprise)
+#   MODULE_TARGET(enterprise)
 # ELSE()
-# 	MODULE_TARGET(oss)
+#   MODULE_TARGET(oss)
 # ENDIF()
 
 MODULE_TARGET(oss)

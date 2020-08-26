@@ -179,3 +179,4 @@ workflows:
       - run_automation:
           requires:
             - deploy_release
+          <<: *on-version-tags

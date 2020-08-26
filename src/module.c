@@ -1405,7 +1405,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   printf("RSValue size: %lu\n", sizeof(RSValue));
 
-  if (RedisModule_Init(ctx, "ft", RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
+  if (RedisModule_Init(ctx, RSCOORDINATOR_MODULE_NAME, RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 

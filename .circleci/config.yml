@@ -172,8 +172,7 @@ workflows:
           <<: *on-any-branch
       - deploy_snapshots:
           <<: *after-platform-builds
-          #@@ <<: *on-master
-          <<: *on-any-branch
+          <<: *on-master
       - deploy_release:
           <<: *after-platform-builds
           <<: *on-version-tags

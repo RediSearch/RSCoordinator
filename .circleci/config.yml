@@ -205,7 +205,7 @@ workflows:
   nightly:
     triggers:
       - schedule:
-          cron: "17 30 * * *"
+          cron: "07 20 * * *"
           <<: *on-master
     jobs:
       - bionic:

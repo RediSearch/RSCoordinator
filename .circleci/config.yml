@@ -40,7 +40,7 @@ commands:
 jobs:
   bionic:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-bionic
+      - image: redisfab/rmbuilder:6.0.6-x64-bionic
     environment:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
@@ -49,7 +49,7 @@ jobs:
 
   xenial:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-xenial
+      - image: redisfab/rmbuilder:6.0.6-x64-xenial
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
@@ -58,7 +58,7 @@ jobs:
 
   trusty:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-trusty
+      - image: redisfab/rmbuilder:6.0.6-x64-trusty
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
@@ -67,7 +67,7 @@ jobs:
   
   centos7:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-centos7
+      - image: redisfab/rmbuilder:6.0.6-x64-centos7
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
@@ -76,7 +76,7 @@ jobs:
 
   deploy_snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-buster
+      - image: redisfab/rmbuilder:6.0.6-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -89,7 +89,7 @@ jobs:
 
   deploy_release:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-buster
+      - image: redisfab/rmbuilder:6.0.6-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -102,7 +102,7 @@ jobs:
 
   run_automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.5-x64-buster
+      - image: redisfab/rmbuilder:6.0.6-x64-buster
     steps:
       - run:
           name: Run QA Automation

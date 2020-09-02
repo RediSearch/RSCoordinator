@@ -229,8 +229,8 @@ workflows:
           cron: "07 20 * * *"
           <<: *on-master
     jobs:
-      - bionic:
+      - build-bionic:
           search-from-master: true
-      - centos7:
+      - build-centos7:
           search-from-master: true
       - nightly-automation

@@ -30,7 +30,7 @@ commands:
             if [[ <<parameters.search-from-master>> == true ]]; then
               pushd src/dep/RediSearch
               git checkout master
-              git pull
+              git pull --recurse-submodules
               popd > /dev/null
             fi
       - run:

@@ -63,7 +63,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
 
-        self.pip_install("-r %s/readies/paella/requirements.txt" % HERE)
+        self.pip_install("-r %s/deps/readies/paella/requirements.txt" % ROOT)
         self.pip_install("awscli pudb")
         self.pip_install("jinja2 semantic_version six")
 

@@ -1,15 +1,23 @@
 version: 2.1
 
 commands:
-  build-steps:
+  setup-automation:
     steps:
-      - checkout
       - run:
           name: Setup automation and install dependencies
           command: |
             (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
             PIP=1 FORCE=1 ./deps/readies/bin/getpy2
             ./system-setup.py
+
+  build-steps:
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
+    steps:
+      - checkout
+      - setup-automation
       - run:
           name: Install Redis
           command: python2 ./deps/readies/bin/getredis -v 6
@@ -18,6 +26,12 @@ commands:
           command: |
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
+            fi
+            if [[ <<parameters.search-from-master>> == true ]]; then
+              pushd src/dep/RediSearch
+              git checkout master
+              git pull
+              popd > /dev/null
             fi
       - run:
           name: Configuration & UV Build
@@ -43,45 +57,55 @@ commands:
             - snapshots/*.tgz
 
 jobs:
-  bionic:
+  build-bionic:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-bionic
+      - image: redisfab/rmbuilder:6.0.7-x64-bionic
     environment:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
-  xenial:
+  build-xenial:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-xenial
+      - image: redisfab/rmbuilder:6.0.7-x64-xenial
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
     steps:
       - build-steps
 
-  trusty:
+  build-trusty:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-trusty
+      - image: redisfab/rmbuilder:6.0.7-x64-trusty
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
     steps:
       - build-steps
   
-  centos7:
+  build-centos7:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-centos7
+      - image: redisfab/rmbuilder:6.0.7-x64-centos7
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
-  deploy_snapshots:
+  deploy-snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-buster
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -93,9 +117,9 @@ jobs:
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
             done
 
-  deploy_release:
+  deploy-release:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-buster
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -107,19 +131,25 @@ jobs:
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
             done
 
-  run_automation:
+  release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.6-x64-buster
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
+      - checkout
+      - setup-automation
       - run:
           name: Run QA Automation
-          command: |
-            apt-get -qq update
-            apt-get -y install ca-certificates curl
-            curl -k -u ${QA_AUTOMATION_USERNAME}:${QA_AUTOMATION_PASS} -X POST \
-                -H 'Content-Type: application/json' \
-                -d "{'service_id':'single_module_test_cycle', 'name':'redisearch automation-testing', 'properties':{'sut_version':'6.0.8', 'email_recipients':'s5i1u4h5a8c8w2d7@redislabs.slack.com', 'sut_environments':[], 'tools_environment':{}, 'module_name': 'search', 'modules_version':"\'${CIRCLE_TAG}\'", 'cycle_environments_setup':[{'teardown':true, 'name':'trusty-amd64-aws', 'concurrency':4}, {'teardown':true, 'name':'xenial-amd64-aws', 'concurrency':4}, {'teardown':true, 'name':'rhel7.8-x86_64-aws', 'concurrency':4}]}}" \
-                https://qa-automation-center.redislabs.com/processes
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+
+  nightly-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly ./tests/qa/run
 
 
 on-any-branch: &on-any-branch
@@ -159,31 +189,48 @@ on-master-and-version-tags: &on-master-and-version-tags
 
 after-platform-builds: &after-platform-builds
   requires:
-    - centos7
-    - bionic
-    - xenial
-    - trusty
+#    - build-centos7
+    - build-bionic
+#    - build-xenial
+#    - build-trusty
  
 
 workflows:
   version: 2
   default_flow:
     jobs:
-      - bionic:
+      - build-bionic:
+          search-from-master: true
           <<: *on-any-branch
-      - xenial:
-          <<: *on-any-branch
-      - centos7:
-          <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
-      - deploy_snapshots:
+#      - build-xenial:
+#          <<: *on-any-branch
+#      - build-centos7:
+#          <<: *on-any-branch
+#      - build-trusty:
+#          <<: *on-any-branch
+      - deploy-snapshots:
           <<: *after-platform-builds
-          <<: *on-master
-      - deploy_release:
+#          <<: *on-master
+          <<: *on-any-branch
+      - deploy-release:
           <<: *after-platform-builds
           <<: *on-version-tags
-      - run_automation:
+      - release-automation:
           requires:
-            - deploy_release
+            - deploy-release
           <<: *on-version-tags
+      - nightly-automation:
+          <<: *after-platform-builds
+          <<: *on-any-branch
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          <<: *on-master
+    jobs:
+      - bionic:
+          search-from-master: true
+      - centos7:
+          search-from-master: true
+      - nightly-automation

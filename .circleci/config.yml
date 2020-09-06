@@ -225,7 +225,9 @@ workflows:
           <<: *on-master
     jobs:
       - build-bionic:
+          name: nightly-bionic
           search-from-master: true
       - build-centos7:
+          name: nightly-centos7
           search-from-master: true
 #      - nightly-automation

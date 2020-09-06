@@ -189,10 +189,10 @@ on-master-and-version-tags: &on-master-and-version-tags
 
 after-platform-builds: &after-platform-builds
   requires:
-#    - build-centos7
+    - build-centos7
     - build-bionic
-#    - build-xenial
-#    - build-trusty
+    - build-xenial
+    - build-trusty
  
 
 workflows:
@@ -200,28 +200,23 @@ workflows:
   default_flow:
     jobs:
       - build-bionic:
-          search-from-master: true
           <<: *on-any-branch
-#      - build-xenial:
-#          <<: *on-any-branch
-#      - build-centos7:
-#          <<: *on-any-branch
-#      - build-trusty:
-#          <<: *on-any-branch
+      - build-xenial:
+          <<: *on-any-branch
+      - build-centos7:
+          <<: *on-any-branch
+      - build-trusty:
+          <<: *on-any-branch
       - deploy-snapshots:
           <<: *after-platform-builds
-#          <<: *on-master
-          <<: *on-any-branch
+          <<: *on-master
       - deploy-release:
           <<: *after-platform-builds
           <<: *on-version-tags
-      - release-automation:
-          requires:
-            - deploy-release
-          <<: *on-version-tags
-      - nightly-automation:
-          <<: *after-platform-builds
-          <<: *on-any-branch
+#      - release-automation:
+#          requires:
+#            - deploy-release
+#          <<: *on-version-tags
 
   nightly:
     triggers:
@@ -233,4 +228,4 @@ workflows:
           search-from-master: true
       - build-centos7:
           search-from-master: true
-      - nightly-automation
+#      - nightly-automation

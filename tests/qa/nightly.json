@@ -13,7 +13,7 @@
         "teardown": true,
         "name": "bionic-amd64-aws",
         "concurrency": 1,
-        "module_url": ""http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.master-snapshot.zip"
+        "module_url": "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.master-snapshot.zip"
       }
     ]
   }

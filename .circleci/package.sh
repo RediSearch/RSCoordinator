@@ -1,10 +1,15 @@
 #!/bin/bash
+
 set -x
 set -e
 
-export MODULE_SO=$BUILD_DIR/module-enterprise.so
-export PACKAGE_NAME="redisearch"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT=$(cd $HERE/..; pwd)
 
-source src/dep/RediSearch/.circleci/ci_package.sh
+BUILD_DIR=${BUILD_DIR:-build}
 
-# And let 'er rip
+export ARTDIR=$ROOT/$BUILD_DIR/artifacts
+export PACKAGE_NAME=redisearch
+export RAMP_YAML=$ROOT/ramp.yml
+
+$ROOT/src/dep/RediSearch/pack.sh $ROOT/$BUILD_DIR/module-enterprise.so

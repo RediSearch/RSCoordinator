@@ -9,3 +9,4 @@
 .git
 **/print_version
 site
+/artifacts/*

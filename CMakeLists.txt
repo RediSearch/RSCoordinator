@@ -81,6 +81,10 @@ MACRO(MODULE_TARGET SUFFIX)
     
     SET_TARGET_PROPERTIES(${_moduleName} PROPERTIES PREFIX "")
     SET_TARGET_PROPERTIES(${_moduleName} PROPERTIES SUFFIX ".so")
+
+    ADD_CUSTOM_COMMAND(TARGET ${_moduleName} POST_BUILD
+		COMMAND objcopy --only-keep-debug $<TARGET_FILE:${_moduleName}> $<TARGET_FILE:${_moduleName}>.debug
+        COMMAND ${CMAKE_STRIP} -g $<TARGET_FILE:${_moduleName}>)
 ENDMACRO()
 
 # IF (RS_ENTERPRISE_BUILD)

@@ -32,7 +32,7 @@ commands:
           name: Package
           command: ./.circleci/package.sh && ./.circleci/package-light.sh
       - persist_to_workspace:
-          root: /workspace
+          root: artifacts
           paths:
             - '*.zip'
             - '*.tgz'

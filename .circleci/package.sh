@@ -8,7 +8,7 @@ ROOT=$(cd $HERE/..; pwd)
 
 BUILD_DIR=${BUILD_DIR:-build}
 
-export ARTDIR=$ROOT/$BUILD_DIR/artifacts
+export ARTDIR=$ROOT/artifacts
 export PACKAGE_NAME=redisearch
 export RAMP_YAML=$ROOT/ramp.yml
 

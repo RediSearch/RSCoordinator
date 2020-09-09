@@ -25,7 +25,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("build-essential")
         self.install("libtool m4 automake")
         if self.osnick == 'trusty':
-            self.install("cmake3")
+            self.install("cmake3 realpath")
         else:
             self.install("cmake")
         self.install("python-psutil")

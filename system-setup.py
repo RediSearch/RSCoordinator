@@ -18,14 +18,14 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget lcov")
+        self.install("git wget gawk lcov")
 
     def debian_compat(self):
         self.install("libatomic1")
         self.install("build-essential")
         self.install("libtool m4 automake")
         if self.osnick == 'trusty':
-            self.install("cmake3")
+            self.install("cmake3 realpath")
         else:
             self.install("cmake")
         self.install("python-psutil")
@@ -59,6 +59,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
         
         self.pip_install("awscli pudb")
+        self.pip_install("jinja2 semantic_version six")
 
 #----------------------------------------------------------------------------------------------
 

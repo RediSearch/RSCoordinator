@@ -18,7 +18,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget lcov")
+        self.install("git wget gawk lcov")
 
     def debian_compat(self):
         self.install("libatomic1")

@@ -23,12 +23,19 @@ class RedisRSCoordinatorSetup(paella.Setup):
     def debian_compat(self):
         self.install("libatomic1")
         self.install("build-essential")
-        self.install("libtool m4 automake")
         if self.osnick == 'trusty':
-            self.install("cmake3 realpath")
+            self.ubuntu_trusty()
         else:
+            self.install("libtool m4 automake")
             self.install("cmake")
         self.install("python-psutil")
+        
+    def ubuntu_trusty(self):
+        self.install_ubuntu_modern_gcc()
+        self.install("libtool m4 automake") # after modern gcc
+        self.install("cmake3")
+        self.install("realpath")
+        self.install_linux_gnu_tar()
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
@@ -37,9 +44,6 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("libtool m4 automake")
         self.install("cmake3")
         self.run("ln -s `command -v cmake3` /usr/local/bin/cmake")
-
-        # self.run("yum remove -y python-setuptools || true")
-        # self.pip_install("-IU --force-reinstall setuptools")
         
     def fedora(self):
         self.install("libatomic")

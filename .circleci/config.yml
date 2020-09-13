@@ -206,7 +206,7 @@ workflows:
 #      - centos7:
 #          <<: *on-any-branch
 #      - trusty:
-3          <<: *on-any-branch
+#          <<: *on-any-branch
       - deploy-snapshots:
           <<: *after-platform-builds
           <<: *on-master

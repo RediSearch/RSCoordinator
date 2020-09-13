@@ -1,5 +1,5 @@
 {
-  "service_id": "single_module_test_cycle_sanity_and_extended",
+  "service_id": "single_module_test_cycle",
   "name": "redisearch automation-testing",
   "properties": {
     "sut_version": "master",

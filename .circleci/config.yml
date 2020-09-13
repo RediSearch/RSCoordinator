@@ -57,7 +57,7 @@ commands:
             - snapshots/*.tgz
 
 jobs:
-  build-bionic:
+  bionic:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-bionic
     environment:
@@ -71,7 +71,7 @@ jobs:
       - build-steps:
           search-from-master: <<parameters.search-from-master>>
 
-  build-xenial:
+  xenial:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-xenial
     environment:
@@ -80,7 +80,7 @@ jobs:
     steps:
       - build-steps
 
-  build-trusty:
+  trusty:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-trusty
     environment:
@@ -89,7 +89,7 @@ jobs:
     steps:
       - build-steps
   
-  build-centos7:
+  centos7:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-centos7
     environment:
@@ -189,34 +189,38 @@ on-master-and-version-tags: &on-master-and-version-tags
 
 after-platform-builds: &after-platform-builds
   requires:
-    - build-centos7
-    - build-bionic
-    - build-xenial
-    - build-trusty
+#    - centos7
+    - bionic
+#    - xenial
+#    - trusty
  
 
 workflows:
   version: 2
   default_flow:
     jobs:
-      - build-bionic:
+      - bionic:
           <<: *on-any-branch
-      - build-xenial:
-          <<: *on-any-branch
-      - build-centos7:
-          <<: *on-any-branch
-      - build-trusty:
-          <<: *on-any-branch
+#      - xenial:
+#          <<: *on-any-branch
+#      - centos7:
+#          <<: *on-any-branch
+#      - trusty:
+3          <<: *on-any-branch
       - deploy-snapshots:
           <<: *after-platform-builds
           <<: *on-master
       - deploy-release:
           <<: *after-platform-builds
           <<: *on-version-tags
-#      - release-automation:
-#          requires:
-#            - deploy-release
-#          <<: *on-version-tags
+      - nightly-automation:
+          name: nightly-automation-test
+          <<: *after-platform-builds
+          <<: *on-any-branch
+      - release-automation:
+          requires:
+            - deploy-release
+          <<: *on-version-tags
 
   nightly:
     triggers:
@@ -224,10 +228,10 @@ workflows:
           cron: "07 20 * * *"
           <<: *on-master
     jobs:
-      - build-bionic:
+      - bionic:
           name: nightly-bionic
           search-from-master: true
-      - build-centos7:
+      - centos7:
           name: nightly-centos7
           search-from-master: true
-#      - nightly-automation
+      - nightly-automation

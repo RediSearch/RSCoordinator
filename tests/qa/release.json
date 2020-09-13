@@ -7,7 +7,7 @@
     "sut_environments": [],
     "tools_environment": {},
     "module_name": "search",
-    "module_version": "{{MODULE_VERSION}}",
+    "modules_version": "{{MODULE_VERSION}}",
     "cycle_environments_setup": [
       {
         "teardown": true,

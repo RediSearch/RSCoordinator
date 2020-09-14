@@ -1,0 +1,26 @@
+service_id: single_module_test_cycle
+name: redisearch automation-testing
+properties:
+  sut_version: master
+  email_recipients: s5i1u4h5a8c8w2d7@redislabs.slack.com
+  sut_environments: []
+  tools_environment: {}
+  module_name: search
+  modules_version: "{{MODULE_VERSION}}"
+  cycle_environments_setup:
+    - name: trusty-amd64-aws
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      teardown: true
+      concurrency: 4
+    - name: xenial-amd64-aws
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      teardown: true
+      concurrency: 4
+    - name: bionic-amd64-aws
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      teardown: true
+      concurrency: 4
+    - name: rhel7.8-amd64-aws
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      teardown: true
+      concurrency: 4

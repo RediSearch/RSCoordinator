@@ -189,10 +189,10 @@ on-master-and-version-tags: &on-master-and-version-tags
 
 after-platform-builds: &after-platform-builds
   requires:
-#    - centos7
+    - centos7
     - bionic
-#    - xenial
-#    - trusty
+    - xenial
+    - trusty
  
 
 workflows:
@@ -201,22 +201,18 @@ workflows:
     jobs:
       - bionic:
           <<: *on-any-branch
-#      - xenial:
-#          <<: *on-any-branch
-#      - centos7:
-#          <<: *on-any-branch
-#      - trusty:
-#          <<: *on-any-branch
+      - xenial:
+          <<: *on-any-branch
+      - centos7:
+          <<: *on-any-branch
+      - trusty:
+          <<: *on-any-branch
       - deploy-snapshots:
           <<: *after-platform-builds
           <<: *on-master
       - deploy-release:
           <<: *after-platform-builds
           <<: *on-version-tags
-      - nightly-automation:
-          name: nightly-automation-test
-          <<: *after-platform-builds
-          <<: *on-any-branch
       - release-automation:
           requires:
             - deploy-release

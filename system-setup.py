@@ -4,7 +4,8 @@ import sys
 import os
 import argparse
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "deps/readies"))
+ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(ROOT, "deps/readies"))
 import paella
 
 #----------------------------------------------------------------------------------------------
@@ -18,7 +19,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget gawk lcov")
+        self.install("git wget gawk lcov jq")
 
     def debian_compat(self):
         self.install("libatomic1")
@@ -61,7 +62,8 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("--no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
         self.pip_install("--no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
-        
+
+        self.pip_install("-r %s/deps/readies/paella/requirements.txt" % ROOT)
         self.pip_install("awscli pudb")
         self.pip_install("jinja2 semantic_version six")
 

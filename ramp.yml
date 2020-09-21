@@ -20,6 +20,7 @@ capabilities:
     - flash
     - crdb
     - eviction_expiry
+    - hash_policy
 exclude_commands:
     - FT.CREATE
     - FT.DROP

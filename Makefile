@@ -49,7 +49,7 @@ _PYTEST_ARGS=\
 	--module $(abspath $(BUILD_DIR)/module-oss.so) --module-args "$(strip PARTITIONS AUTO $(MODULE_ARGS))" \
 	$(PYTEST_ARGS)
 
-ifeq ($(TEST_GDB),1)
+ifeq ($(GDB),1)
 _PYTEST_ARGS += -s --shards-count 1 --debugger gdb
 else
 _PYTEST_ARGS += --shards-count 3

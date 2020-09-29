@@ -46,7 +46,7 @@ _PYTEST_ARGS=\
 	-t ./src/dep/RediSearch/src/pytest/$(TEST) \
 	--env oss-cluster --env-reuse \
 	 --clear-logs \
-	--module $(abspath $(BUILD_DIR)/module-oss.so) --module-args "PARTITIONS AUTO $(MODULE_ARGS)" \
+	--module $(abspath $(BUILD_DIR)/module-oss.so) --module-args "$(strip PARTITIONS AUTO $(MODULE_ARGS))" \
 	$(PYTEST_ARGS)
 
 ifeq ($(TEST_GDB),1)
@@ -58,15 +58,7 @@ _PYTEST_ARGS += -s
 endif
 endif
 
-define rmtest_config
-[server]
-module = $(abspath $(BUILD_DIR)/module-oss.so)
-endef
-
-$(info $(rmtest_config))
-
 pytest:
-	$(file >rmtest.config,$(rmtest_config))
 	$(PYTHON) -m RLTest $(_PYTEST_ARGS)
 
 #----------------------------------------------------------------------------------------------

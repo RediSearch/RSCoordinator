@@ -1,33 +1,78 @@
 
 ROOT:=$(shell pwd)
 
+#----------------------------------------------------------------------------------------------
+ 
+ifeq ($(DEBUG),1)
+CONFIG_ARGS += --enable-debug
+endif
+
 all: build
 
 export BUILD_DIR ?= build
 
 configure:
 	mkdir -p $(BUILD_DIR)
-	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8
+	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8 $(CONFIG_ARGS)
 
+ifeq ($(wildcard $(BUILD_DIR)/Makefile),)
+build: configure
+else
 build:
+endif
 	$(MAKE) -C $(BUILD_DIR)
-.PHONY: build
 
-test: build
-	$(MAKE) -C test
-	$(MAKE) -C src/dep/rmr/test test
-	$(MAKE) -C src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
-	$(MAKE) -C src module-oss.so
-	# $(MAKE) -C pytest
+.PHONY: build
 
 clean:
 	$(MAKE) -C src clean
+
 .PHONY: clean
 
 deepclean:
 	$(MAKE) -C src deepclean
 
+#----------------------------------------------------------------------------------------------
+ 
+test: build
+	$(MAKE) -C test
+	$(MAKE) -C src/dep/rmr/test test
+	$(MAKE) -C src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
+	$(MAKE) -C src module-oss.so
+
+PYTHON ?= python2
+
+_PYTEST_ARGS=\
+	-t ./src/dep/RediSearch/src/pytest/$(TEST) \
+	--env oss-cluster --env-reuse \
+	 --clear-logs \
+	--module $(abspath $(BUILD_DIR)/module-oss.so) --module-args "PARTITIONS AUTO $(MODULE_ARGS)" \
+	$(PYTEST_ARGS)
+
+ifeq ($(TEST_GDB),1)
+_PYTEST_ARGS += -s --shards-count 1 --debugger gdb
+else
+_PYTEST_ARGS += --shards-count 3
+ifneq ($(TEST),)
+_PYTEST_ARGS += -s
+endif
+endif
+
+define rmtest_config
+[server]
+module = $(abspath $(BUILD_DIR)/module-oss.so)
+endef
+
+$(info $(rmtest_config))
+
+pytest:
+	$(file >rmtest.config,$(rmtest_config))
+	$(PYTHON) -m RLTest $(_PYTEST_ARGS)
+
+#----------------------------------------------------------------------------------------------
+
 BRANCH:=$(shell git branch | awk '/\*/{print $$2}')
+
 docker:
 	docker build . -t rscoordinator
 

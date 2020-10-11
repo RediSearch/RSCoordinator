@@ -16,6 +16,6 @@ cd $BUILD_DIR
 
 ctest -V
 
-test_args="--env oss-cluster --env-reuse -t $ROOT/src/dep/RediSearch/src/pytest/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO"
+test_args="--env oss-cluster --env-reuse -t $ROOT/src/dep/RediSearch/tests/pytests/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO"
 python -m RLTest $test_args --module-args "PARTITIONS AUTO"
 python -m RLTest $test_args --module-args "PARTITIONS AUTO SAFEMODE"

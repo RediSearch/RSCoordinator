@@ -8,6 +8,13 @@
 SearchCluster NewSearchCluster(size_t size, const char **table, size_t tableSize) {
   SearchCluster ret = (SearchCluster){.size = size, .shardsStartSlots=NULL,};
   PartitionCtx_Init(&ret.part, size, table, tableSize);
+  if(size){
+    // assume slots are equaly distributed
+    ret.shardsStartSlots = malloc(sizeof(int) * size);
+    for(size_t j = 0, i = 0 ; i < tableSize ; j++, i+=(tableSize/size)){
+      ret.shardsStartSlots[j] = i;
+    }
+  }
   return ret;
 }
 

@@ -212,7 +212,10 @@ static void MRConn_Stop(MRConn *conn) {
 static void freeConn(MRConn *conn) {
   MREndpoint_Free(&conn->ep);
   if (conn->timer) {
-    free(conn->timer);
+    if (uv_is_active(conn->timer)) {
+      uv_timer_stop(conn->timer);
+    }
+    uv_close(conn->timer, (uv_close_cb)free);
   }
   free(conn);
 }
@@ -353,13 +356,6 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     } else {
       // Will be freed anyway
     }
-    return;
-  }
-
-  if (conn->state == MRConn_Freeing) {
-    // Free the object if successful
-    detachFromConn(conn, status == REDIS_OK);
-    freeConn(conn);
     return;
   }
 

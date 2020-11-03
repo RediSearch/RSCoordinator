@@ -3,6 +3,7 @@
 #include <uv.h>
 #include <redismodule.h>
 #include "dep/RediSearch/src/rmutil/periodic.h"
+#include "../../version.h"
 
 #define REDIS_CLUSTER_REFRESH_TIMEOUT 1000
 
@@ -115,7 +116,7 @@ static int updateTopoCB(RedisModuleCtx *ctx, void *p) {
   RedisModule_ThreadSafeContextLock(ctx);
   RedisModule_AutoMemory(ctx);
 
-  RedisModuleCallReply *r = RedisModule_Call(ctx, "FT.CLUSTERREFRESH", "");
+  RedisModuleCallReply *r = RedisModule_Call(ctx, RSCOORDINATOR_MODULE_NAME".CLUSTERREFRESH", "");
   if (RedisModule_CallReplyType(r) == REDIS_REPLY_ERROR) {
     fprintf(stderr, "Error running CLUSTERREFRESH: %s\n", RedisModule_CallReplyStringPtr(r, NULL));
   }

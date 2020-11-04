@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include "../../version.h"
 
 /*
  * Forward declaration
@@ -69,7 +70,7 @@ struct mrCommandConf __commandConfig[] = {
     {"FT.CREATE", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.RULEADD", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.RULESET", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
-    {"FT.CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1, -1, NULL},
+    {RSCOORDINATOR_MODULE_NAME".CLUSTERINFO", MRCommand_Read | MRCommand_Coordination, -1, -1, NULL},
     {"FT.INFO", MRCommand_Read | MRCommand_Coordination, -1, 1, NULL},
     {"FT.ADDHASH", MRCommand_Read | MRCommand_Coordination, -1, 2, NULL},
     {"FT.DEL", MRCommand_Read | MRCommand_Coordination, -1, 2, NULL},

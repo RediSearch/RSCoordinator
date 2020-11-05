@@ -40,7 +40,7 @@ $ mkdir build
 
 $ python configure.py
 
-$ cd buidl
+$ cd build
 
 $ make
 

@@ -34,7 +34,8 @@ fi
 
 export TEST=${TEST:-release}
 if [[ ! -f $TEST.json ]]; then
-
+	echo "Invalid TEST name: $TEST" >&2
+	exit 1
 fi
 
 export RS_VERSION=$(cat $HERE/RS_VERSION)

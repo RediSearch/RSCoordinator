@@ -9,7 +9,7 @@
     "module_name": "search",
     "modules_version": "master",
     "test_names_modules": [
-        "RediSearchEnterprise"
+        "{{RS_MODULE}}"
     ],
     "cycle_environments_setup": [
       {

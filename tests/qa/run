@@ -1,9 +1,9 @@
 #!/bin/bash
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT=$HERE/../..
+ROOT=$(cd $HERE/../..; pwd)
 
-[[ $VERBOSE == 1 ]] && { set -x; PS4='$LINENO: '; }
+(( $VERBOSE > 1 )) && { set -x; PS4='$LINENO: '; }
 
 if [[ $1 == --help || $1 == help ]]; then
 	cat <<-END
@@ -18,7 +18,7 @@ if [[ $1 == --help || $1 == help ]]; then
 		MODULE_VERSION=ver            Module version to test. Default: master
 		LIGHT=1                       Test RediSearch Light
 		NOP=1                         Do not execute automation command
-		VERBOSE=1                     Print commands as they run
+		VERBOSE=N                     Set verbosity level (N=1,2)
 
 		Other configuration:
 		RS_VERSION file includes Redis Enterprive version for release tests.
@@ -66,7 +66,7 @@ cd $HERE
 
 json_in=$(mktemp /tmp/$TEST.json.XXXX)
 $ROOT/deps/readies/bin/xtx -e RS_MODULE -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
-[[ $VERBOSE == 1 ]] && cat $json_in
+(( $VERBOSE >= 1 )) && cat $json_in
 
 [[ $NOP == 1 ]] && exit 0
 

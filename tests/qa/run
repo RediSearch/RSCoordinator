@@ -3,6 +3,26 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT=$HERE/../..
 
+if [[ $1 == --help || $1 == help ]]; then
+	cat <<-END
+		Invoke QA Automation tests
+
+		[ARGVARS...] run [--help|help]
+
+		Argument variables:
+		QA_AUTOMATION_USERNAME=name   QA automation (Opereto) username
+		QA_AUTOMATION_PASS=pass       QA automation (Opereto) password
+		TEST=name                     Name of .json parameters file
+		MODULE_VERSION=ver            Module version to test. Default: master
+		LIGHT=1                       Test RediSearch Light
+
+		Other configuration:
+		RS_VERSION file includes Redis Enterprive version for release tests.
+
+	END
+	exit 0
+fi
+
 if [[ -z $QA_AUTOMATION_USERNAME ]]; then
 	echo "Variable QA_AUTOMATION_USERNAME is undefined." >&2
 	exit 1
@@ -13,7 +33,26 @@ if [[ -z $QA_AUTOMATION_PASS ]]; then
 fi
 
 export TEST=${TEST:-release}
-export MODULE_VERSION=${MODULE_VERSION:-master}
+if [[ ! -f $TEST.json ]]; then
+	echo "Invalid TEST name: $TEST" >&2
+	exit 1
+fi
+
+export RS_VERSION=$(cat $HERE/RS_VERSION)
+
+if [[ -z $MODULE_VERSION ]]; then
+	export MODULE_VERSION=master
+else
+	export MODULE_VERSION=$(echo "$MODULE_VERSION" | sed  's/^v\(.*\)/\1/')
+fi
+
+if [[ $LIGHT == 1 ]]; then
+	RS_MODULE=RedisearchLight
+	RS_MODULE_FILE_PREFIX=redisearch-light
+else
+	RS_MODULE=RediSearchEnterprise
+	RS_MODULE_FILE_PREFIX=redisearch
+fi
 
 results() {
 	echo "$JSON" | jq "$1" | cut -d\" -f2
@@ -22,7 +61,7 @@ results() {
 cd $HERE
 
 json_in=$(mktemp /tmp/$TEST.json.XXXX)
-$ROOT/deps/readies/bin/xtx -e MODULE_VERSION $TEST.json > $json_in
+$ROOT/deps/readies/bin/xtx -e RS_MODULE -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
 [[ $VERBOSE == 1 ]] && cat $json_in
 
 JSON=$(curl -sk \

@@ -48,8 +48,10 @@ fi
 
 if [[ $LIGHT == 1 ]]; then
 	RS_MODULE=RedisearchLight
+	RS_MODULE_FILE_PREFIX=redisearch-light
 else
 	RS_MODULE=RediSearchEnterprise
+	RS_MODULE_FILE_PREFIX=redisearch
 fi
 
 results() {

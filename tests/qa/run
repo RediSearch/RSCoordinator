@@ -3,6 +3,8 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT=$HERE/../..
 
+[[ $VERBOSE == 1 ]] && { set -x; PS4='$LINENO: '; }
+
 if [[ $1 == --help || $1 == help ]]; then
 	cat <<-END
 		Invoke QA Automation tests
@@ -15,6 +17,8 @@ if [[ $1 == --help || $1 == help ]]; then
 		TEST=name                     Name of .json parameters file
 		MODULE_VERSION=ver            Module version to test. Default: master
 		LIGHT=1                       Test RediSearch Light
+		NOP=1                         Do not execute automation command
+		VERBOSE=1                     Print commands as they run
 
 		Other configuration:
 		RS_VERSION file includes Redis Enterprive version for release tests.
@@ -33,7 +37,7 @@ if [[ -z $QA_AUTOMATION_PASS ]]; then
 fi
 
 export TEST=${TEST:-release}
-if [[ ! -f $TEST.json ]]; then
+if [[ ! -f $HERE/$TEST.json ]]; then
 	echo "Invalid TEST name: $TEST" >&2
 	exit 1
 fi
@@ -47,11 +51,11 @@ else
 fi
 
 if [[ $LIGHT == 1 ]]; then
-	RS_MODULE=RedisearchLight
-	RS_MODULE_FILE_PREFIX=redisearch-light
+	export RS_MODULE=RedisearchLight
+	export RS_MODULE_FILE_PREFIX=redisearch-light
 else
-	RS_MODULE=RediSearchEnterprise
-	RS_MODULE_FILE_PREFIX=redisearch
+	export RS_MODULE=RediSearchEnterprise
+	export RS_MODULE_FILE_PREFIX=redisearch
 fi
 
 results() {
@@ -63,6 +67,8 @@ cd $HERE
 json_in=$(mktemp /tmp/$TEST.json.XXXX)
 $ROOT/deps/readies/bin/xtx -e RS_MODULE -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
 [[ $VERBOSE == 1 ]] && cat $json_in
+
+[[ $NOP == 1 ]] && exit 0
 
 JSON=$(curl -sk \
 	-u "$QA_AUTOMATION_USERNAME":"$QA_AUTOMATION_PASS" \

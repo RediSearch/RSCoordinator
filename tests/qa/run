@@ -13,7 +13,12 @@ if [[ -z $QA_AUTOMATION_PASS ]]; then
 fi
 
 export TEST=${TEST:-release}
-export MODULE_VERSION=${MODULE_VERSION:-master}
+
+if [[ -z $MODULE_VERSION ]]; then
+	export MODULE_VERSION=master
+else
+	export MODULE_VERSION=$(echo "$MODULE_VERSION" | sed  's/^v\(.*\)/\1/')
+fi
 
 results() {
 	echo "$JSON" | jq "$1" | cut -d\" -f2

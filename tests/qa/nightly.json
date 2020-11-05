@@ -8,6 +8,9 @@
     "tools_environment": {},
     "module_name": "search",
     "modules_version": "master",
+    "test_names_modules": [
+        "RediSearchEnterprise"
+    ],
     "cycle_environments_setup": [
       {
         "teardown": true,

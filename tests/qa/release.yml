@@ -1,28 +1,28 @@
 service_id: single_module_test_cycle
 name: redisearch automation-testing
 properties:
-  sut_version: master
+  sut_version: {{RS_VERSION}}
   email_recipients: s5i1u4h5a8c8w2d7@redislabs.slack.com
   sut_environments: []
   tools_environment: {}
   module_name: search
-  modules_version: "{{MODULE_VERSION}}"
+  modules_version: {{MODULE_VERSION}}
   test_names_modules:
-    - RediSearchEnterprise
+    - {{RS_MODULE}}
   cycle_environments_setup:
     - name: trusty-amd64-aws
-      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/{{RS_MODULE_FILE_PREFIX}}.Linux-ubuntu14.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
       teardown: true
-      concurrency: 4
+      concurrency: 1
     - name: xenial-amd64-aws
-      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/{{RS_MODULE_FILE_PREFIX}}.Linux-ubuntu16.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
       teardown: true
-      concurrency: 4
+      concurrency: 1
     - name: bionic-amd64-aws
-      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/{{RS_MODULE_FILE_PREFIX}}.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
       teardown: true
-      concurrency: 4
-    - name: rhel7.8-amd64-aws
-      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/redisearch.Linux-ubuntu18.04-x86_64.{{MODULE_VERSION}}-snapshot.zip"
+      concurrency: 1
+    - name: rhel7.7-amd64-aws
+      # module_url: "http://redismodules.s3.amazonaws.com/redisearch/snapshots/{{RS_MODULE_FILE_PREFIX}}.Linux-rhel7-x86_64.{{MODULE_VERSION}}-snapshot.zip"
       teardown: true
-      concurrency: 4
+      concurrency: 1

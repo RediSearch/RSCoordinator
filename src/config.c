@@ -74,6 +74,21 @@ CONFIG_GETTER(getTimeout) {
   return sdscatprintf(ss, "%d", realConfig->timeoutMS);
 }
 
+CONFIG_SETTER(setGlobalPass) {
+  SearchClusterConfig *realConfig = getOrCreateRealConfig(config);
+  int acrc = AC_GetString(ac, &realConfig->globalPass, NULL, 0);
+  if (acrc != AC_OK) {
+    QueryError_SetError(status, QUERY_EPARSEARGS, NULL);
+    return REDISMODULE_ERR;
+  }
+  return REDISMODULE_OK;
+}
+
+CONFIG_GETTER(getGlobalPass) {
+  sds ss = sdsempty();
+  return sdscatprintf(ss, "Password: *******");
+}
+
 static RSConfigOptions clusterOptions_g = {
     .vars =
         {
@@ -86,6 +101,10 @@ static RSConfigOptions clusterOptions_g = {
              .helpText = "Cluster synchronization timeout",
              .setValue = setTimeout,
              .getValue = getTimeout},
+             {.name = "OSS_GLOBAL_PASSWORD",
+              .helpText = "Global oss cluster password that will be used to connect to other shards",
+              .setValue = setGlobalPass,
+              .getValue = getGlobalPass},
             {.name = NULL}
             // fin
         }

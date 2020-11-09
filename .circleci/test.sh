@@ -17,5 +17,6 @@ cd $BUILD_DIR
 ctest -V
 
 test_args="--env oss-cluster --env-reuse -t $ROOT/src/dep/RediSearch/tests/pytests/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO"
-python -m RLTest $test_args --module-args "PARTITIONS AUTO"
-python -m RLTest $test_args --module-args "PARTITIONS AUTO SAFEMODE"
+python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO"
+python2.7 -m RLTest $test_args --oss_password password --module-args "OSS_GLOBAL_PASSWORD password PARTITIONS AUTO"
+python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO SAFEMODE"

@@ -1,3 +1,4 @@
+#include "../../config.h"
 #include "cluster.h"
 #include "conn.h"
 #include <uv.h>
@@ -82,7 +83,7 @@ MRClusterTopology *RedisCluster_GetTopology(RedisModuleCtx *ctx) {
       MRClusterNode node = {
           .endpoint =
               (MREndpoint){
-                  .host = strndup(host, hostlen), .port = port, .auth = NULL, .unixSock = NULL},
+                  .host = strndup(host, hostlen), .port = port, .auth = (clusterConfig.globalPass ? strdup(clusterConfig.globalPass) : NULL) , .unixSock = NULL},
           .id = strndup(id, idlen),
           .flags = MRNode_Coordinator,
       };

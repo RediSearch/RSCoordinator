@@ -57,6 +57,11 @@ loadmodule /path/to/oss-module.so
 ```
 
 The module automatically discovers the Redis cluster topology and distributes the search commands accordingly.
+Notice that it is possible to give a global password that will be used to connect to other shards using OSS_GLOBAL_PASSWORD module argument, i.e:
+
+```
+loadmodule /path/to/oss-module.so OSS_GLOBAL_PASSWORD <password>
+```
 
 # Commands
 

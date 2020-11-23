@@ -238,11 +238,9 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
   tmparr = array_append(tmparr, "_NUM_SSTRING");
 
   for (size_t ii = 0; ii < us->nserialized; ++ii) {
+    tmparr = array_append(tmparr, us->serialized[ii]);
     if (strncasecmp("LIMIT",  us->serialized[ii], strlen("LIMIT")) == 0) {
-      if (ii + 2 > us->nserialized) {
-        // Shard will return an error for missing offset and/or limit
-        tmparr = array_append(tmparr, us->serialized[ii]);
-      } else {
+      if (ii + 2 <= us->nserialized) {
         // change offset to `0`
         tmparr = array_append(tmparr, "0");
         
@@ -254,8 +252,6 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
         tmparr = array_append(tmparr, buf);
         ii += 2;
       }
-    } else {
-      tmparr = array_append(tmparr, us->serialized[ii]);
     }
   }
 

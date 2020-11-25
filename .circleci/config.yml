@@ -1,140 +1,236 @@
-version: 2
+version: 2.1
 
-defaults:
-  ci_steps: &ci_steps
-    - checkout
-    - run:
-        name: Python Dependencies
-        command: |
-          wget -q https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py
-          python /tmp/get-pip.py
-          python -m pip install --upgrade setuptools
-          python -m pip uninstall -y -q redis redis-py-cluster ramp-packer RLTest rmtest semantic-version
-          python -m pip install --no-cache-dir git+https://github.com/Grokzen/redis-py-cluster.git@master
-          python -m pip install --no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master
-          python -m pip install --no-cache-dir git+https://github.com/RedisLabs/RAMP@master        
-    - run:
-          name: Redis_5_upgrade
-          command: cd ..;rm -rf ./redis; git clone https://github.com/antirez/redis.git; cd ./redis; git fetch; git checkout 5.0.8; make; make install
-    - run:
-        name: Submodule checkout
-        command: |
-          if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
-            git submodule update --init --recursive
-          fi
+commands:
+  setup-automation:
+    steps:
+      - run:
+          name: Setup automation and install dependencies
+          command: |
+            (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
+            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            ./system-setup.py
 
-    - run:
-        name: Configuration & UV Build
-        command: ./.circleci/configure.sh
-    
-    - run:
-        name: Main Build
-        command: ./.circleci/build.sh
-    - run:
-        name: Test
-        command: ./.circleci/test.sh
-    - run:
-        name: Package
-        command: ./.circleci/package.sh && ./.circleci/package-light.sh
-
-    - persist_to_workspace:
-        root: /workspace
-        paths:
-          - 'snapshot'
-          - 'release'
-
-  default_jobs: &default_jobs
-    - centos
-    - ubuntu
-    - trusty
+  build-steps:
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Install Redis
+          command: python2 ./deps/readies/bin/getredis -v 6
+      - run:
+          name: Submodule checkout
+          command: |
+            if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
+              git submodule update --init --recursive
+            fi
+            if [[ <<parameters.search-from-master>> == true ]]; then
+              pushd src/dep/RediSearch
+              git checkout master
+              git pull --recurse-submodules
+              popd > /dev/null
+            fi
+      - run:
+          name: Configuration & UV Build
+          command: ./.circleci/configure.sh
+      - run:
+          name: Main Build
+          command: ./.circleci/build.sh
+      - run:
+          name: Test
+          command: ./.circleci/test.sh
+      - run:
+          name: Package
+          command: |
+            ./.circleci/package.sh
+            ./.circleci/package-light.sh
+      - persist_to_workspace:
+          root: /workspace
+          paths:
+            - 'snapshot'
+            - 'release'
 
 jobs:
-  ubuntu:
+  bionic:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-bionic
     environment:
-      - BUILD_DIR: build-debian
-      - DIST_SUFFIX: -ubuntu16.04
+      - BUILD_DIR: build-bionic
+      - DIST_SUFFIX: -ubuntu18.04
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
+    steps:
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
-    steps: *ci_steps
+  xenial:
+    docker:
+      - image: redisfab/rmbuilder:6.0.7-x64-xenial
+    environment:
+      - BUILD_DIR: build-xenial
+      - DIST_SUFFIX: -ubuntu16.04
+    steps:
+      - build-steps
 
   trusty:
     docker:
-      - image: 'redislabsmodules/rmbuildertrusty:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-trusty
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
-    steps: *ci_steps
+    steps:
+      - build-steps
   
-  centos:
+  centos7:
     docker:
-      - image: 'redislabsmodules/rmbuildercentos:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-centos7
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
+    parameters:
+      search-from-master:
+        type: boolean
+        default: false
+    steps:
+      - build-steps:
+          search-from-master: <<parameters.search-from-master>>
 
-    steps: *ci_steps
-
-  deploy_snapshots:
+  deploy-snapshots:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy Snapshots to S3
           command: |
-            for f in /workspace/snapshot/*.zip; do
+            cd /workspace/snapshots
+            for f in *.zip *.tgz; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
             done
 
-  deploy_release:
+  deploy-release:
     docker:
-      - image: 'redislabsmodules/rmbuilder:latest'
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
       - run:
           name: Deploy Releases to S3
           command: |
-            for f in /workspace/release/*.zip; do
+            cd /workspace
+            for f in *.zip *.tgz; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
             done
 
+  release-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+      - run:
+          name: Run QA Automation (RediSearch Light)
+          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release LIGHT=1 ./tests/qa/run
+
+  nightly-automation:
+    docker:
+      - image: redisfab/rmbuilder:6.0.7-x64-buster
+    steps:
+      - checkout
+      - setup-automation
+      - run:
+          name: Run QA Automation
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly ./tests/qa/run
+      - run:
+          name: Run QA Automation (RediSearch Light)
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly LIGHT=1 ./tests/qa/run
+
+
+on-any-branch: &on-any-branch
+  filters:
+    branches:
+      only: /.*/
+    tags:
+      only: /.*/
+
+never: &never
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      ignore: /.*/
+
+on-master: &on-master
+  filters:
+    branches:
+      only: master
+
+on-version-tags: &on-version-tags
+  filters:
+    branches:
+      ignore: /.*/
+    tags:
+      only: /^v[0-9].*/
+
+on-master-and-version-tags: &on-master-and-version-tags
+  filters:
+    branches:
+      only:
+        - master
+    tags:
+      only: /^v[0-9].*/
+
+
+after-platform-builds: &after-platform-builds
+  requires:
+    - centos7
+    - bionic
+    - xenial
+    - trusty
+ 
+
 workflows:
   version: 2
-
   default_flow:
     jobs:
-      - ubuntu:
-          filters:
-            branches:
-              only: /.*/
-            tags:
-              only: /.*/
-      - centos:
-          filters:
-            branches:
-              only: /.*/
-            tags:
-              only: /.*/
+      - bionic:
+          <<: *on-any-branch
+      - xenial:
+          <<: *on-any-branch
+      - centos7:
+          <<: *on-any-branch
       - trusty:
-          filters:
-            branches:
-              only: /.*/
-            tags:
-              only: /.*/
-      - deploy_snapshots:
-          requires: *default_jobs
-          filters:
-            branches:
-              only:
-                - master
-                - circle-sandbox
-      - deploy_release:
-          requires: *default_jobs
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v[0-9].*/
+          <<: *on-any-branch
+      - deploy-snapshots:
+          <<: *after-platform-builds
+          <<: *on-master
+      - deploy-release:
+          <<: *after-platform-builds
+          <<: *on-version-tags
+      - release-automation:
+          requires:
+            - deploy-release
+          <<: *on-version-tags
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "07 20 * * *"
+          <<: *on-master
+    jobs:
+      - bionic:
+          name: nightly-bionic
+          search-from-master: true
+      - centos7:
+          name: nightly-centos7
+          search-from-master: true
+      - nightly-automation

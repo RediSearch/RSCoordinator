@@ -45,16 +45,13 @@ commands:
       - run:
           name: Package
           command: |
-            mkdir artifacts
             ./.circleci/package.sh
             ./.circleci/package-light.sh
       - persist_to_workspace:
-          root: artifacts
+          root: /workspace
           paths:
-            - '*.zip'
-            - '*.tgz'
-            - snapshots/*.zip
-            - snapshots/*.tgz
+            - 'snapshot'
+            - 'release'
 
 jobs:
   bionic:

@@ -35,7 +35,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 static int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
   if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
-      //      printf("Error is '%s'\n", MRReply_String(rep, NULL));
+      // printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
@@ -237,6 +237,20 @@ static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_Upstream
 
   for (size_t ii = 0; ii < us->nserialized; ++ii) {
     tmparr = array_append(tmparr, us->serialized[ii]);
+    if (strncasecmp("LIMIT", us->serialized[ii], strlen("LIMIT")) == 0) {
+      if (ii + 2 <= us->nserialized) {
+        // change offset to `0`
+        tmparr = array_append(tmparr, "0");
+        
+        // change num to `offset + num`
+        char buf[32];
+        long long offset = atoll(us->serialized[ii + 1]);
+        long long limit = atoll(us->serialized[ii + 2]);
+        snprintf(buf, sizeof(buf), "%lld", offset + limit);
+        tmparr = array_append(tmparr, buf);
+        ii += 2;
+      }
+    }
   }
 
   *xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);

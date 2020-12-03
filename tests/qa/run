@@ -3,7 +3,7 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT=$(cd $HERE/../..; pwd)
 
-(( $VERBOSE > 1 )) && { set -x; PS4='$LINENO: '; }
+(( VERBOSE > 1 )) && { set -x; PS4='$LINENO: '; }
 
 if [[ $1 == --help || $1 == help ]]; then
 	cat <<-END
@@ -19,9 +19,10 @@ if [[ $1 == --help || $1 == help ]]; then
 		LIGHT=1                       Test RediSearch Light
 		NOP=1                         Do not execute automation command
 		VERBOSE=N                     Set verbosity level (N=1,2)
+		QUICK=1                       Only test one RS version
 
 		Other configuration:
-		RS_VERSION file includes Redis Enterprive version for release tests.
+		RS_VERSIONS file includes Redis Enterprive versions for release tests.
 
 	END
 	exit 0
@@ -42,49 +43,66 @@ if [[ ! -f $HERE/$TEST.json ]]; then
 	exit 1
 fi
 
-export RS_VERSION=$(cat $HERE/RS_VERSION)
+run_test() {
+	export RS_VERSION=$1
 
-if [[ -z $MODULE_VERSION ]]; then
-	export MODULE_VERSION=master
-else
-	export MODULE_VERSION=$(echo "$MODULE_VERSION" | sed  's/^v\(.*\)/\1/')
-fi
+	if [[ -z $MODULE_VERSION ]]; then
+		export MODULE_VERSION=master
+	else
+		export MODULE_VERSION=$(echo "$MODULE_VERSION" | sed  's/^v\(.*\)/\1/')
+	fi
 
-if [[ $LIGHT == 1 ]]; then
-	export RS_MODULE=RedisearchLight
-	export RS_MODULE_FILE_PREFIX=redisearch-light
-else
-	export RS_MODULE=RediSearchEnterprise
-	export RS_MODULE_FILE_PREFIX=redisearch
-fi
+	if [[ $LIGHT == 1 ]]; then
+		export RS_MODULE=RedisearchLight
+		export RS_MODULE_FILE_PREFIX=redisearch-light
+	else
+		export RS_MODULE=RediSearchEnterprise
+		export RS_MODULE_FILE_PREFIX=redisearch
+	fi
 
-results() {
-	echo "$JSON" | jq "$1" | cut -d\" -f2
+	results() {
+		echo "$JSON" | jq "$1" | cut -d\" -f2
+	}
+
+	cd $HERE
+
+	json_in=$(mktemp /tmp/$TEST.json.XXXX)
+	$ROOT/deps/readies/bin/xtx -e RS_MODULE -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
+	(( VERBOSE >= 1 )) && cat $json_in
+
+	if [[ $NOP == 1 ]]; then
+		echo "Testing RS $RS_VERSION"
+		return 0
+	fi
+
+	JSON=$(curl -sk \
+		-u "$QA_AUTOMATION_USERNAME":"$QA_AUTOMATION_PASS" \
+		-X POST -H "Content-Type: application/json" \
+		-d @$json_in \
+		https://qa-automation-center.redislabs.com/processes 2>&1)
+	rc=$?
+	rm $json_in
+	status=$(results .status)
+	if [[ $rc == 0 && $status == success ]]; then
+		id=$(results .data[0])
+		echo "Tests running for RS $RS_VERSION"
+		echo "Results: https://qa-automation-center.redislabs.com/ui#dashboard/flow/$id"
+		return 0
+	else
+		err=$(results .message)
+		echo "Failed to run tests for RS $RS_VERSION: $err"
+		return 1
+	fi
 }
 
-cd $HERE
-
-json_in=$(mktemp /tmp/$TEST.json.XXXX)
-$ROOT/deps/readies/bin/xtx -e RS_MODULE -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
-(( $VERBOSE >= 1 )) && cat $json_in
-
-[[ $NOP == 1 ]] && exit 0
-
-JSON=$(curl -sk \
-	-u "$QA_AUTOMATION_USERNAME":"$QA_AUTOMATION_PASS" \
-	-X POST -H "Content-Type: application/json" \
-	-d @$json_in \
-	https://qa-automation-center.redislabs.com/processes 2>&1)
-rc=$?
-rm $json_in
-status=$(results .status)
-if [[ $rc == 0 && $status == success ]]; then
-	id=$(results .data[0])
-	echo "Tests running."
-	echo "Results: https://qa-automation-center.redislabs.com/ui#dashboard/flow/$id"
-	exit 0
+rc=0
+if [[ $QUICK == 1 ]]; then
+	RS_VERSIONS=$(cat $HERE/RS_VERSIONS | head -1)
 else
-	err=$(results .message)
-	echo "Error: $err"
-	exit 1
+	RS_VERSIONS=$(cat $HERE/RS_VERSIONS)
 fi
+for RS_VERSION in $RS_VERSIONS; do
+	run_test $RS_VERSION
+	[[ $? != 0 && $rc == 0 ]] && rc=$?
+done
+exit $rc

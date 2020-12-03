@@ -152,10 +152,10 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly ./tests/qa/run
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
       - run:
           name: Run QA Automation (RediSearch Light)
-          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly LIGHT=1 ./tests/qa/run
+          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 LIGHT=1 ./tests/qa/run
 
 
 on-any-branch: &on-any-branch

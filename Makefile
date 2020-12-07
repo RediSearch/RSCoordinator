@@ -52,7 +52,7 @@ _PYTEST_ARGS=\
 ifeq ($(GDB),1)
 _PYTEST_ARGS += -s --shards-count 1 --debugger gdb
 else
-_PYTEST_ARGS += --shards-count 3
+_PYTEST_ARGS += --shards-count 2
 ifneq ($(TEST),)
 _PYTEST_ARGS += -s
 endif

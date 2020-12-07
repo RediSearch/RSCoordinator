@@ -434,7 +434,7 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
     return -1;
   } else {
     // printf("Scores are tied. Will compare ID Strings instead\n");
-    int rv = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    int rv = -cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
     // printf("ID Strings: Comparing <N=%lu> %.*s vs <N=%lu> %.*s => %d\n", r2->idLen,
     // (int)r2->idLen,
     //        r2->id, r1->idLen, (int)r1->idLen, r1->id, rv);

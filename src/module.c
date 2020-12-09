@@ -434,7 +434,13 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
     return -1;
   } else {
     // printf("Scores are tied. Will compare ID Strings instead\n");
+    
+    // This was reversed to be more compatible with OSS version where tie breaker was changed 
+    // to return the lower doc ID to reduce sorting heap work. Doc name might not be ascending 
+    // or decending but this still may reduce heap work.
+    // Our tests are usually ascending so this will create similarity between RS and RSC.
     int rv = -cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    
     // printf("ID Strings: Comparing <N=%lu> %.*s vs <N=%lu> %.*s => %d\n", r2->idLen,
     // (int)r2->idLen,
     //        r2->id, r1->idLen, (int)r1->idLen, r1->id, rv);

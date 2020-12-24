@@ -1296,7 +1296,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   clusterConfig.type = DetectClusterType();
 
   RedisModule_Log(ctx, "notice",
-                  "Cluster configuration: %d partitions, type: %d, coordinator timeout: %dms",
+                  "Cluster configuration: %ld partitions, type: %d, coordinator timeout: %dms",
                   clusterConfig.numPartitions, clusterConfig.type, clusterConfig.timeoutMS);
 
   /* Configure cluster injections */
@@ -1472,7 +1472,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler), "readonly", 0, 0, -1));
 
 
-  if (RSBuildType_g == ClusterType_RedisOSS) {
+  if (RSBuildType_g == RSBuildType_OSS) {
     RedisModule_Log(ctx, "notice", "Register write commands");
     // write commands (on enterprise we do not define them, the dmc take care of them)
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADD", SafeCmd(SingleShardCommandHandler), "readonly", 0, 0, -1));

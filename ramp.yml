@@ -38,6 +38,8 @@ exclude_commands:
     - FT._ALTERIFNX
     - FT._ALIASADDIFNX
     - FT._ALIASDELIFX
+    - _FT.CONFIG
+    - _FT.DEBUG
 overide_command:
     - {"command_arity": -1, "command_name": "FT.SUGADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
     - {"command_arity": -1, "command_name": "FT.SUGDEL", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}

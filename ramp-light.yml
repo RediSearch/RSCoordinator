@@ -21,4 +21,6 @@ capabilities:
     - crdb
     - eviction_expiry
     - hash_policy
-
+exclude_commands:
+    - FT.CONFIG
+    - FT.DEBUG

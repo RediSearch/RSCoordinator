@@ -434,7 +434,13 @@ static int cmp_results(const void *p1, const void *p2, const void *udata) {
     return -1;
   } else {
     // printf("Scores are tied. Will compare ID Strings instead\n");
-    int rv = cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    
+    // This was reversed to be more compatible with OSS version where tie breaker was changed 
+    // to return the lower doc ID to reduce sorting heap work. Doc name might not be ascending 
+    // or decending but this still may reduce heap work.
+    // Our tests are usually ascending so this will create similarity between RS and RSC.
+    int rv = -cmpStrings(r2->id, r2->idLen, r1->id, r1->idLen);
+    
     // printf("ID Strings: Comparing <N=%lu> %.*s vs <N=%lu> %.*s => %d\n", r2->idLen,
     // (int)r2->idLen,
     //        r2->id, r1->idLen, (int)r1->idLen, r1->id, rv);
@@ -1290,7 +1296,7 @@ int initSearchCluster(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   clusterConfig.type = DetectClusterType();
 
   RedisModule_Log(ctx, "notice",
-                  "Cluster configuration: %d partitions, type: %d, coordinator timeout: %dms",
+                  "Cluster configuration: %ld partitions, type: %d, coordinator timeout: %dms",
                   clusterConfig.numPartitions, clusterConfig.type, clusterConfig.timeoutMS);
 
   /* Configure cluster injections */
@@ -1466,7 +1472,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SPELLCHECK", SafeCmd(SpellCheckCommandHandler), "readonly", 0, 0, -1));
 
 
-  if (RSBuildType_g == ClusterType_RedisOSS) {
+  if (RSBuildType_g == RSBuildType_OSS) {
     RedisModule_Log(ctx, "notice", "Register write commands");
     // write commands (on enterprise we do not define them, the dmc take care of them)
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.ADD", SafeCmd(SingleShardCommandHandler), "readonly", 0, 0, -1));

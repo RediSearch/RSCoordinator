@@ -177,7 +177,7 @@ on-master: &on-master
 on-version-branch: &on-version-branch
   filters:
     branches:
-      only: '1.8'
+      only: master
 
 on-version-tags: &on-version-tags
   filters:

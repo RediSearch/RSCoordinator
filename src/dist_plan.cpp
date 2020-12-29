@@ -207,6 +207,10 @@ static RLookup *distStepGetLookup(PLN_BaseStep *bstp) {
 
 /* Distribute COUNT into remote count and local SUM */
 static int distributeCount(ReducerDistCtx *rdctx, QueryError *status) {
+  if (rdctx->srcReducer->args.argc != 0) {
+    QueryError_SetErrorFmt(status, QUERY_EPARSEARGS, "Count accepts 0 values only");
+    return REDISMODULE_ERR;
+  }
   const char *countAlias;
   if (!rdctx->addRemote("COUNT", &countAlias, status, "0")) {
     return REDISMODULE_ERR;

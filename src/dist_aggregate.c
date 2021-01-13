@@ -221,9 +221,8 @@ static void rpnetFree(ResultProcessor *rp) {
 
   if (nc->profile) {
     for (size_t i = 0; i < nc->profileIdx; ++i) {
-      if (nc->profile[nc->profileIdx] != nc->current.root) {
-        // TODO: solve leak
-        // MRReply_Free(nc->profile[nc->profileIdx]);
+      if (nc->profile[i] != nc->current.root) {
+        MRReply_Free(nc->profile[i]);
       }
     }
     rm_free(nc->profile);

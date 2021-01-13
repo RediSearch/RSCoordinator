@@ -578,17 +578,17 @@ static void getReplyOffsets(const searchRequestCtx *ctx, searchReplyOffsets *off
   }
 }
 
-static int processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleCtx *ctx) {
+static void processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleCtx *ctx) {
   if (arr == NULL) {
-    return 0;
+    return;
   }
   if (MRReply_Type(arr) == MR_REPLY_ERROR) {
     rCtx->lastError = arr;
-    return 0;
+    return;
   }
   if (MRReply_Type(arr) != MR_REPLY_ARRAY || MRReply_Length(arr) == 0) {
     // Empty reply??
-    return 0;
+    return;
   }
 
   // first element is always the total count
@@ -601,7 +601,6 @@ static int processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleC
   //         scoreOffset, fieldsOffset, sortKeyOffset);
   for (int j = 1; j < len; j += offsets.step) {
     if (j + offsets.step > len) {
-      RS_LOG_ASSERT(!rCtx->searchCtx->profileArgs, "Profile should reach here");
       RedisModule_Log(
           ctx, "warning",
           "got a bad reply from redisearch, reply contains less parameters then expected");
@@ -611,17 +610,15 @@ static int processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleC
     searchResult *res = newResult(rCtx->cachedResult, arr, j, offsets.score, offsets.payload,
                                   offsets.firstField, offsets.sortKey, rCtx->searchCtx->withExplainScores);
     if (!res || !res->id) {
-      if (rCtx->searchCtx->profileArgs) {
-        return j;
-      }
       RedisModule_Log(ctx, "warning", "got an unexpected argument when parsing redisearch results");
       rCtx->errorOccured = true;
       // invalid result - usually means something is off with the response, and we should just
       // quit this response
       rCtx->cachedResult = res;
-      return 0;
+      break;
+    } else {
+      rCtx->cachedResult = NULL;
     }
-    rCtx->cachedResult = NULL;
 
     // fprintf(stderr, "Response %d result %d Reply docId %s score: %f sortkey %f\n", i, j,
     //         res->id, res->score, res->sortKeyNum);
@@ -648,7 +645,6 @@ static int processSearchReply(MRReply *arr, searchReducerCtx *rCtx, RedisModuleC
       }
     }
   }
-  return 0;
 }
 
 static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
@@ -761,16 +757,18 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
-static size_t PrintProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int *profileOffset) {
+static size_t PrintProfile(RedisModuleCtx *ctx, int count, MRReply **replies) {
   size_t retLen = 0;
   for (int i = 0; i < count; ++i) {
-    //RedisModule_ReplyWithPrintf(ctx, "Shard No. %d", i + 1);
     RedisModule_ReplyWithPrintf(ctx, "Shard #%d", i + 1);
     retLen++;
-    for (int j = profileOffset[i]; j < MRReply_Length(replies[i]); ++j) {
-      int ret = MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(replies[i], j));
-      retLen++;
+
+    MRReply *reply = MRReply_ArrayElement(replies[i], 1);
+    int len = MRReply_Length(reply);
+    for (int j = 0; j < len; ++j) {
+      MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(reply, j));
     }
+    retLen += len;
   }
   return retLen;
 }
@@ -792,9 +790,9 @@ int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
   rCtx.searchCtx = req;
 
-  int profileOffset[count];
   for (int i = 0; i < count; i++) {
-    profileOffset[i] = processSearchReply(replies[i], &rCtx, ctx);
+    MRReply *reply = MRReply_ArrayElement(replies[i], 0);
+    processSearchReply(reply, &rCtx, ctx);
   }
   clock_t endProcessClock = clock();
   if (rCtx.cachedResult) {
@@ -812,13 +810,14 @@ int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     goto cleanup;
   }
   
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+  RedisModule_ReplyWithArray(ctx, 2);
   // print results
   sendSearchResults(ctx, &rCtx);
-  int arrLen = 1;
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+  int arrLen = 0;
 
   // print profile of shards
-  arrLen += PrintProfile(ctx, count, replies, profileOffset);
+  arrLen += PrintProfile(ctx, count, replies);
 
   // print coordinator stats
   RedisModule_ReplyWithArray(ctx, 6);

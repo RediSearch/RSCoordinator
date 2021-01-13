@@ -335,14 +335,7 @@ void searchRequestCtx_Free(searchRequestCtx *r) {
 int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
 int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
 
-searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
-  /* A search request must have at least 3 args */
-  if (argc < 3) {
-    return NULL;
-  }
-
-  searchRequestCtx *req = malloc(sizeof(searchRequestCtx));
-
+void rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
   req->profileArgs = 0;
   req->reducer = searchResultReducer;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
@@ -354,6 +347,17 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
       req->profileArgs++;
     }
   }
+}
+
+searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
+  /* A search request must have at least 3 args */
+  if (argc < 3) {
+    return NULL;
+  }
+
+  searchRequestCtx *req = malloc(sizeof(searchRequestCtx));
+
+  rscParseProfile(req, argv);
 
   int argvOffset = 2 + req->profileArgs;
   req->queryString = strdup(RedisModule_StringPtrLen(argv[argvOffset++], NULL));
@@ -757,13 +761,13 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
-static size_t PrintProfile(RedisModuleCtx *ctx, int count, MRReply **replies) {
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem) {
   size_t retLen = 0;
   for (int i = 0; i < count; ++i) {
     RedisModule_ReplyWithPrintf(ctx, "Shard #%d", i + 1);
     retLen++;
 
-    MRReply *reply = MRReply_ArrayElement(replies[i], 1);
+    MRReply *reply = MRReply_ArrayElement(replies[i], arrayElem);
     int len = MRReply_Length(reply);
     for (int j = 0; j < len; ++j) {
       MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(reply, j));
@@ -794,7 +798,6 @@ int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     MRReply *reply = MRReply_ArrayElement(replies[i], 0);
     processSearchReply(reply, &rCtx, ctx);
   }
-  clock_t endProcessClock = clock();
   if (rCtx.cachedResult) {
     free(rCtx.cachedResult);
   }
@@ -813,18 +816,15 @@ int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModule_ReplyWithArray(ctx, 2);
   // print results
   sendSearchResults(ctx, &rCtx);
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-  int arrLen = 0;
 
   // print profile of shards
-  arrLen += PrintProfile(ctx, count, replies);
+  int arrLen = 0;
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+  arrLen += PrintShardProfile(ctx, count, replies, 1);
 
   // print coordinator stats
-  RedisModule_ReplyWithArray(ctx, 6);
-  RedisModule_ReplyWithSimpleString(ctx, "Total shards time");
-  RedisModule_ReplyWithDouble(ctx, (double)(returnClock - req->profileClock) / CLOCKS_PER_MILLISEC);
-  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator post-process time");
-  RedisModule_ReplyWithDouble(ctx, (double)(endProcessClock - returnClock) / CLOCKS_PER_MILLISEC);
+  RedisModule_ReplyWithArray(ctx, 2);
   RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
   RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->profileClock) / CLOCKS_PER_MILLISEC);
   arrLen++;
@@ -1264,6 +1264,20 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   return REDIS_OK;
 }*/
 
+int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 4) {
+    return RedisModule_WrongArity(ctx);
+  }
+  const char *typeStr = RedisModule_StringPtrLen(argv[1], NULL);
+  if (RMUtil_ArgExists("SEARCH", argv, 3, 1)) {
+    return FlatSearchCommandHandler(ctx, argv, argc);
+  }
+  if (RMUtil_ArgExists("AGGREGATE", argv, 3, 1)) {
+    return DistAggregateCommand(ctx, argv, argc);
+  }
+  return RedisModule_ReplyWithError(ctx, "No `SEARCH` or `AGGREGATE` provided");
+}
+
 int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
   RedisModule_AutoMemory(ctx);
@@ -1559,7 +1573,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.PROFILE", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.PROFILE", SafeCmd(ProfileCommandHandler), "readonly", 0, 0, -1));
   if (clusterConfig.type == ClusterType_RedisLabs) {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));
   } else {

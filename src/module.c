@@ -762,9 +762,13 @@ static size_t PrintProfile(RedisModuleCtx *ctx, int count, MRReply **replies) {
   for (int i = 0; i < count; ++i) {
     RedisModule_ReplyWithPrintf(ctx, "Shard #%d", i + 1);
     retLen++;
+
     MRReply *reply = MRReply_ArrayElement(replies[i], 1);
-    MR_ReplyWithMRReply(ctx, reply);
-    retLen++;
+    int len = MRReply_Length(reply);
+    for (int j = 0; j < len; ++j) {
+      MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(reply, j));
+    }
+    retLen += len;
   }
   return retLen;
 }

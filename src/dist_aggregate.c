@@ -221,7 +221,7 @@ static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
   nc->base.Free = rpnetFree;
   nc->base.Next = rpnetNext_Start;
-  nc->base.name = "Network";
+  nc->base.type = RP_NETWORK;
   return nc;
 }
 

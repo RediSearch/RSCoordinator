@@ -18,6 +18,8 @@ capabilities:
     - backup_restore
 exclude_commands:
     - FT.ADDHASH
+    - _FT.CONFIG
+    - _FT.DEBUG
 overide_command:
     - {"command_arity": -1, "command_name": "FT.SYNUPDATE", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}
     - {"command_arity": -1, "command_name": "FT.SYNADD", "first_key": 0, "flags": ["write"], "last_key": 0, "step": -1}

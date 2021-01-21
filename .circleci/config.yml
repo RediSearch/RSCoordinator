@@ -110,7 +110,7 @@ jobs:
           name: Deploy Snapshots to S3
           command: |
             cd /workspace/snapshots
-            for f in *.zip *.tgz; do
+            for f in `find . -name "*.zip" -or -name "*.tgz"`; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
             done
 
@@ -123,8 +123,8 @@ jobs:
       - run:
           name: Deploy Releases to S3
           command: |
-            cd /workspace
-            for f in *.zip *.tgz; do
+            cd /workspace/release
+            for f in `find . -name "*.zip" -or -name "*.tgz"`; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
             done
 

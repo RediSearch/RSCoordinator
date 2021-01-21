@@ -298,7 +298,7 @@ MRCommandGenerator SearchCluster_MultiplexCommand(SearchCluster *c, MRCommand *c
 void SearchCluster_EnsureSize(RedisModuleCtx *ctx, SearchCluster *c, MRClusterTopology *topo) {
   // If the cluster doesn't have a size yet - set the partition number aligned to the shard number
   if (c->size == 0 && MRClusterTopology_IsValid(topo)) {
-    RedisModule_Log(ctx, "notice", "Setting number of partitions to %d", topo->numShards);
+    RedisModule_Log(ctx, "notice", "Setting number of partitions to %ld", topo->numShards);
     c->size = topo->numShards;
     PartitionCtx_SetSize(&c->part, topo->numShards);
   }

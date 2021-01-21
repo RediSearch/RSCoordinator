@@ -17,3 +17,6 @@ capabilities:
     - persistence_rdb
     - clustering
     - replica_of
+exclude_commands:
+    - FT.CONFIG
+    - FT.DEBUG

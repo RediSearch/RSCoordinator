@@ -214,12 +214,15 @@ workflows:
       - trusty:
           <<: *on-any-branch
       - deploy-snapshots:
+          context: common
           <<: *after-platform-builds
           <<: *on-master
       - deploy-release:
+          context: common
           <<: *after-platform-builds
           <<: *on-version-tags
       - release-automation:
+          context: common
           requires:
             - deploy-release
           <<: *on-version-tags

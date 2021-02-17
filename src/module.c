@@ -332,10 +332,10 @@ void searchRequestCtx_Free(searchRequestCtx *r) {
   free(r);
 }
 
-int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
-int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
+static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
+static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
 
-int rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
+static int rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
   req->profileArgs = 0;
   req->reducer = searchResultReducer;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
@@ -721,7 +721,7 @@ static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
   }
 }
 
-int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};
@@ -768,6 +768,10 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   return REDISMODULE_OK;
 }
 
+/**
+ * This function is used to print profiles received from the shards.
+ * It is used by both SEARCH and AGGREGATE
+ */
 size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem) {
   size_t retLen = 0;
   for (int i = 0; i < count; ++i) {
@@ -784,7 +788,7 @@ size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int 
   return retLen;
 }
 
-int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};

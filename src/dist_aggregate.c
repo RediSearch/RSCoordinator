@@ -130,8 +130,8 @@ typedef struct {
   MRCommandGenerator cg;
 
   // profile vars
-  MRReply **profile;
-  int profileIdx;
+  MRReply **shardsProfile;
+  int shardsProfileIdx;
 } RPNet;
 
 static int getNextReply(RPNet *nc) {
@@ -170,7 +170,7 @@ static int rpnetNext(ResultProcessor *self, SearchResult *r) {
     // Check if profile which has 3 replies
     long long cursorId = MRReply_Integer(MRReply_ArrayElement(nc->current.root, 1));
     if (cursorId == 0 && MRReply_Length(nc->current.root) == 3) {
-      nc->profile[nc->profileIdx++] = nc->current.root; 
+      nc->shardsProfile[nc->shardsProfileIdx++] = nc->current.root; 
     } else {
       MRReply_Free(nc->current.root);
     }
@@ -219,13 +219,13 @@ static void rpnetFree(ResultProcessor *rp) {
 
   nc->cg.Free(nc->cg.ctx);
 
-  if (nc->profile) {
-    for (size_t i = 0; i < nc->profileIdx; ++i) {
-      if (nc->profile[i] != nc->current.root) {
-        MRReply_Free(nc->profile[i]);
+  if (nc->shardsProfile) {
+    for (size_t i = 0; i < nc->shardsProfileIdx; ++i) {
+      if (nc->shardsProfile[i] != nc->current.root) {
+        MRReply_Free(nc->shardsProfile[i]);
       }
     }
-    rm_free(nc->profile);
+    rm_free(nc->shardsProfile);
   }
 
   if (nc->current.root) {
@@ -241,8 +241,8 @@ static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
   RPNet *nc = calloc(1, sizeof(*nc));
   nc->cmd = *cmd;
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
-  nc->profileIdx = 0;
-  nc->profile = NULL;
+  nc->shardsProfileIdx = 0;
+  nc->shardsProfile = NULL;
   nc->base.Free = rpnetFree;
   nc->base.Next = rpnetNext_Start;
   nc->base.type = RP_NETWORK;
@@ -322,24 +322,39 @@ static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
   rpRoot->base.parent = &r->qiter;
 
   if (IsProfile(r)) {
-    rpRoot->profile = rm_malloc(sizeof(*rpRoot->profile) * sc->size);
+    rpRoot->shardsProfile = rm_malloc(sizeof(*rpRoot->shardsProfile) * sc->size);
 
     ResultProcessor *rpProfile = RPProfile_New(&rpRoot->base, &r->qiter);
-    //rpProfile->upstream = &rpRoot->base;
-    //rpProfile->parent = &r->qiter;
     r->qiter.endProc = rpProfile;
   }
 }
 
-void printAggProfile(RedisModuleCtx *ctx, AREQ *req);
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem);
 
-void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
-                         struct ConcurrentCmdCtx *cmdCtx) {
-  // CMD, index, expr, args...
-  AREQ *r = AREQ_New();
-  QueryError status = {0};
-  r->qiter.err = &status;
+void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
+  size_t nelem = 0;
+  clock_t finishTime = clock();
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
 
+  // profileRP replace netRP as end PR
+  RPNet *rpnet = (RPNet *)req->qiter.endProc->upstream;
+
+  // Print shards profile
+  nelem += PrintShardProfile(ctx, rpnet->shardsProfileIdx, rpnet->shardsProfile, 2);
+
+  // Print coordinator profile
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator result processors profile");
+  Profile_Print(ctx, req);
+  nelem += 2;
+
+  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->initClock) / CLOCKS_PER_MILLISEC);
+  nelem += 2;
+
+  RedisModule_ReplySetArrayLength(ctx, nelem);
+}
+
+static int parseProfile(RedisModuleString **argv, int argc, AREQ *r) {
   // Profile args
   int profileArgs = 0;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
@@ -351,27 +366,32 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
       r->reqflags |= QEXEC_F_PROFILE_LIMITED;
     }
     if (RMUtil_ArgIndex("QUERY", argv + 3, 2) == -1) {
-      QueryError_SetError(&status, QUERY_EPARSEARGS, "No QUERY keyword provided");
+      QueryError_SetError(r->qiter.err, QUERY_EPARSEARGS, "No QUERY keyword provided");
+      return -1;
     }
   }
+  return profileArgs;
+}
+
+void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
+                         struct ConcurrentCmdCtx *cmdCtx) {
+  // CMD, index, expr, args...
+  AREQ *r = AREQ_New();
+  QueryError status = {0};
+  r->qiter.err = &status;
+
+  int profileArgs = parseProfile(argv, argc, r);
+  if (profileArgs == -1) goto err;
 
   int rc = AREQ_Compile(r, argv + 2 + profileArgs, argc - 2 - profileArgs, &status);
-  if (rc != REDISMODULE_OK) {
+  if (rc != REDISMODULE_OK) goto err;
 
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
   rc = AGGPLN_Distribute(&r->ap, &status);
-  if (rc != REDISMODULE_OK) {
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
+  if (rc != REDISMODULE_OK) goto err;
+
   AREQDIST_UpstreamInfo us = {NULL};
   rc = AREQ_BuildDistributedPipeline(r, &us, &status);
-  if (rc != REDISMODULE_OK) {
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
+  if (rc != REDISMODULE_OK) goto err;
 
   SearchCluster *sc = GetSearchCluster();
 
@@ -406,7 +426,6 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
     rc = AREQ_StartCursor(r, ctx, ixname, &status);
 
     if (rc != REDISMODULE_OK) {
-      assert(QueryError_HasError(&status));
       goto err;
     }
   } else if (IsProfile(r)) {
@@ -426,50 +445,4 @@ err:
   QueryError_ReplyAndClear(ctx, &status);
   AREQ_Free(r);
   return;
-}
-/*
-void PrintCoordinatorProfile(RedisModuleCtx *ctx, int count, MRReply **replies) {
-  // print profile of shards
-  int arrLen = 0;
-  clock_t returnClock = clock();
-  arrLen += PrintProfile(ctx, count, replies);
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-
-  // print coordinator stats
-  RedisModule_ReplyWithArray(ctx, 6);
-  RedisModule_ReplyWithSimpleString(ctx, "Total shards time");
-  RedisModule_ReplyWithDouble(ctx, (double)(returnClock - req->profileClock) / CLOCKS_PER_MILLISEC);
-  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator post-process time");
-  RedisModule_ReplyWithDouble(ctx, (double)(endProcessClock - returnClock) / CLOCKS_PER_MILLISEC);
-  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
-  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->profileClock) / CLOCKS_PER_MILLISEC);
-  arrLen++;
-
-  RedisModule_ReplySetArrayLength(ctx, arrLen);
-}
-*/
-
-size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem);
-
-void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
-  size_t nelem = 0;
-  clock_t finishTime = clock();
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-
-  // profileRP replace netRP as end PR
-  RPNet *rpnet = (RPNet *)req->qiter.endProc->upstream;
-
-  // Print shards profile
-  nelem += PrintShardProfile(ctx, rpnet->profileIdx, rpnet->profile, 2);
-
-  // Print coordinator profile
-  RedisModule_ReplyWithSimpleString(ctx, "Coordinator result processors profile");
-  Profile_Print(ctx, req);
-  nelem += 2;
-
-  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
-  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->initClock) / CLOCKS_PER_MILLISEC);
-  nelem += 2;
-
-  RedisModule_ReplySetArrayLength(ctx, nelem);
 }

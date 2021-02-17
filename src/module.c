@@ -788,6 +788,10 @@ int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
   }
 
+  if (MRReply_Type(*replies) == MR_REPLY_ERROR) {
+    return MR_ReplyWithMRReply(ctx, *replies);
+  }
+
   size_t num = req->offset + req->limit;
   rCtx.pq = rm_malloc(heap_sizeof(num));
   heap_init(rCtx.pq, cmp_results, req, num);

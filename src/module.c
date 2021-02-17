@@ -335,18 +335,22 @@ void searchRequestCtx_Free(searchRequestCtx *r) {
 int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
 int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
 
-void rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
+int rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
   req->profileArgs = 0;
   req->reducer = searchResultReducer;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
-    req->profileArgs++;
+    req->profileArgs += 2;
     req->reducer = profileSearchResultReducer;
     req->profileClock = clock();
-    if (RMUtil_ArgIndex("LIMITED", argv + 1, 1) != -1) {
+    if (RMUtil_ArgIndex("LIMITED", argv + 3, 1) != -1) {
       req->profileLimited = 1;
       req->profileArgs++;
     }
+    if (RMUtil_ArgIndex("QUERY", argv + 3, 2) == -1) {
+      return REDISMODULE_ERR;
+    }
   }
+  return REDISMODULE_OK;
 }
 
 searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
@@ -357,7 +361,10 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
 
   searchRequestCtx *req = malloc(sizeof(searchRequestCtx));
 
-  rscParseProfile(req, argv);
+  if (rscParseProfile(req, argv) != REDISMODULE_OK) {
+    free(req);
+    return NULL;
+  }
 
   int argvOffset = 2 + req->profileArgs;
   req->queryString = strdup(RedisModule_StringPtrLen(argv[argvOffset++], NULL));
@@ -1269,14 +1276,14 @@ int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 }*/
 
 int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-  if (argc < 4) {
+  if (argc < 5) {
     return RedisModule_WrongArity(ctx);
   }
-  const char *typeStr = RedisModule_StringPtrLen(argv[1], NULL);
-  if (RMUtil_ArgExists("SEARCH", argv, 3, 1)) {
+  const char *typeStr = RedisModule_StringPtrLen(argv[2], NULL);
+  if (RMUtil_ArgExists("SEARCH", argv, 3, 2)) {
     return FlatSearchCommandHandler(ctx, argv, argc);
   }
-  if (RMUtil_ArgExists("AGGREGATE", argv, 3, 1)) {
+  if (RMUtil_ArgExists("AGGREGATE", argv, 3, 2)) {
     return DistAggregateCommand(ctx, argv, argc);
   }
   return RedisModule_ReplyWithError(ctx, "No `SEARCH` or `AGGREGATE` provided");

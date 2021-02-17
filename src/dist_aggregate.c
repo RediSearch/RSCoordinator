@@ -257,15 +257,17 @@ static void buildMRCommand(RedisModuleString **argv, int argc, int profileArgs,
 
   if (profileArgs == 0) {
     tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
+    tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Index name
   } else {
     tmparr = array_append(tmparr, RS_PROFILE_CMD);
+    tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Index name
     tmparr = array_append(tmparr, "AGGREGATE");
-    if (profileArgs == 2) {
+    if (profileArgs == 3) {
       tmparr = array_append(tmparr, "LIMITED");
     }
+    tmparr = array_append(tmparr, "QUERY");
   }
   
-  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1 + profileArgs], NULL));  // Index name
   tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2 + profileArgs], NULL));  // Query
   tmparr = array_append(tmparr, "WITHCURSOR");
   // Numeric responses are encoded as simple strings.
@@ -341,12 +343,15 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // Profile args
   int profileArgs = 0;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
-    profileArgs++;
+    profileArgs += 2;     // SEARCH/AGGREGATE + QUERY
     r->initClock = clock();
     r->reqflags |= QEXEC_F_PROFILE;
-    if (RMUtil_ArgIndex("LIMITED", argv + 1, 1) != -1) {
+    if (RMUtil_ArgIndex("LIMITED", argv + 3, 1) != -1) {
       profileArgs++;
       r->reqflags |= QEXEC_F_PROFILE_LIMITED;
+    }
+    if (RMUtil_ArgIndex("QUERY", argv + 3, 2) == -1) {
+      QueryError_SetError(&status, QUERY_EPARSEARGS, "No QUERY keyword provided");
     }
   }
 

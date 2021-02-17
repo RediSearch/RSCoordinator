@@ -322,9 +322,9 @@ static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
   if (IsProfile(r)) {
     rpRoot->profile = rm_malloc(sizeof(*rpRoot->profile) * sc->size);
 
-    ResultProcessor *rpProfile = RPProfile_New(NULL, NULL, 0);
-    rpProfile->upstream = &rpRoot->base;
-    rpProfile->parent = &r->qiter;
+    ResultProcessor *rpProfile = RPProfile_New(&rpRoot->base, &r->qiter);
+    //rpProfile->upstream = &rpRoot->base;
+    //rpProfile->parent = &r->qiter;
     r->qiter.endProc = rpProfile;
   }
 }
@@ -337,13 +337,12 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   AREQ *r = AREQ_New();
   QueryError status = {0};
   r->qiter.err = &status;
-  r->reqflags |= QEXEC_F_COORDINATOR;
 
   // Profile args
   int profileArgs = 0;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
     profileArgs++;
-    r->initTime = clock();
+    r->initClock = clock();
     r->reqflags |= QEXEC_F_PROFILE;
     if (RMUtil_ArgIndex("LIMITED", argv + 1, 1) != -1) {
       profileArgs++;
@@ -378,7 +377,7 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   // Build the result processor chain
   buildDistRPChain(r, &xcmd, sc, &us);
 
-  if (IsProfile(r)) r->parseTime = clock() - r->initTime;
+  if (IsProfile(r)) r->parseTime = clock() - r->initClock;
 
   if (r->reqflags & QEXEC_F_IS_CURSOR) {
     const char *ixname = RedisModule_StringPtrLen(argv[1 + profileArgs], NULL);
@@ -464,7 +463,7 @@ void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
   nelem += 2;
 
   RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
-  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->initTime) / CLOCKS_PER_MILLISEC);
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->initClock) / CLOCKS_PER_MILLISEC);
   nelem += 2;
 
   RedisModule_ReplySetArrayLength(ctx, nelem);

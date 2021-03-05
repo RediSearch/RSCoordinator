@@ -5,7 +5,8 @@ import os
 import argparse
 
 ROOT = HERE = os.path.abspath(os.path.dirname(__file__))
-sys.path.insert(0, os.path.join(ROOT, "deps/readies"))
+READIES = os.path.join(ROOT, "deps/readies")
+sys.path.insert(0, READIES)
 import paella
 
 #----------------------------------------------------------------------------------------------
@@ -15,54 +16,43 @@ class RedisRSCoordinatorSetup(paella.Setup):
         paella.Setup.__init__(self, nop)
 
     def common_first(self):
-        self.setup_pip()
+        self.install_downloaders()
         self.pip_install("wheel")
         self.pip_install("setuptools --upgrade")
 
-        self.install("git wget gawk lcov jq")
+        self.install("git gawk lcov jq")
 
     def debian_compat(self):
         self.install("libatomic1")
-        self.install("build-essential")
         if self.osnick == 'trusty':
             self.ubuntu_trusty()
         else:
+            self.run("%s/bin/getgcc" % READIES)
             self.install("libtool m4 automake")
-            self.install("cmake")
-        self.install("python-psutil")
         
     def ubuntu_trusty(self):
-        self.install_ubuntu_modern_gcc()
+        self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake") # after modern gcc
-        self.install("cmake3")
         self.install("realpath")
         self.install_linux_gnu_tar()
 
     def redhat_compat(self):
         self.install("redhat-lsb-core")
         self.install("libatomic")
-        self.group_install("'Development Tools'")
+        self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake")
-        self.install("cmake3")
-        self.run("ln -s `command -v cmake3` /usr/local/bin/cmake")
         
     def fedora(self):
         self.install("libatomic")
-        self.group_install("'Development Tools'")
-        self.install("cmake")
+        self.run("%s/bin/getgcc" % READIES)
 
-    def macosx(self):
-        if sh('xcode-select -p') == '':
-            fatal("Xcode tools are not installed. Please run xcode-select --install.")
-        self.install("cmake")
+    def macos(self):
+        pass
 
     def common_last(self):
-        self.pip_install("-U --no-cache-dir git+https://github.com/RedisLabsModules/RLTest.git@master")
-        self.pip_install("-U --no-cache-dir git+https://github.com/RedisLabs/RAMP@master")
-
-        self.pip_install("-r %s/deps/readies/paella/requirements.txt" % ROOT)
+        self.run("%s/bin/getcmake" % READIES)
+        self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("awscli pudb")
-        self.pip_install("jinja2 semantic_version six")
 
 #----------------------------------------------------------------------------------------------
 

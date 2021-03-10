@@ -789,6 +789,7 @@ size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int 
 }
 
 static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  clock_t postProccesTime = clock();
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};
@@ -839,13 +840,17 @@ static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **rep
   arrLen += PrintShardProfile(ctx, count, replies, 1);
 
   // print coordinator stats
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
+  // search cmd only do the heap
   RedisModule_ReplyWithArray(ctx, 2);
   RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
   RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->profileClock) / CLOCKS_PER_MILLISEC);
-  arrLen++;
+  RedisModule_ReplyWithArray(ctx, 2);
+  RedisModule_ReplyWithSimpleString(ctx, "Post Proccessing time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - postProccesTime) / CLOCKS_PER_MILLISEC); 
+  arrLen += 3;
 
   RedisModule_ReplySetArrayLength(ctx, arrLen);
-
 
 cleanup:
   if (rCtx.pq) {

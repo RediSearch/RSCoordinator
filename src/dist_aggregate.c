@@ -167,9 +167,9 @@ static int rpnetNext(ResultProcessor *self, SearchResult *r) {
   RPNet *nc = (RPNet *)self;
   // if we've consumed the last reply - free it
   if (nc->current.rows && nc->curIdx == MRReply_Length(nc->current.rows)) {
-    // Check if profile which has 3 replies
     long long cursorId = MRReply_Integer(MRReply_ArrayElement(nc->current.root, 1));
-    if (cursorId == 0 && MRReply_Length(nc->current.root) == 3) {
+    // in profile mode, save shard's profile info to be returned later
+    if (cursorId == 0 && nc->shardsProfile) {
       nc->shardsProfile[nc->shardsProfileIdx++] = nc->current.root; 
     } else {
       MRReply_Free(nc->current.root);
@@ -275,7 +275,7 @@ static void buildMRCommand(RedisModuleString **argv, int argc, int profileArgs,
 
   for (size_t ii = 0; ii < us->nserialized; ++ii) {
     tmparr = array_append(tmparr, us->serialized[ii]);
-    if (strncasecmp("LIMIT",  us->serialized[ii], strlen("LIMIT")) == 0) {
+    if (strncasecmp("LIMIT", us->serialized[ii], strlen("LIMIT")) == 0) {
       if (ii + 2 <= us->nserialized) {
         // change offset to `0`
         tmparr = array_append(tmparr, "0");
@@ -343,6 +343,9 @@ void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
   nelem += PrintShardProfile(ctx, rpnet->shardsProfileIdx, rpnet->shardsProfile, 2);
 
   // Print coordinator profile
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
+  nelem++;
+
   RedisModule_ReplyWithSimpleString(ctx, "Coordinator result processors profile");
   Profile_Print(ctx, req);
   nelem += 2;

@@ -4,7 +4,6 @@
 #include "search_cluster.h"
 #include "commands.h"
 #include "aggregate/aggregate.h"
-#include "util/arr.h"
 #include "dist_plan.h"
 #include "profile.h"
 #include <err.h>
@@ -45,6 +44,7 @@ static int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
+    RedisModule_Log(NULL, "warning", "An empty reply was received from a shard");
     return REDIS_ERR;
   }
 
@@ -146,7 +146,9 @@ static int getNextReply(RPNet *nc) {
 
     MRReply *rows = MRReply_ArrayElement(root, 0);
     if (rows == NULL || MRReply_Type(rows) != MR_REPLY_ARRAY || MRReply_Length(rows) == 0) {
-      RedisModule_Assert("Shouldn't get here");
+      MRReply_Free(root);
+      RedisModule_Log(NULL, "warning", "An empty reply was received from a shard");
+      ;    
     }
     nc->current.root = root;
     nc->current.rows = rows;
@@ -314,7 +316,7 @@ static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
     }
   }
 
-  // assert(found);
+  // update root and end with RPNet
   r->qiter.rootProc = &rpRoot->base;
   if (!found) {
     r->qiter.endProc = &rpRoot->base;
@@ -325,11 +327,13 @@ static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
     rpRoot->shardsProfile = rm_malloc(sizeof(*rpRoot->shardsProfile) * sc->size);
 
     ResultProcessor *rpProfile = RPProfile_New(&rpRoot->base, &r->qiter);
-    r->qiter.endProc = rpProfile;
+    if (!found) {
+      r->qiter.endProc = rpProfile;
+    }
   }
 }
 
-size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem);
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int isSearch);
 
 void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
   size_t nelem = 0;
@@ -340,13 +344,13 @@ void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
   RPNet *rpnet = (RPNet *)req->qiter.endProc->upstream;
 
   // Print shards profile
-  nelem += PrintShardProfile(ctx, rpnet->shardsProfileIdx, rpnet->shardsProfile, 2);
+  nelem += PrintShardProfile(ctx, rpnet->shardsProfileIdx, rpnet->shardsProfile, 0);
 
   // Print coordinator profile
   RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
   nelem++;
 
-  RedisModule_ReplyWithSimpleString(ctx, "Coordinator result processors profile");
+  RedisModule_ReplyWithSimpleString(ctx, "Result processors profile");
   Profile_Print(ctx, req);
   nelem += 2;
 

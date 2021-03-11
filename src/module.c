@@ -770,15 +770,19 @@ static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
 
 /**
  * This function is used to print profiles received from the shards.
- * It is used by both SEARCH and AGGREGATE
+ * It is used by both SEARCH and AGGREGATE.
  */
-size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int arrayElem) {
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int isSearch) {
   size_t retLen = 0;
+  // Print information for each shard
   for (int i = 0; i < count; ++i) {
     RedisModule_ReplyWithPrintf(ctx, "Shard #%d", i + 1);
     retLen++;
-
-    MRReply *reply = MRReply_ArrayElement(replies[i], arrayElem);
+    // The 1st location always stores the results. On FT.AGGREGATE, the next place stores the
+    // cursor ID. The last location (2nd for FT.SEARCH and 3rd for FT.AGGREGATE) stores the
+    // profile information of the shard.
+    int idx = isSearch ? 1 : 2;
+    MRReply *reply = MRReply_ArrayElement(replies[i], idx);
     int len = MRReply_Length(reply);
     for (int j = 0; j < len; ++j) {
       MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(reply, j));
@@ -1247,42 +1251,6 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }
-/*
-int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (argc < 3) {
-    return RedisModule_WrongArity(ctx);
-  }
-  // Check that the cluster state is valid
-  if (!SearchCluster_Ready(GetSearchCluster())) {
-    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
-  }
-  RedisModule_AutoMemory(ctx);
-  // MR_UpdateTopology(ctx);
-
-  // If this a one-node cluster, we revert to a simple, flat one level coordination
-  // if (MR_NumHosts() < 2) {
-  //   return LocalSearchCommandHandler(ctx, argv, argc);
-  // }
-
-  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  MRCommand_ReplaceArg(&cmd, 0, "FT.LSEARCH", sizeof("FT.LSEARCH") - 1);
-
-  searchRequestCtx *req = rscParseRequest(argv, argc);
-  if (!req) {
-    return RedisModule_ReplyWithError(ctx, "Invalid search request");
-  }
-  // Internally we must have WITHSCORES set, even if the usr didn't set it
-  MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
-
-  // MRCommand_Print(&cmd);
-
-  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination | MRCluster_MastersOnly);
-  MR_Fanout(mrctx, searchResultReducer, cmd);
-
-  return REDIS_OK;
-}*/
 
 int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 5) {

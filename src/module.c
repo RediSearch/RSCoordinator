@@ -337,10 +337,8 @@ static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **rep
 
 static int rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
   req->profileArgs = 0;
-  req->reducer = searchResultReducer;
   if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
     req->profileArgs += 2;
-    req->reducer = profileSearchResultReducer;
     req->profileClock = clock();
     if (RMUtil_ArgIndex("LIMITED", argv + 3, 1) != -1) {
       req->profileLimited = 1;
@@ -721,53 +719,6 @@ static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
   }
 }
 
-static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
-  searchRequestCtx *req = MRCtx_GetPrivdata(mc);
-  searchReducerCtx rCtx = {NULL};
-
-  // got no replies - this means timeout
-  if (count == 0 || req->limit < 0) {
-    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
-  }
-
-  size_t num = req->offset + req->limit;
-  rCtx.pq = rm_malloc(heap_sizeof(num));
-  heap_init(rCtx.pq, cmp_results, req, num);
-
-  rCtx.searchCtx = req;
-
-  for (int i = 0; i < count; i++) {
-    processSearchReply(replies[i], &rCtx, ctx);
-  }
-  if (rCtx.cachedResult) {
-    free(rCtx.cachedResult);
-  }
-  // If we didn't get any results and we got an error - return it.
-  // If some shards returned results and some errors - we prefer to show the results we got an not
-  // return an error. This might change in the future
-  if ((rCtx.totalReplies == 0 && rCtx.lastError != NULL) || rCtx.errorOccured) {
-    if (rCtx.lastError) {
-      MR_ReplyWithMRReply(ctx, rCtx.lastError);
-    } else {
-      RedisModule_ReplyWithError(ctx, "could not parse redisearch results");
-    }
-  } else {
-    sendSearchResults(ctx, &rCtx);
-  }
-
-  if (rCtx.pq) {
-    searchResult *res;
-    while ((res = heap_poll(rCtx.pq))) {
-      free(res);
-    }
-    heap_free(rCtx.pq);
-  }
-
-  searchRequestCtx_Free(req);
-  return REDISMODULE_OK;
-}
-
 /**
  * This function is used to print profiles received from the shards.
  * It is used by both SEARCH and AGGREGATE.
@@ -792,12 +743,42 @@ size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int 
   return retLen;
 }
 
-static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
-  clock_t postProccesTime = clock();
+static void profileSearchReply(RedisModuleCtx *ctx, searchReducerCtx *rCtx,
+                               int count, MRReply **replies,
+                               clock_t totalTime, clock_t postProccesTime) {
+  RedisModule_ReplyWithArray(ctx, 2);
+  // print results
+  sendSearchResults(ctx, rCtx);
+
+  // print profile of shards
+  int arrLen = 0;
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+  arrLen += PrintShardProfile(ctx, count, replies, 1);
+
+  // print coordinator stats
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
+  arrLen++;
+  // search cmd only do the heap so there is no parsing time
+  RedisModule_ReplyWithArray(ctx, 2);
+  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - totalTime) / CLOCKS_PER_MILLISEC);
+  arrLen++;
+
+  RedisModule_ReplyWithArray(ctx, 2);
+  RedisModule_ReplyWithSimpleString(ctx, "Post Proccessing time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - postProccesTime) / CLOCKS_PER_MILLISEC); 
+  arrLen++;
+
+  RedisModule_ReplySetArrayLength(ctx, arrLen);
+}
+
+static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  clock_t postProccesTime;
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};
-  clock_t returnClock = clock();
+  int profile = (req->profileArgs > 0);
 
   // got no replies - this means timeout
   if (count == 0 || req->limit < 0) {
@@ -815,7 +796,7 @@ static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **rep
   rCtx.searchCtx = req;
 
   for (int i = 0; i < count; i++) {
-    MRReply *reply = MRReply_ArrayElement(replies[i], 0);
+    MRReply *reply = (!profile) ? replies[i] : MRReply_ArrayElement(replies[i], 0);
     processSearchReply(reply, &rCtx, ctx);
   }
   if (rCtx.cachedResult) {
@@ -833,29 +814,12 @@ static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **rep
     goto cleanup;
   }
   
-  RedisModule_ReplyWithArray(ctx, 2);
-  // print results
-  sendSearchResults(ctx, &rCtx);
-
-  // print profile of shards
-  int arrLen = 0;
-  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
-
-  arrLen += PrintShardProfile(ctx, count, replies, 1);
-
-  // print coordinator stats
-  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
-  // search cmd only do the heap
-  RedisModule_ReplyWithArray(ctx, 2);
-  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
-  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->profileClock) / CLOCKS_PER_MILLISEC);
-  RedisModule_ReplyWithArray(ctx, 2);
-  RedisModule_ReplyWithSimpleString(ctx, "Post Proccessing time");
-  RedisModule_ReplyWithDouble(ctx, (double)(clock() - postProccesTime) / CLOCKS_PER_MILLISEC); 
-  arrLen += 3;
-
-  RedisModule_ReplySetArrayLength(ctx, arrLen);
-
+  if (!profile) {
+    sendSearchResults(ctx, &rCtx);
+  } else {
+    postProccesTime = clock();
+    profileSearchReply(ctx, &rCtx, count, replies, req->profileClock, postProccesTime);
+  }
 cleanup:
   if (rCtx.pq) {
     searchResult *res;
@@ -1247,7 +1211,7 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   // we also ask only masters to serve the request, to avoid duplications by random
   MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
 
-  MR_Map(mrctx, req->reducer, cg, true);
+  MR_Map(mrctx, searchResultReducer, cg, true);
   cg.Free(cg.ctx);
   return REDISMODULE_OK;
 }

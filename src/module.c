@@ -1220,6 +1220,11 @@ int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
   if (argc < 5) {
     return RedisModule_WrongArity(ctx);
   }
+
+  if (RMUtil_ArgExists("WITHCURSOR", argv, argc, 3)) {
+    return RedisModule_ReplyWithError(ctx, "FT.PROFILE does not support cursor");
+  }
+
   const char *typeStr = RedisModule_StringPtrLen(argv[2], NULL);
   if (RMUtil_ArgExists("SEARCH", argv, 3, 2)) {
     return FlatSearchCommandHandler(ctx, argv, argc);

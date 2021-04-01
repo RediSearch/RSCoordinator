@@ -1,10 +1,11 @@
-#include <result_processor.h>
-#include <dep/rmr/rmr.h>
-#include <search_cluster.h>
-#include <commands.h>
-#include <aggregate/aggregate.h>
-#include <util/arr.h>
+#include "result_processor.h"
+#include "dep/rmr/rmr.h"
+#include "dep/rmutil/util.h"
+#include "search_cluster.h"
+#include "commands.h"
+#include "aggregate/aggregate.h"
 #include "dist_plan.h"
+#include "profile.h"
 #include <err.h>
 
 /* Get cursor command using a cursor id and an existing aggregate command */
@@ -35,12 +36,15 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
 }
 
 static int netCursorCallback(MRIteratorCallbackCtx *ctx, MRReply *rep, MRCommand *cmd) {
-  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || MRReply_Length(rep) != 2) {
+  // Should we assert this??
+  if (!rep || MRReply_Type(rep) != MR_REPLY_ARRAY || 
+             (MRReply_Length(rep) != 2 && MRReply_Length(rep) != 3)) {
     if (MRReply_Type(rep) == MR_REPLY_ERROR) {
       //      printf("Error is '%s'\n", MRReply_String(rep, NULL));
     }
     MRReply_Free(rep);
     MRIteratorCallback_Done(ctx, 1);
+    RedisModule_Log(NULL, "warning", "An empty reply was received from a shard");
     return REDIS_ERR;
   }
 
@@ -124,6 +128,10 @@ typedef struct {
   MRIterator *it;
   MRCommand cmd;
   MRCommandGenerator cg;
+
+  // profile vars
+  MRReply **shardsProfile;
+  int shardsProfileIdx;
 } RPNet;
 
 static int getNextReply(RPNet *nc) {
@@ -139,7 +147,8 @@ static int getNextReply(RPNet *nc) {
     MRReply *rows = MRReply_ArrayElement(root, 0);
     if (rows == NULL || MRReply_Type(rows) != MR_REPLY_ARRAY || MRReply_Length(rows) == 0) {
       MRReply_Free(root);
-      continue;
+      RedisModule_Log(NULL, "warning", "An empty reply was received from a shard");
+      ;    
     }
     nc->current.root = root;
     nc->current.rows = rows;
@@ -160,7 +169,13 @@ static int rpnetNext(ResultProcessor *self, SearchResult *r) {
   RPNet *nc = (RPNet *)self;
   // if we've consumed the last reply - free it
   if (nc->current.rows && nc->curIdx == MRReply_Length(nc->current.rows)) {
-    MRReply_Free(nc->current.root);
+    long long cursorId = MRReply_Integer(MRReply_ArrayElement(nc->current.root, 1));
+    // in profile mode, save shard's profile info to be returned later
+    if (cursorId == 0 && nc->shardsProfile) {
+      nc->shardsProfile[nc->shardsProfileIdx++] = nc->current.root; 
+    } else {
+      MRReply_Free(nc->current.root);
+    }
     nc->current.root = nc->current.rows = NULL;
   }
 
@@ -206,6 +221,15 @@ static void rpnetFree(ResultProcessor *rp) {
 
   nc->cg.Free(nc->cg.ctx);
 
+  if (nc->shardsProfile) {
+    for (size_t i = 0; i < nc->shardsProfileIdx; ++i) {
+      if (nc->shardsProfile[i] != nc->current.root) {
+        MRReply_Free(nc->shardsProfile[i]);
+      }
+    }
+    rm_free(nc->shardsProfile);
+  }
+
   if (nc->current.root) {
     MRReply_Free(nc->current.root);
   }
@@ -219,27 +243,41 @@ static RPNet *RPNet_New(const MRCommand *cmd, SearchCluster *sc) {
   RPNet *nc = calloc(1, sizeof(*nc));
   nc->cmd = *cmd;
   nc->cg = SearchCluster_MultiplexCommand(sc, &nc->cmd);
+  nc->shardsProfileIdx = 0;
+  nc->shardsProfile = NULL;
   nc->base.Free = rpnetFree;
   nc->base.Next = rpnetNext_Start;
   nc->base.type = RP_NETWORK;
   return nc;
 }
 
-static void buildMRCommand(RedisModuleString **argv, int argc, AREQDIST_UpstreamInfo *us,
-                           MRCommand *xcmd) {
+static void buildMRCommand(RedisModuleString **argv, int argc, int profileArgs,
+                           AREQDIST_UpstreamInfo *us, MRCommand *xcmd) {
   // We need to prepend the array with the command, index, and query that
   // we want to use.
   const char **tmparr = array_new(const char *, us->nserialized);
-  tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
-  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Query
-  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2], NULL));
+
+  if (profileArgs == 0) {
+    tmparr = array_append(tmparr, RS_AGGREGATE_CMD);                         // Command
+    tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Index name
+  } else {
+    tmparr = array_append(tmparr, RS_PROFILE_CMD);
+    tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[1], NULL));  // Index name
+    tmparr = array_append(tmparr, "AGGREGATE");
+    if (profileArgs == 3) {
+      tmparr = array_append(tmparr, "LIMITED");
+    }
+    tmparr = array_append(tmparr, "QUERY");
+  }
+  
+  tmparr = array_append(tmparr, RedisModule_StringPtrLen(argv[2 + profileArgs], NULL));  // Query
   tmparr = array_append(tmparr, "WITHCURSOR");
   // Numeric responses are encoded as simple strings.
   tmparr = array_append(tmparr, "_NUM_SSTRING");
 
   for (size_t ii = 0; ii < us->nserialized; ++ii) {
     tmparr = array_append(tmparr, us->serialized[ii]);
-    if (strncasecmp("LIMIT",  us->serialized[ii], strlen("LIMIT")) == 0) {
+    if (strncasecmp("LIMIT", us->serialized[ii], strlen("LIMIT")) == 0) {
       if (ii + 2 <= us->nserialized) {
         // change offset to `0`
         tmparr = array_append(tmparr, "0");
@@ -278,12 +316,68 @@ static void buildDistRPChain(AREQ *r, MRCommand *xcmd, SearchCluster *sc,
     }
   }
 
-  // assert(found);
+  // update root and end with RPNet
   r->qiter.rootProc = &rpRoot->base;
   if (!found) {
     r->qiter.endProc = &rpRoot->base;
   }
   rpRoot->base.parent = &r->qiter;
+
+  if (IsProfile(r)) {
+    rpRoot->shardsProfile = rm_malloc(sizeof(*rpRoot->shardsProfile) * sc->size);
+
+    ResultProcessor *rpProfile = RPProfile_New(&rpRoot->base, &r->qiter);
+    if (!found) {
+      r->qiter.endProc = rpProfile;
+    }
+  }
+}
+
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int isSearch);
+
+void printAggProfile(RedisModuleCtx *ctx, AREQ *req) {
+  size_t nelem = 0;
+  clock_t finishTime = clock();
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+  // profileRP replace netRP as end PR
+  RPNet *rpnet = (RPNet *)req->qiter.endProc->upstream;
+
+  // Print shards profile
+  nelem += PrintShardProfile(ctx, rpnet->shardsProfileIdx, rpnet->shardsProfile, 0);
+
+  // Print coordinator profile
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
+  nelem++;
+
+  RedisModule_ReplyWithSimpleString(ctx, "Result processors profile");
+  Profile_Print(ctx, req);
+  nelem += 2;
+
+  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - req->initClock) / CLOCKS_PER_MILLISEC);
+  nelem += 2;
+
+  RedisModule_ReplySetArrayLength(ctx, nelem);
+}
+
+static int parseProfile(RedisModuleString **argv, int argc, AREQ *r) {
+  // Profile args
+  int profileArgs = 0;
+  if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
+    profileArgs += 2;     // SEARCH/AGGREGATE + QUERY
+    r->initClock = clock();
+    r->reqflags |= QEXEC_F_PROFILE;
+    if (RMUtil_ArgIndex("LIMITED", argv + 3, 1) != -1) {
+      profileArgs++;
+      r->reqflags |= QEXEC_F_PROFILE_LIMITED;
+    }
+    if (RMUtil_ArgIndex("QUERY", argv + 3, 2) == -1) {
+      QueryError_SetError(r->qiter.err, QUERY_EPARSEARGS, "No QUERY keyword provided");
+      return -1;
+    }
+  }
+  return profileArgs;
 }
 
 void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc,
@@ -292,34 +386,33 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   AREQ *r = AREQ_New();
   QueryError status = {0};
   r->qiter.err = &status;
-  int rc = AREQ_Compile(r, argv + 2, argc - 2, &status);
-  if (rc != REDISMODULE_OK) {
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
+
+  int profileArgs = parseProfile(argv, argc, r);
+  if (profileArgs == -1) goto err;
+
+  int rc = AREQ_Compile(r, argv + 2 + profileArgs, argc - 2 - profileArgs, &status);
+  if (rc != REDISMODULE_OK) goto err;
+
   rc = AGGPLN_Distribute(&r->ap, &status);
-  if (rc != REDISMODULE_OK) {
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
+  if (rc != REDISMODULE_OK) goto err;
+
   AREQDIST_UpstreamInfo us = {NULL};
   rc = AREQ_BuildDistributedPipeline(r, &us, &status);
-  if (rc != REDISMODULE_OK) {
-    assert(QueryError_HasError(&status));
-    goto err;
-  }
+  if (rc != REDISMODULE_OK) goto err;
 
   SearchCluster *sc = GetSearchCluster();
 
   // Construct the command string
   MRCommand xcmd;
-  buildMRCommand(argv, argc, &us, &xcmd);
+  buildMRCommand(argv , argc, profileArgs, &us, &xcmd);
 
   // Build the result processor chain
   buildDistRPChain(r, &xcmd, sc, &us);
 
+  if (IsProfile(r)) r->parseTime = clock() - r->initClock;
+
   if (r->reqflags & QEXEC_F_IS_CURSOR) {
-    const char *ixname = RedisModule_StringPtrLen(argv[1], NULL);
+    const char *ixname = RedisModule_StringPtrLen(argv[1 + profileArgs], NULL);
 //    const char *partTag = PartitionTag(&sc->part, sc->myPartition);
 //    size_t dummy;
 //    char *tagged = writeTaggedId(ixname, strlen(ixname), partTag, strlen(partTag), &dummy);
@@ -339,13 +432,17 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     rc = AREQ_StartCursor(r, ctx, ixname, &status);
 
-//    free(tagged);
     if (rc != REDISMODULE_OK) {
-      assert(QueryError_HasError(&status));
       goto err;
     }
+  } else if (IsProfile(r)) {
+    RedisModule_ReplyWithArray(ctx, 2);
+    sendChunk(r, ctx, -1);
+    printAggProfile(ctx, r);
+    AREQ_Free(r);
   } else {
-    AREQ_Execute(r, ctx);
+    sendChunk(r, ctx, -1);
+    AREQ_Free(r);
   }
   return;
 

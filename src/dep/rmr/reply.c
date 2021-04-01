@@ -153,7 +153,7 @@ int MR_ReplyWithMRReply(RedisModuleCtx *ctx, MRReply *rep) {
       for (size_t i = 0; i < MRReply_Length(rep); i++) {
         MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(rep, i));
       }
-      break;
+      return REDISMODULE_OK;
     }
 
     case MR_REPLY_INTEGER:

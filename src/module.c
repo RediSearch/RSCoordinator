@@ -22,6 +22,7 @@
 #include "aggregate/aggregate.h"
 #include "value.h"
 #include "cluster_spell_check.h"
+#include "profile.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -319,11 +320,35 @@ typedef struct {
   int withSortingKeys;
   int noContent;
 
+  // used to signal profile flag and count related args
+  int profileArgs;
+  int profileLimited;
+  clock_t profileClock;
+  void *reducer;
 } searchRequestCtx;
 
 void searchRequestCtx_Free(searchRequestCtx *r) {
   free(r->queryString);
   free(r);
+}
+
+static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
+static int profileSearchResultReducer(struct MRCtx *mc, int count, MRReply **replies);
+
+static int rscParseProfile(searchRequestCtx *req, RedisModuleString **argv) {
+  req->profileArgs = 0;
+  if (RMUtil_ArgIndex("FT.PROFILE", argv, 1) != -1) {
+    req->profileArgs += 2;
+    req->profileClock = clock();
+    if (RMUtil_ArgIndex("LIMITED", argv + 3, 1) != -1) {
+      req->profileLimited = 1;
+      req->profileArgs++;
+    }
+    if (RMUtil_ArgIndex("QUERY", argv + 3, 2) == -1) {
+      return REDISMODULE_ERR;
+    }
+  }
+  return REDISMODULE_OK;
 }
 
 searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
@@ -333,12 +358,19 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
   }
 
   searchRequestCtx *req = malloc(sizeof(searchRequestCtx));
-  req->queryString = strdup(RedisModule_StringPtrLen(argv[2], NULL));
+
+  if (rscParseProfile(req, argv) != REDISMODULE_OK) {
+    free(req);
+    return NULL;
+  }
+
+  int argvOffset = 2 + req->profileArgs;
+  req->queryString = strdup(RedisModule_StringPtrLen(argv[argvOffset++], NULL));
   req->limit = 10;
   req->offset = 0;
   // marks the user set WITHSCORES. internally it's always set
-  req->withScores = RMUtil_ArgExists("WITHSCORES", argv, argc, 3) != 0;
-  req->withExplainScores = RMUtil_ArgExists("EXPLAINSCORE", argv, argc, 3) != 0;
+  req->withScores = RMUtil_ArgExists("WITHSCORES", argv, argc, argvOffset) != 0;
+  req->withExplainScores = RMUtil_ArgExists("EXPLAINSCORE", argv, argc, argvOffset) != 0;
 
   // Parse SORTBY ... ASC
   int sortByIndex = RMUtil_ArgIndex("SORTBY", argv, argc);
@@ -350,15 +382,15 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
     }
   }
 
-  req->withSortingKeys = RMUtil_ArgExists("WITHSORTKEYS", argv, argc, 3) != 0;
+  req->withSortingKeys = RMUtil_ArgExists("WITHSORTKEYS", argv, argc, argvOffset) != 0;
   // fprintf(stderr, "Sortby: %d, asc: %d withsort: %d\n", req->withSortby, req->sortAscending,
   //         req->withSortingKeys);
 
   // Detect "NOCONTENT"
-  req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, 3) != 0;
+  req->noContent = RMUtil_ArgExists("NOCONTENT", argv, argc, argvOffset) != 0;
 
   // if RETURN exists - make sure we don't have RETURN 0
-  if (!req->noContent && RMUtil_ArgExists("RETURN", argv, argc, 3)) {
+  if (!req->noContent && RMUtil_ArgExists("RETURN", argv, argc, argvOffset)) {
     long long numReturns = -1;
     RMUtil_ParseArgsAfter("RETURN", argv, argc, "l", &numReturns);
     // RETURN 0 equals NOCONTENT
@@ -367,10 +399,10 @@ searchRequestCtx *rscParseRequest(RedisModuleString **argv, int argc) {
     }
   }
 
-  req->withPayload = RMUtil_ArgExists("WITHPAYLOADS", argv, argc, 3) != 0;
+  req->withPayload = RMUtil_ArgExists("WITHPAYLOADS", argv, argc, argvOffset) != 0;
 
   // Parse LIMIT argument
-  RMUtil_ParseArgsAfter("LIMIT", argv, argc, "ll", &req->offset, &req->limit);
+  RMUtil_ParseArgsAfter("LIMIT", argv + argvOffset, argc - argvOffset, "ll", &req->offset, &req->limit);
   if (req->limit < 0 || req->offset < 0) {
     free(req);
     return NULL;
@@ -687,14 +719,74 @@ static void sendSearchResults(RedisModuleCtx *ctx, searchReducerCtx *rCtx) {
   }
 }
 
-int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+/**
+ * This function is used to print profiles received from the shards.
+ * It is used by both SEARCH and AGGREGATE.
+ */
+size_t PrintShardProfile(RedisModuleCtx *ctx, int count, MRReply **replies, int isSearch) {
+  size_t retLen = 0;
+  // Print information for each shard
+  for (int i = 0; i < count; ++i) {
+    RedisModule_ReplyWithPrintf(ctx, "Shard #%d", i + 1);
+    retLen++;
+    // The 1st location always stores the results. On FT.AGGREGATE, the next place stores the
+    // cursor ID. The last location (2nd for FT.SEARCH and 3rd for FT.AGGREGATE) stores the
+    // profile information of the shard.
+    int idx = isSearch ? 1 : 2;
+    MRReply *reply = MRReply_ArrayElement(replies[i], idx);
+    int len = MRReply_Length(reply);
+    for (int j = 0; j < len; ++j) {
+      MR_ReplyWithMRReply(ctx, MRReply_ArrayElement(reply, j));
+    }
+    retLen += len;
+  }
+  return retLen;
+}
+
+static void profileSearchReply(RedisModuleCtx *ctx, searchReducerCtx *rCtx,
+                               int count, MRReply **replies,
+                               clock_t totalTime, clock_t postProccesTime) {
+  RedisModule_ReplyWithArray(ctx, 2);
+  // print results
+  sendSearchResults(ctx, rCtx);
+
+  // print profile of shards
+  int arrLen = 0;
+  RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
+
+  arrLen += PrintShardProfile(ctx, count, replies, 1);
+
+  // print coordinator stats
+  RedisModule_ReplyWithSimpleString(ctx, "Coordinator");
+  arrLen++;
+  // search cmd only do the heap so there is no parsing time
+  RedisModule_ReplyWithArray(ctx, 2);
+  RedisModule_ReplyWithSimpleString(ctx, "Total Coordinator time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - totalTime) / CLOCKS_PER_MILLISEC);
+  arrLen++;
+
+  RedisModule_ReplyWithArray(ctx, 2);
+  RedisModule_ReplyWithSimpleString(ctx, "Post Proccessing time");
+  RedisModule_ReplyWithDouble(ctx, (double)(clock() - postProccesTime) / CLOCKS_PER_MILLISEC); 
+  arrLen++;
+
+  RedisModule_ReplySetArrayLength(ctx, arrLen);
+}
+
+static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
+  clock_t postProccesTime;
   RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};
+  int profile = (req->profileArgs > 0);
 
   // got no replies - this means timeout
   if (count == 0 || req->limit < 0) {
     return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+  }
+
+  if (MRReply_Type(*replies) == MR_REPLY_ERROR) {
+    return MR_ReplyWithMRReply(ctx, *replies);
   }
 
   size_t num = req->offset + req->limit;
@@ -704,7 +796,8 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   rCtx.searchCtx = req;
 
   for (int i = 0; i < count; i++) {
-    processSearchReply(replies[i], &rCtx, ctx);
+    MRReply *reply = (!profile) ? replies[i] : MRReply_ArrayElement(replies[i], 0);
+    processSearchReply(reply, &rCtx, ctx);
   }
   if (rCtx.cachedResult) {
     free(rCtx.cachedResult);
@@ -718,10 +811,16 @@ int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     } else {
       RedisModule_ReplyWithError(ctx, "could not parse redisearch results");
     }
-  } else {
-    sendSearchResults(ctx, &rCtx);
+    goto cleanup;
   }
-
+  
+  if (!profile) {
+    sendSearchResults(ctx, &rCtx);
+  } else {
+    postProccesTime = clock();
+    profileSearchReply(ctx, &rCtx, count, replies, req->profileClock, postProccesTime);
+  }
+cleanup:
   if (rCtx.pq) {
     searchResult *res;
     while ((res = heap_poll(rCtx.pq))) {
@@ -1089,33 +1188,20 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf, strlen(buf));
   }
 
-  // Tag the InKeys arguments
-//  int inKeysPos = RMUtil_ArgIndex("INKEYS", argv, argc);
-//
-//  if (inKeysPos > 2) {
-//    long long numFilteredIds = 0;
-//    // Get the number of INKEYS args
-//    RMUtil_ParseArgsAfter("INKEYS", &argv[inKeysPos], argc - inKeysPos, "l", &numFilteredIds);
-//    // If we won't overflow - tag each key
-//    if (numFilteredIds > 0 && numFilteredIds + inKeysPos + 1 < argc) {
-//      inKeysPos += 2;  // the start of the actual keys
-//      for (int x = inKeysPos; x < inKeysPos + numFilteredIds && x < argc; x++) {
-//        SearchCluster_RewriteCommandArg(GetSearchCluster(), &cmd, x, x);
-//      }
-//    }
-//  }
-  // MRCommand_Print(&cmd);
-
   /* Replace our own FT command with _FT. command */
-  MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
+  if (req->profileArgs == 0) {
+    MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
+  } else {
+    MRCommand_ReplaceArg(&cmd, 0, "_FT.PROFILE", sizeof("_FT.PROFILE") - 1);
+  }
 
   // adding the WITHSCORES option anyway immediately after the query.
   // Worst case it will appears twice.
-  MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
+  MRCommand_AppendArgsAtPos(&cmd, 3 + req->profileArgs, 1, "WITHSCORES");
   if (req->withSortby) {
     // if sort by requested we adding the WITHSORTKEYS option anyway immediately after the query.
     // Worst case it will appears twice.
-    MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSORTKEYS");
+    MRCommand_AppendArgsAtPos(&cmd, 3 + req->profileArgs, 1, "WITHSORTKEYS");
     // req->withSortingKeys = 1;
   }
 
@@ -1130,40 +1216,23 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
   return REDISMODULE_OK;
 }
 
-int SearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  if (argc < 3) {
+int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 5) {
     return RedisModule_WrongArity(ctx);
   }
-  // Check that the cluster state is valid
-  if (!SearchCluster_Ready(GetSearchCluster())) {
-    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+
+  if (RMUtil_ArgExists("WITHCURSOR", argv, argc, 3)) {
+    return RedisModule_ReplyWithError(ctx, "FT.PROFILE does not support cursor");
   }
-  RedisModule_AutoMemory(ctx);
-  // MR_UpdateTopology(ctx);
 
-  // If this a one-node cluster, we revert to a simple, flat one level coordination
-  // if (MR_NumHosts() < 2) {
-  //   return LocalSearchCommandHandler(ctx, argv, argc);
-  // }
-
-  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-  MRCommand_ReplaceArg(&cmd, 0, "FT.LSEARCH", sizeof("FT.LSEARCH") - 1);
-
-  searchRequestCtx *req = rscParseRequest(argv, argc);
-  if (!req) {
-    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+  const char *typeStr = RedisModule_StringPtrLen(argv[2], NULL);
+  if (RMUtil_ArgExists("SEARCH", argv, 3, 2)) {
+    return FlatSearchCommandHandler(ctx, argv, argc);
   }
-  // Internally we must have WITHSCORES set, even if the usr didn't set it
-  MRCommand_AppendArgsAtPos(&cmd, 3, 1, "WITHSCORES");
-
-  // MRCommand_Print(&cmd);
-
-  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  MR_SetCoordinationStrategy(mrctx, MRCluster_RemoteCoordination | MRCluster_MastersOnly);
-  MR_Fanout(mrctx, searchResultReducer, cmd);
-
-  return REDIS_OK;
+  if (RMUtil_ArgExists("AGGREGATE", argv, 3, 2)) {
+    return DistAggregateCommand(ctx, argv, argc);
+  }
+  return RedisModule_ReplyWithError(ctx, "No `SEARCH` or `AGGREGATE` provided");
 }
 
 int ClusterInfoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -1461,6 +1530,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.PROFILE", SafeCmd(ProfileCommandHandler), "readonly", 0, 0, -1));
   if (clusterConfig.type == ClusterType_RedisLabs) {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));
   } else {

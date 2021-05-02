@@ -219,8 +219,8 @@ after-platform-builds: &after-platform-builds
     - centos7
     - bionic
     - xenial
-    - trusty
- 
+    # - trusty
+
 
 workflows:
   version: 2

@@ -929,6 +929,10 @@ static int DistAggregateCommand(RedisModuleCtx *ctx, RedisModuleString **argv, i
                                                RSExecDistAggregate, ctx, argv, argc);
 }
 
+static void CursorCommandInternal(RedisModuleCtx *ctx, RedisModuleString **argv, int argc, struct ConcurrentCmdCtx *cmdCtx) {
+  RSCursorCommand(ctx, argv, argc);
+}
+
 static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (argc < 4) {
     return RedisModule_WrongArity(ctx);
@@ -936,8 +940,8 @@ static int CursorCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
   if (!SearchCluster_Ready(GetSearchCluster())) {
     return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
   }
-  RSCursorCommand(ctx, argv, argc);
-  return REDISMODULE_OK;
+  return ConcurrentSearch_HandleRedisCommandEx(DIST_AGG_THREADPOOL, CMDCTX_NO_GIL,
+                                               CursorCommandInternal, ctx, argv, argc);
 }
 
 int TagValsCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {

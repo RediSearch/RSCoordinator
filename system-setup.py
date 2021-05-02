@@ -18,7 +18,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
     def common_first(self):
         self.install_downloaders()
         self.pip_install("wheel")
-        self.pip_install("setuptools --upgrade")
+        self.pip_install("--ignore-installed --no-cache-dir setuptools --upgrade")
 
         self.install("git gawk lcov jq")
 

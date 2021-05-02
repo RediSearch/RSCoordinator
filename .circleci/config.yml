@@ -59,7 +59,7 @@ commands:
 jobs:
   bionic:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-bionic
+      - image: redisfab/rmbuilder:6.2.1-x64-bionic
     environment:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
@@ -73,7 +73,7 @@ jobs:
 
   xenial:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-xenial
+      - image: redisfab/rmbuilder:6.2.1-x64-xenial
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
@@ -82,7 +82,7 @@ jobs:
 
   trusty:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-trusty
+      - image: redisfab/rmbuilder:6.2.1-x64-trusty
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
@@ -91,7 +91,7 @@ jobs:
   
   centos7:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-centos7
+      - image: redisfab/rmbuilder:6.2.1-x64-centos7
     environment:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
@@ -105,7 +105,7 @@ jobs:
 
   deploy-snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -119,7 +119,7 @@ jobs:
 
   deploy-release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -133,7 +133,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -146,7 +146,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.1-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -232,8 +232,8 @@ workflows:
           <<: *on-any-branch
       - centos7:
           <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
+      # - trusty:
+      #    <<: *on-any-branch
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds

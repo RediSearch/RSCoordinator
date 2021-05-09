@@ -219,8 +219,8 @@ after-platform-builds: &after-platform-builds
     - centos7
     - bionic
     - xenial
-    - trusty
- 
+    # - trusty
+
 
 workflows:
   version: 2
@@ -232,8 +232,8 @@ workflows:
           <<: *on-any-branch
       - centos7:
           <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
+      # - trusty:
+      #    <<: *on-any-branch
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds

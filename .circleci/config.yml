@@ -90,19 +90,6 @@ jobs:
     steps:
       - build-steps
 
-  trusty:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-trusty
-    environment:
-      - BUILD_DIR: build-trusty
-      - DIST_SUFFIX: -ubuntu14.04
-    parameters:
-      redis_version:
-        type: string
-        default: "6"
-    steps:
-      - build-steps
-  
   centos7:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-centos7
@@ -234,15 +221,17 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 after-platform-builds: &after-platform-builds
   requires:
     - centos7
-    - bionic
+    - bionic-std
     - xenial
-#    - trusty
  
 
 workflows:
   version: 2
   default_flow:
     jobs:
+      - bionic:
+          name: bionic-std
+          <<: *on-any-branch
       - bionic:
           name: bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
@@ -252,16 +241,14 @@ workflows:
       - bionic:
           name: latest-search-bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
+          search-from-int: true
           matrix:
             parameters:
-              search-from-int: true
               redis_version: ["5.0", "6.0", "6.2"]
       - xenial:
           <<: *on-any-branch
       - centos7:
           <<: *on-any-branch
-#      - trusty:
-#          <<: *on-any-branch
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds

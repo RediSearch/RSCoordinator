@@ -12,6 +12,12 @@ commands:
 
   build-steps:
     parameters:
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
       search-from-master:
         type: boolean
         default: false
@@ -20,7 +26,7 @@ commands:
       - setup-automation
       - run:
           name: Install Redis
-          command: python2 ./deps/readies/bin/getredis -v 6
+          command: python2 ./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>
       - run:
           name: Submodule checkout
           command: |
@@ -64,6 +70,9 @@ jobs:
       search-from-master:
         type: boolean
         default: false
+      redis_version:
+        type: string
+        default: "6"
     steps:
       - build-steps:
           search-from-master: <<parameters.search-from-master>>
@@ -74,6 +83,10 @@ jobs:
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
+    parameters:
+      redis_version:
+        type: string
+        default: "6"
     steps:
       - build-steps
 
@@ -83,6 +96,10 @@ jobs:
     environment:
       - BUILD_DIR: build-trusty
       - DIST_SUFFIX: -ubuntu14.04
+    parameters:
+      redis_version:
+        type: string
+        default: "6"
     steps:
       - build-steps
   
@@ -96,6 +113,9 @@ jobs:
       search-from-master:
         type: boolean
         default: false
+      redis_version:
+        type: string
+        default: "6"
     steps:
       - build-steps:
           search-from-master: <<parameters.search-from-master>>
@@ -225,6 +245,9 @@ workflows:
     jobs:
       - bionic:
           <<: *on-any-branch
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
       - xenial:
           <<: *on-any-branch
       - centos7:
@@ -232,12 +255,15 @@ workflows:
       - trusty:
           <<: *on-any-branch
       - deploy-snapshots:
+          context: common
           <<: *after-platform-builds
           <<: *on-integ-branch
       - deploy-release:
+          context: common
           <<: *after-platform-builds
           <<: *on-version-tags
       - release-automation:
+          context: common
           requires:
             - deploy-release
           <<: *on-version-tags
@@ -253,7 +279,14 @@ workflows:
       - bionic:
           name: nightly-bionic
           search-from-master: true
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
       - centos7:
           name: nightly-centos7
           search-from-master: true
-      - nightly-automation
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
+      - nightly-automation:
+          context: common

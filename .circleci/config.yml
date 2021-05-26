@@ -7,7 +7,7 @@ commands:
           name: Setup automation and install dependencies
           command: |
             (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            FORCE=1 ./deps/readies/bin/getpy2
             ./system-setup.py
 
   build-steps:
@@ -18,7 +18,7 @@ commands:
       getredis_params:
         type: string
         default: ""
-      search-from-master:
+      search-from-int:
         type: boolean
         default: false
     steps:
@@ -33,9 +33,9 @@ commands:
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
             fi
-            if [[ <<parameters.search-from-master>> == true ]]; then
+            if [[ <<parameters.search-from-int>> == true ]]; then
               pushd src/dep/RediSearch
-              git checkout master
+              git checkout 1.6
               git pull --recurse-submodules
               popd > /dev/null
             fi
@@ -67,7 +67,7 @@ jobs:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
     parameters:
-      search-from-master:
+      search-from-int:
         type: boolean
         default: false
       redis_version:
@@ -75,7 +75,7 @@ jobs:
         default: "6"
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          search-from-int: <<parameters.search-from-int>>
 
   xenial:
     docker:
@@ -110,7 +110,7 @@ jobs:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
     parameters:
-      search-from-master:
+      search-from-int:
         type: boolean
         default: false
       redis_version:
@@ -118,7 +118,7 @@ jobs:
         default: "6"
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          search-from-int: <<parameters.search-from-int>>
 
   deploy-snapshots:
     docker:
@@ -244,9 +244,17 @@ workflows:
   default_flow:
     jobs:
       - bionic:
+          name: bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
           matrix:
             parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
+      - bionic:
+          name: latest-search-bionic-with-redis-<< matrix.redis_version >>
+          <<: *on-any-branch
+          matrix:
+            parameters:
+              search-from-int: true
               redis_version: ["5.0", "6.0", "6.2"]
       - xenial:
           <<: *on-any-branch
@@ -277,14 +285,14 @@ workflows:
               only: master
     jobs:
       - bionic:
-          name: nightly-bionic
-          search-from-master: true
+          name: nightly-bionic-with-redis-<< matrix.redis_version >>
+          search-from-int: true
           matrix:
             parameters:
               redis_version: ["5.0", "6.0", "6.2"]
       - centos7:
-          name: nightly-centos7
-          search-from-master: true
+          name: nightly-centos7-with-redis-<< matrix.redis_version >>
+          search-from-int: true
           matrix:
             parameters:
               redis_version: ["5.0", "6.0", "6.2"]

@@ -252,8 +252,8 @@ workflows:
           <<: *on-any-branch
       - centos7:
           <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
+#      - trusty:
+#          <<: *on-any-branch
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds

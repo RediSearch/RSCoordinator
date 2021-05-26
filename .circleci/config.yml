@@ -59,7 +59,7 @@ commands:
       - run:
           name: Deploy gate
           command: |
-            if [[ <<parameters.deploy>> == true ]]; then
+            if [[ <<parameters.deploy>> == false ]]; then
               circleci step halt
             fi
       - persist_to_workspace:
@@ -88,6 +88,8 @@ jobs:
     steps:
       - build-steps:
           search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
   xenial:
     docker:
@@ -96,6 +98,9 @@ jobs:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
     parameters:
+      search-from-int:
+        type: boolean
+        default: false
       redis_version:
         type: string
         default: "6"
@@ -103,7 +108,10 @@ jobs:
         type: boolean
         default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
   centos7:
     docker:
@@ -124,6 +132,8 @@ jobs:
     steps:
       - build-steps:
           search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
   deploy-snapshots:
     docker:

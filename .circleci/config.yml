@@ -21,6 +21,9 @@ commands:
       search-from-int:
         type: boolean
         default: false
+      deploy:
+        type: boolean
+        default: false
     steps:
       - checkout
       - setup-automation
@@ -53,6 +56,12 @@ commands:
           command: |
             ./.circleci/package.sh
             ./.circleci/package-light.sh
+      - run:
+          name: Deploy gate
+          command: |
+            if [[ <<parameters.deploy>> == true ]]; then
+              circleci step halt
+            fi
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -73,6 +82,9 @@ jobs:
       redis_version:
         type: string
         default: "6"
+      deploy:
+        type: boolean
+        default: false
     steps:
       - build-steps:
           search-from-int: <<parameters.search-from-int>>
@@ -87,6 +99,9 @@ jobs:
       redis_version:
         type: string
         default: "6"
+      deploy:
+        type: boolean
+        default: false
     steps:
       - build-steps
 
@@ -103,6 +118,9 @@ jobs:
       redis_version:
         type: string
         default: "6"
+      deploy:
+        type: boolean
+        default: false
     steps:
       - build-steps:
           search-from-int: <<parameters.search-from-int>>
@@ -232,6 +250,7 @@ workflows:
       - bionic:
           name: bionic-std
           <<: *on-any-branch
+          deploy: true
       - bionic:
           name: bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
@@ -247,8 +266,10 @@ workflows:
               redis_version: ["5.0", "6.0", "6.2"]
       - xenial:
           <<: *on-any-branch
+          deploy: true
       - centos7:
           <<: *on-any-branch
+          deploy: true
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds

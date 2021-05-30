@@ -7,12 +7,21 @@ commands:
           name: Setup automation and install dependencies
           command: |
             (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
+            FORCE=1 ./deps/readies/bin/getpy2
             ./system-setup.py
 
   build-steps:
     parameters:
-      search-from-master:
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
+      search-from-int:
+        type: boolean
+        default: false
+      deploy:
         type: boolean
         default: false
     steps:
@@ -20,16 +29,16 @@ commands:
       - setup-automation
       - run:
           name: Install Redis
-          command: python2 ./deps/readies/bin/getredis -v 6
+          command: python2 ./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>
       - run:
           name: Submodule checkout
           command: |
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
             fi
-            if [[ <<parameters.search-from-master>> == true ]]; then
+            if [[ <<parameters.search-from-int>> == true ]]; then
               pushd src/dep/RediSearch
-              git checkout master
+              git checkout 1.6
               git pull --recurse-submodules
               popd > /dev/null
             fi
@@ -47,6 +56,12 @@ commands:
           command: |
             ./.circleci/package.sh
             ./.circleci/package-light.sh
+      - run:
+          name: Deploy gate
+          command: |
+            if [[ <<parameters.deploy>> == false ]]; then
+              circleci step halt
+            fi
       - persist_to_workspace:
           root: /workspace
           paths:
@@ -54,19 +69,27 @@ commands:
             - 'release'
 
 jobs:
-  bionic:
+  bionic_:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-bionic
     environment:
       - BUILD_DIR: build-bionic
       - DIST_SUFFIX: -ubuntu18.04
     parameters:
-      search-from-master:
+      search-from-int:
+        type: boolean
+        default: false
+      redis_version:
+        type: string
+        default: "6"
+      deploy:
         type: boolean
         default: false
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
   xenial:
     docker:
@@ -74,18 +97,22 @@ jobs:
     environment:
       - BUILD_DIR: build-xenial
       - DIST_SUFFIX: -ubuntu16.04
+    parameters:
+      search-from-int:
+        type: boolean
+        default: false
+      redis_version:
+        type: string
+        default: "6"
+      deploy:
+        type: boolean
+        default: false
     steps:
-      - build-steps
+      - build-steps:
+          search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
-  trusty:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-trusty
-    environment:
-      - BUILD_DIR: build-trusty
-      - DIST_SUFFIX: -ubuntu14.04
-    steps:
-      - build-steps
-  
   centos7:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-centos7
@@ -93,12 +120,20 @@ jobs:
       - BUILD_DIR: build-el
       - DIST_SUFFIX: -rhel7
     parameters:
-      search-from-master:
+      search-from-int:
+        type: boolean
+        default: false
+      redis_version:
+        type: string
+        default: "6"
+      deploy:
         type: boolean
         default: false
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          search-from-int: <<parameters.search-from-int>>
+          redis_version: <<parameters.redis_version>>
+          deploy: <<parameters.deploy>>
 
   deploy-snapshots:
     docker:
@@ -216,28 +251,45 @@ after-platform-builds: &after-platform-builds
     - centos7
     - bionic
     - xenial
-    - trusty
  
 
 workflows:
   version: 2
   default_flow:
     jobs:
-      - bionic:
+      - bionic_:
+          name: bionic
           <<: *on-any-branch
+          deploy: true
+      - bionic_:
+          name: bionic-with-redis-<< matrix.redis_version >>
+          <<: *on-any-branch
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
+      - bionic_:
+          name: latest-search-bionic-with-redis-<< matrix.redis_version >>
+          <<: *on-any-branch
+          search-from-int: true
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
       - xenial:
           <<: *on-any-branch
+          deploy: true
       - centos7:
           <<: *on-any-branch
-      - trusty:
-          <<: *on-any-branch
+          deploy: true
       - deploy-snapshots:
+          context: common
           <<: *after-platform-builds
           <<: *on-integ-branch
       - deploy-release:
+          context: common
           <<: *after-platform-builds
           <<: *on-version-tags
       - release-automation:
+          context: common
           requires:
             - deploy-release
           <<: *on-version-tags
@@ -250,10 +302,17 @@ workflows:
             branches:
               only: master
     jobs:
-      - bionic:
-          name: nightly-bionic
-          search-from-master: true
+      - bionic_:
+          name: nightly-bionic-with-redis-<< matrix.redis_version >>
+          search-from-int: true
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
       - centos7:
-          name: nightly-centos7
-          search-from-master: true
-      - nightly-automation
+          name: nightly-centos7-with-redis-<< matrix.redis_version >>
+          search-from-int: true
+          matrix:
+            parameters:
+              redis_version: ["5.0", "6.0", "6.2"]
+      - nightly-automation:
+          context: common

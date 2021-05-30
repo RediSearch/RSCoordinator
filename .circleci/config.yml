@@ -69,7 +69,7 @@ commands:
             - 'release'
 
 jobs:
-  bionic:
+  bionic_:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-bionic
     environment:
@@ -249,7 +249,7 @@ on-integ-and-version-tags: &on-integ-and-version-tags
 after-platform-builds: &after-platform-builds
   requires:
     - centos7
-    - bionic-std
+    - bionic
     - xenial
  
 
@@ -257,17 +257,17 @@ workflows:
   version: 2
   default_flow:
     jobs:
-      - bionic:
-          name: bionic-std
+      - bionic_:
+          name: bionic
           <<: *on-any-branch
           deploy: true
-      - bionic:
+      - bionic_:
           name: bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
           matrix:
             parameters:
               redis_version: ["5.0", "6.0", "6.2"]
-      - bionic:
+      - bionic_:
           name: latest-search-bionic-with-redis-<< matrix.redis_version >>
           <<: *on-any-branch
           search-from-int: true
@@ -302,7 +302,7 @@ workflows:
             branches:
               only: master
     jobs:
-      - bionic:
+      - bionic_:
           name: nightly-bionic-with-redis-<< matrix.redis_version >>
           search-from-int: true
           matrix:

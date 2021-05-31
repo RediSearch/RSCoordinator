@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index f86c9b7..05e51cf 100644
+index f86c9b7..da53b08 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -40,7 +40,7 @@ IF(WIN32)
@@ -11,6 +11,15 @@ index f86c9b7..05e51cf 100644
  
  SET_TARGET_PROPERTIES(hiredis
      PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE
+@@ -97,7 +97,7 @@ IF(ENABLE_SSL)
+     FIND_PACKAGE(OpenSSL REQUIRED)
+     SET(hiredis_ssl_sources 
+         ssl.c)
+-    ADD_LIBRARY(hiredis_ssl SHARED
++    ADD_LIBRARY(hiredis_ssl STATIC
+             ${hiredis_ssl_sources})
+ 
+     IF (APPLE)
 diff --git a/async.c b/async.c
 index 020cb09..ecb247e 100644
 --- a/async.c

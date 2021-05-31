@@ -32,6 +32,58 @@ inline int SearchCluster_Ready(SearchCluster *sc) {
   return sc != NULL && sc->size != 0 && sc->part.table != NULL;
 }
 
+char* getConfigValue(RedisModuleCtx *ctx, const char* confName){
+  RedisModuleCallReply *rep = RedisModule_Call(ctx, "config", "cc", "get", confName);
+  RedisModule_Assert(RedisModule_CallReplyType(rep) == REDISMODULE_REPLY_ARRAY);
+  if (RedisModule_CallReplyLength(rep) == 0){
+    return NULL;
+  }
+  RedisModule_Assert(RedisModule_CallReplyLength(rep) == 2);
+  RedisModuleCallReply *valueRep = RedisModule_CallReplyArrayElement(rep, 1);
+  RedisModule_Assert(RedisModule_CallReplyType(valueRep) == REDISMODULE_REPLY_STRING);
+  size_t len;
+  const char* valueRepCStr = RedisModule_CallReplyStringPtr(valueRep, &len);
+
+  char* res = rm_calloc(1, len + 1);
+  memcpy(res, valueRepCStr, len);
+
+  RedisModule_FreeCallReply(rep);
+
+  return res;
+}
+
+int checkTLS(char** client_key, char** client_cert){
+  int ret = 1;
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
+  RedisModule_ThreadSafeContextLock(ctx);
+
+  char* clusterTls = getConfigValue(ctx, "tls-cluster");
+  if (!clusterTls || strcmp(clusterTls, "yes")) {
+    ret = 0;
+    goto done;
+  }
+
+  *client_key = getConfigValue(ctx, "tls-key-file");
+  *client_cert = getConfigValue(ctx, "tls-cert-file");
+
+  if (!*client_key || !*client_cert){
+    ret = 0;
+    if(*client_key){
+      rm_free(*client_key);
+    }
+    if(*client_cert){
+      rm_free(*client_cert);
+    }
+  }
+
+done:
+  if (clusterTls) {
+    rm_free(clusterTls);
+  }
+  RedisModule_ThreadSafeContextUnlock(ctx);
+  return ret;
+}
+
 char *writeTaggedId(const char *key, size_t keyLen, const char *tag, size_t tagLen,
                     size_t *taggedLen) {
   size_t total = keyLen + tagLen + 3;  // +3 because of '{', '}', and NUL

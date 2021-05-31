@@ -1,6 +1,7 @@
 #include "conn.h"
 #include "reply.h"
 #include "hiredis/adapters/libuv.h"
+#include "search_cluster.h"
 
 #include <uv.h>
 #include <signal.h>
@@ -370,7 +371,32 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     return;
   }
 
+  // todo: check if tls is require and if it does initiate a tls connection
+  char* client_cert = NULL;
+  char* client_key = NULL;
+  if(checkTLS(&client_key, &client_cert)){
+    redisSSLContextError ssl_error;
+    redisSSLContext *ssl_context = redisCreateSSLContext(NULL, NULL, client_cert, client_key, NULL, &ssl_error);
+    if(ssl_context == NULL || ssl_error != 0) {
+      CONN_LOG(conn, "Error on ssl contex creation: %s", (ssl_error != 0) ? redisSSLContextGetError(ssl_error) : "Unknown error");
+      detachFromConn(conn, 0);  // Free the connection as well - we have an error
+      MRConn_SwitchState(conn, MRConn_Connecting);
+      return;
+    }
+    if (redisInitiateSSLWithContext((redisContext *)(&c->c), ssl_context) != REDIS_OK) {
+      CONN_LOG(conn, "Error on tls auth");
+      detachFromConn(conn, 0);  // Free the connection as well - we have an error
+      MRConn_SwitchState(conn, MRConn_Connecting);
+      return;
+    }
+    rm_free(client_key);
+    rm_free(client_cert);
+  }
+
+
+
   // If this is an authenticated connection, we need to atu
+
   if (conn->ep.auth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
       detachFromConn(conn, 1);
@@ -413,14 +439,6 @@ static int MRConn_Connect(MRConn *conn) {
   redisOptions options = {.type = REDIS_CONN_TCP,
                           .options = REDIS_OPT_NOAUTOFREEREPLIES,
                           .endpoint.tcp = {.ip = conn->ep.host, .port = conn->ep.port}};
-
-//  if (MRReply_UseV2) {
-//    options.reader = redisReaderCreateWithFunctions(&redisReplyV2Functions);
-//    options.accessors = &redisReplyV2Accessors;
-//    if (MRReply_UseBlockAlloc) {
-//      redisReaderEnableBlockAllocator(options.reader);
-//    }
-//  }
 
   redisAsyncContext *c = redisAsyncConnectWithOptions(&options);
   if (c->err) {

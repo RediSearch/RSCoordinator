@@ -320,8 +320,10 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   redisReply *rep = r;
   /* AUTH error */
-  if (REDIS_REPLY_GETTYPE(&c->c, rep) == REDIS_REPLY_ERROR) {
-    CONN_LOG(conn, "Error authenticating: %s", REDIS_REPLY_GETSTRZ(&c->c, rep));
+  if (MRReply_Type(rep) == REDIS_REPLY_ERROR) {
+    size_t len;
+    const char* s = MRReply_String(rep, &len);
+    CONN_LOG(conn, "Error authenticating: %.*s", (int)len, s);
     MRConn_SwitchState(conn, MRConn_ReAuth);
     /*we don't try to reconnect to failed connections */
     return;
@@ -409,16 +411,16 @@ static int MRConn_Connect(MRConn *conn) {
   // fprintf(stderr, "Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
 
   redisOptions options = {.type = REDIS_CONN_TCP,
-                          .options = REDIS_OPT_NOFREEREPLIES,
+                          .options = REDIS_OPT_NOAUTOFREEREPLIES,
                           .endpoint.tcp = {.ip = conn->ep.host, .port = conn->ep.port}};
 
-  if (MRReply_UseV2) {
-    options.reader = redisReaderCreateWithFunctions(&redisReplyV2Functions);
-    options.accessors = &redisReplyV2Accessors;
-    if (MRReply_UseBlockAlloc) {
-      redisReaderEnableBlockAllocator(options.reader);
-    }
-  }
+//  if (MRReply_UseV2) {
+//    options.reader = redisReaderCreateWithFunctions(&redisReplyV2Functions);
+//    options.accessors = &redisReplyV2Accessors;
+//    if (MRReply_UseBlockAlloc) {
+//      redisReaderEnableBlockAllocator(options.reader);
+//    }
+//  }
 
   redisAsyncContext *c = redisAsyncConnectWithOptions(&options);
   if (c->err) {

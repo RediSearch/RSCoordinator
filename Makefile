@@ -11,7 +11,14 @@ all: build
 
 export BUILD_DIR ?= build
 
-configure:
+apply_hiredis_patch:
+	if [ -f "src/dep/rmr/hiredis/applied_hiredis_patch" ]; then\
+	    echo "skip hiredis patch as its already applied";\
+	else\
+	    echo "apply hiredis patch"; cd src/dep/rmr/hiredis/;git apply ../../../../hiredis_patch;touch applied_hiredis_patch;\
+	fi
+
+configure: apply_hiredis_patch
 	mkdir -p $(BUILD_DIR)
 	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8 $(CONFIG_ARGS)
 

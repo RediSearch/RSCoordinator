@@ -374,9 +374,10 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
   // todo: check if tls is require and if it does initiate a tls connection
   char* client_cert = NULL;
   char* client_key = NULL;
-  if(checkTLS(&client_key, &client_cert)){
-    redisSSLContextError ssl_error;
-    redisSSLContext *ssl_context = redisCreateSSLContext(NULL, NULL, client_cert, client_key, NULL, &ssl_error);
+  char* ca_cert = NULL;
+  if(checkTLS(&client_key, &client_cert, &ca_cert)){
+    redisSSLContextError ssl_error = 0;
+    redisSSLContext *ssl_context = redisCreateSSLContext(ca_cert, NULL, client_cert, client_key, NULL, &ssl_error);
     if(ssl_context == NULL || ssl_error != 0) {
       CONN_LOG(conn, "Error on ssl contex creation: %s", (ssl_error != 0) ? redisSSLContextGetError(ssl_error) : "Unknown error");
       detachFromConn(conn, 0);  // Free the connection as well - we have an error

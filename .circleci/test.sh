@@ -20,3 +20,7 @@ test_args="--env oss-cluster --env-reuse -t $ROOT/src/dep/RediSearch/tests/pytes
 python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO"
 python2.7 -m RLTest $test_args --oss_password password --module-args "OSS_GLOBAL_PASSWORD password PARTITIONS AUTO"
 python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO SAFEMODE"
+
+bash $ROOT/gen-test-certs.sh
+
+python2.7 -m RLTest $test_args --tls-cert-file $ROOT/tests/tls/redis.crt --tls-key-file $ROOT/tests/tls/redis.key --tls-ca-cert-file $ROOT/tests/tls/ca.crt --tls

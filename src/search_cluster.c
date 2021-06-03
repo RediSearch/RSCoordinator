@@ -56,11 +56,16 @@ int checkTLS(char** client_key, char** client_cert, char** ca_cert){
   int ret = 1;
   RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(NULL);
   RedisModule_ThreadSafeContextLock(ctx);
+  char* clusterTls = NULL;
+  char* tlsPort = NULL;
 
-  char* clusterTls = getConfigValue(ctx, "tls-cluster");
+  clusterTls = getConfigValue(ctx, "tls-cluster");
   if (!clusterTls || strcmp(clusterTls, "yes")) {
-    ret = 0;
-    goto done;
+    tlsPort = getConfigValue(ctx, "tls-port");
+    if (!tlsPort || strcmp(tlsPort, "0")) {
+      ret = 0;
+      goto done;
+    }
   }
 
   *client_key = getConfigValue(ctx, "tls-key-file");
@@ -83,6 +88,9 @@ int checkTLS(char** client_key, char** client_cert, char** ca_cert){
 done:
   if (clusterTls) {
     rm_free(clusterTls);
+  }
+  if (tlsPort) {
+    rm_free(tlsPort);
   }
   RedisModule_ThreadSafeContextUnlock(ctx);
   return ret;

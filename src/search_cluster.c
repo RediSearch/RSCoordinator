@@ -62,7 +62,7 @@ int checkTLS(char** client_key, char** client_cert, char** ca_cert){
   clusterTls = getConfigValue(ctx, "tls-cluster");
   if (!clusterTls || strcmp(clusterTls, "yes")) {
     tlsPort = getConfigValue(ctx, "tls-port");
-    if (!tlsPort || strcmp(tlsPort, "0")) {
+    if (!tlsPort || !strcmp(tlsPort, "0")) {
       ret = 0;
       goto done;
     }

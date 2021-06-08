@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# Now let's also handle ftl..
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT=$(cd $HERE/..; pwd)
+
 mkdir -p build-ftl
 cd build-ftl
-cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DRS_MODULE_NAME=ftl ../src/dep/RediSearch
+
+cmake -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DRS_MODULE_NAME=ftl $ROOT/src/dep/RediSearch
 make -sj20
-# do we need to test?
 
-export MODULE_SO=$PWD/redisearch.so
+export ARTDIR=$ROOT/artifacts
+export PACKAGE_NAME=redisearch-light
+export RAMP_YML=ramp-light.yml
 export RAMP_ARGS="-n ftl"
-export RAMP_YML="ramp-light.yml"
-export PACKAGE_NAME="redisearch-light"
 
-cd ..
-
-source src/dep/RediSearch/.circleci/ci_package.sh
+$ROOT/src/dep/RediSearch/pack.sh $PWD/redisearch.so

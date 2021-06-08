@@ -8,4 +8,5 @@
 **/*.a
 .git
 **/print_version
-site
+site/
+/artifacts/

@@ -63,10 +63,12 @@ commands:
               circleci step halt
             fi
       - persist_to_workspace:
-          root: /workspace
+          root: artifacts
           paths:
-            - 'snapshot'
-            - 'release'
+            - '*.zip'
+            - '*.tgz'
+            - snapshots/*.zip
+            - snapshots/*.tgz
 
 jobs:
   bionic_:
@@ -145,8 +147,9 @@ jobs:
           name: Deploy Snapshots to S3
           command: |
             cd /workspace/snapshots
+            du -ah --apparent-size *
             for f in `find . -name "*.zip" -or -name "*.tgz"`; do
-              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
+              echo aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
             done
 
   deploy-release:
@@ -158,9 +161,10 @@ jobs:
       - run:
           name: Deploy Releases to S3
           command: |
-            cd /workspace/release
+            cd /workspace
+            du -ah --apparent-size *
             for f in `find . -name "*.zip" -or -name "*.tgz"`; do
-              aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
+              echo aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
             done
 
   release-automation:
@@ -283,7 +287,8 @@ workflows:
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds
-          <<: *on-integ-branch
+          #@@<<: *on-integ-branch
+          <<: *on-any-branch
       - deploy-release:
           context: common
           <<: *after-platform-builds
@@ -314,5 +319,3 @@ workflows:
           matrix:
             parameters:
               redis_version: ["5.0", "6.0", "6.2"]
-      - nightly-automation:
-          context: common

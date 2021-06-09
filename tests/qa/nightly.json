@@ -6,7 +6,7 @@
     "email_recipients": "s5i1u4h5a8c8w2d7@redislabs.slack.com",
     "sut_environments": [],
     "tools_environment": {},
-    "modules_version": "{{MODULE_VERSION}}",
+    "modules_version": "1.6-snapshot",
     "test_names_modules": [
         "{{RS_MODULE}}"
     ],
@@ -14,7 +14,8 @@
       {
         "teardown": true,
         "name": "bionic-amd64-aws",
-        "concurrency": 1
+        "concurrency": 1,
+        "module_url": "http://redismodules.s3.amazonaws.com/{{RS_MODULE_DIR}}/snapshots/{{RS_MODULE_FILE_PREFIX}}.Linux-ubuntu18.04-x86_64.1.6-snapshot.zip"
       }
     ]
   }

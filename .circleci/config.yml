@@ -298,7 +298,7 @@ workflows:
           requires:
             - deploy-release
           <<: *on-version-tags
-      - release-automation:
+      - nightly-automation:
           context: common
           requires:
             - deploy-snapshots

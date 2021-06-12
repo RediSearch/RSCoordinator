@@ -11,7 +11,7 @@ make -sj20
 
 export ARTDIR=$ROOT/artifacts
 export PACKAGE_NAME=redisearch-light
-export RAMP_YML=ramp-light.yml
+export RAMP_YAML=$ROOT/ramp-light.yml
 export RAMP_ARGS="-n ftl"
 
-$ROOT/src/dep/RediSearch/pack.sh $PWD/redisearch.so
+DEPS=0 $ROOT/src/dep/RediSearch/pack.sh $PWD/redisearch.so

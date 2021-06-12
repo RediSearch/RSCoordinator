@@ -287,7 +287,8 @@ workflows:
       - deploy-snapshots:
           context: common
           <<: *after-platform-builds
-          <<: *on-integ-branch
+          #@@ <<: *on-integ-branch
+          <<: *on-any-branch
       - deploy-release:
           context: common
           <<: *after-platform-builds
@@ -297,6 +298,11 @@ workflows:
           requires:
             - deploy-release
           <<: *on-version-tags
+      - release-automation:
+          context: common
+          requires:
+            - deploy-snapshots
+          <<: *on-any-branch
 
   nightly:
     triggers:

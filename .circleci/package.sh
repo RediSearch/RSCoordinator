@@ -12,4 +12,4 @@ export ARTDIR=$ROOT/artifacts
 export PACKAGE_NAME=redisearch
 export RAMP_YAML=$ROOT/ramp.yml
 
-$ROOT/src/dep/RediSearch/pack.sh $ROOT/$BUILD_DIR/module-enterprise.so
+DEPS=0 $ROOT/src/dep/RediSearch/pack.sh $ROOT/$BUILD_DIR/module-enterprise.so

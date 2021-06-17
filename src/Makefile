@@ -38,7 +38,7 @@ CFLAGS := \
 	-std=gnu99 \
 	-D_GNU_SOURCE \
 	-DREDIS_MODULE_TARGET \
-	-DREDISMODULE_EXPERIMENTAL_API 
+	-DREDISMODULE_EXPERIMENTAL_API
 
 CC:=$(shell sh -c 'type $(CC) >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 
@@ -56,7 +56,7 @@ export CFLAGS
 export DEBUGFLAGS
 export LIBUV_INCLUDE_DIR
 
-CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c) 
+CC_SOURCES = $(wildcard $(SOURCEDIR)/*.c) $(wildcard $(SOURCEDIR)/dep/*.c)
 CC_OBJECTS = $(patsubst $(SOURCEDIR)/%.c, $(SOURCEDIR)/%.o, $(CC_SOURCES))
 
 LIBS = \
@@ -72,7 +72,7 @@ LIBS = \
 	dep/RediSearch/src/dep/snowball/libstemmer.o \
 	dep/rmutil/librmutil.a
 
-all: module.so 
+all: module.so
 
 libuv.a:  $(LIBUV_DIR)/Makefile
 	$(MAKE) -C $(LIBUV_DIR) && cp "$(LIBUV_LIBDIR)/libuv.a" ./
@@ -95,7 +95,7 @@ module.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS) $(INFOSTUB_E
 module-oss.so: rmr rmutil libuv.a libredisearch.a $(LIBS) $(CC_OBJECTS) $(INFOSTUB_OSS)
 	$(LD) -o $@ $(CC_OBJECTS) $(INFOSTUB_OSS) $(LIBS) $(SHOBJ_LDFLAGS) -lc -lpthread -ldl -lm
 
-# OSS is a special build for internal testing on OSS clusters. 
+# OSS is a special build for internal testing on OSS clusters.
 # Unless the module is built with "make oss" it cannot run inside OSS cluster
 oss: module-oss.so
 
@@ -120,18 +120,21 @@ PACKAGE_NAME=redisearch-enterprise
 ifndef BRANCH
 BRANCH:=$(shell git branch | awk '/\*/{print $$2}')
 endif
-RAMP_COMMAND=ramp-packer -m ramp.yml
+RAMP_COMMAND=ramp-packer
 BUILD_DIR:=$(shell mktemp -d)
 
 # Build a RELEASE package(s): the version number plus a "latest" package
 package_release: module.so print_version
-	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "$(CWD)/module.so";\
-	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.`./print_version`.zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.latest.zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp-lightrce.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}-lightrce.`./print_version`.zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp-lightrce.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}-lightrce.latest.zip" "$(CWD)/module.so";\
 
 # Build a package for the current branch
 package: module.so
 	@# On normal build - package the branch latest
-	$(RAMP_COMMAND) --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.$(BRANCH).zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}.$(BRANCH).zip" "$(CWD)/module.so";\
+	$(RAMP_COMMAND) -m ramp-lightrce.yml --output "$(BUILD_DIR)/$(PACKAGE_NAME).{os}-{architecture}-lightrce.$(BRANCH).zip" "$(CWD)/module.so";\
 
 # Upload package files from the build dir to s3
 upload:

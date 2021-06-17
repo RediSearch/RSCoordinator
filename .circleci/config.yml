@@ -48,6 +48,7 @@ commands:
             mkdir artifacts
             ./.circleci/package.sh
             ./.circleci/package-light.sh
+            ./.circleci/package-light-rce.sh
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -88,7 +89,7 @@ jobs:
       - DIST_SUFFIX: -ubuntu14.04
     steps:
       - build-steps
-  
+
   centos7:
     docker:
       - image: redisfab/rmbuilder:6.0.7-x64-centos7

@@ -18,6 +18,6 @@ MODULE=$BUILD_DIR/module-oss.so
 test_args="--env oss-cluster --env-reuse --clear-logs --shards-count 3"
 test_cmd="$ROOT/src/dep/RediSearch/tests/pytests/runtests.sh $MODULE $test_args"
 
-$test_cmd --module-args "PARTITIONS AUTO"
-$test_cmd --oss_password password --module-args "OSS_GLOBAL_PASSWORD password PARTITIONS AUTO"
-$test_cmd --module-args "PARTITIONS AUTO SAFEMODE" 
+MODARGS="PARTITIONS AUTO" $test_cmd
+MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
+MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd

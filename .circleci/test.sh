@@ -16,8 +16,8 @@ ctest -V
 cd $ROOT
 MODULE=$BUILD_DIR/module-oss.so
 test_args="--env oss-cluster --env-reuse --clear-logs --shards-count 3"
-test_cmd="REJSON=1 $ROOT/src/dep/RediSearch/tests/pytests/runtests.sh $MODULE $test_args"
+test_cmd="$ROOT/src/dep/RediSearch/tests/pytests/runtests.sh $MODULE $test_args"
 
-MODARGS="PARTITIONS AUTO" $test_cmd
-MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
-MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd
+REJSON=1 MODARGS="PARTITIONS AUTO" $test_cmd
+REJSON=1 MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
+REJSON=1 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd

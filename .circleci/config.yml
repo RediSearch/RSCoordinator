@@ -104,7 +104,7 @@ commands:
 
   build-steps:
     parameters:
-      search-from-master:
+      compat-search:
         type: boolean
         default: false
     steps:
@@ -116,7 +116,7 @@ commands:
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
             fi
-            if [[ <<parameters.search-from-master>> == true ]]; then
+            if [[ <<parameters.compat-search>> == true ]]; then
               pushd src/dep/RediSearch
               git checkout master
               git pull --recurse-submodules
@@ -147,39 +147,19 @@ commands:
             - snapshots/*.tgz
 
 jobs:
-  bionic:
-    docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-bionic
+  build:
     parameters:
-      search-from-master:
+      platform:
+        type: string
+        default: debian
+      compat-search:
         type: boolean
         default: false
+    docker:
+      - image: redisfab/rmbuilder:6.2.4-x64-<<parameters.platform>>
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
-
-  xenial:
-    docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-xenial
-    steps:
-      - build-steps
-
-  trusty:
-    docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-trusty
-    steps:
-      - build-steps
-
-  centos7:
-    docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-centos7
-    parameters:
-      search-from-master:
-        type: boolean
-        default: false
-    steps:
-      - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          compat-search: <<parameters.compat-search>>
 
   deploy-snapshots:
     docker:
@@ -296,32 +276,43 @@ on-integ-and-version-tags: &on-integ-and-version-tags
       only: /^v[0-9].*/
 
 
-after-platform-builds: &after-platform-builds
-  requires:
-    - centos7
-    - bionic
-    - xenial
-    # - trusty
-
 #----------------------------------------------------------------------------------------------------------------------------------
 
 workflows:
   version: 2
   default_flow:
     jobs:
-      - bionic:
+      - build:
+          name: pr-build
+          compat-search: false
+          platform: bionic
+          <<: *not-on-integ-branch
+      - build:
+          name: int-build-<< matrix.platform >>
+          compat-search: true
+          matrix:
+            alias: int-builds
+            parameters:
+              platform: [focal, bionic, xenial, centos7, centos8]
+          #@@ <<: *on-integ-branch
           <<: *on-any-branch
-      - xenial:
-          <<: *on-any-branch
-      - centos7:
-          <<: *on-any-branch
+      - build:
+          name: version-build-<< matrix.platform >>
+          compat-search: false
+          matrix:
+            alias: version-builds
+            parameters:
+              platform: [focal, bionic, xenial, centos7, centos8]
+          <<: *on-version-tags
       - deploy-snapshots:
           context: common
-          <<: *after-platform-builds
+          requires:
+            - int-builds
           <<: *on-integ-branch
       - deploy-release:
           context: common
-          <<: *after-platform-builds
+          requires:
+            - version-builds
           <<: *on-version-tags
       - release-automation:
           context: common
@@ -337,10 +328,9 @@ workflows:
             branches:
               only: master
     jobs:
-      - bionic:
-          name: nightly-bionic
-          search-from-master: true
-      - centos7:
-          name: nightly-centos7
-          search-from-master: true
-      - nightly-automation
+      - build:
+          name: nightly-build-<< matrix.platform >>
+          compat-search: true
+          matrix:
+            parameters:
+              platform: [bionic, centos7]

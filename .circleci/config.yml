@@ -118,7 +118,7 @@ commands:
             fi
             if [[ <<parameters.compat-search>> == true ]]; then
               pushd src/dep/RediSearch
-              git checkout master
+              git checkout $CIRCLE_BRANCH || true
               git pull --recurse-submodules
               popd > /dev/null
             fi

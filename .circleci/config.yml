@@ -118,8 +118,10 @@ commands:
             fi
             if [[ <<parameters.compat-search>> == true ]]; then
               pushd src/dep/RediSearch
-              [[ -n $(git ls-remote --heads origin $CIRCLE_BRANCH) ]] && git checkout $CIRCLE_BRANCH
-              git pull --recurse-submodules
+              if [[ -n $(git ls-remote --heads origin $CIRCLE_BRANCH) ]]; then
+                git checkout $CIRCLE_BRANCH
+                git pull --recurse-submodules
+              fi
               popd > /dev/null
             fi
       - run:

@@ -1,9 +1,15 @@
 #!/bin/bash
-set -x
-set -e
 
-PROJECT_ROOT=$PWD
-mkdir -p $BUILD_DIR
+set -xe
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT=$(cd $HERE/..; pwd)
+
+BUILD_DIR=${BUILD_DIR:-build}
+
+mkdir -p $ROOT/$BUILD_DIR
+BUILD_DIR=$(cd $ROOT/$BUILD_DIR; pwd)
+
 cd $BUILD_DIR
 
-$PROJECT_ROOT/configure.py -j8
+$ROOT/configure.py -j$($ROOT/deps/readies/bin/nproc)

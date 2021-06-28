@@ -1,36 +1,130 @@
 version: 2.1
 
 commands:
+  early-returns:
+    steps:
+      - run:
+          name: Early return if this is a docs build
+          command: |
+            if [[ $CIRCLE_BRANCH == *docs ]]; then
+              echo "Identifies as documents PR, no testing required."
+              circleci step halt
+            fi
+      - run:
+          name: Early return if this branch should ignore CI
+          command: |
+            if [[ $CIRCLE_BRANCH == *noci ]]; then
+              echo "Identifies as actively ignoring CI, no testing required."
+              circleci step halt
+            fi
+
+  early-return-for-forked-pull-requests:
+    description: >-
+      If this build is from a fork, stop executing the current job and return success.
+      This is useful to avoid steps that will fail due to missing credentials.
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [[ -n "$CIRCLE_PR_NUMBER" ]]; then
+              echo "Nothing to do for forked PRs, so marking this step successful"
+              circleci step halt
+            fi
+
+  setup-executor:
+    steps:
+      - run:
+          name: Setup executor
+          command: |
+            apt-get -qq update
+            apt-get -q install -y git openssh-client curl ca-certificates make tar gzip
+            bash <(curl -fsSL https://get.docker.com)
+      - setup_remote_docker:
+          version: 20.10.2
+          docker_layer_caching: true
+
+  checkout-all:
+    steps:
+      - checkout
+      - run:
+          name: Checkout submodules
+          command: git submodule update --init --recursive
+
   setup-automation:
     steps:
       - run:
-          name: Setup automation and install dependencies
+          name: Setup automation
           command: |
             (mkdir -p deps; cd deps; git clone https://github.com/RedisLabsModules/readies.git)
-            PIP=1 FORCE=1 ./deps/readies/bin/getpy2
-            ./system-setup.py
+            FORCE=1 ./deps/readies/bin/getpy2
+
+  install-prerequisites:
+    parameters:
+      redis_version:
+        type: string
+        default: "6"
+      getredis_params:
+        type: string
+        default: ""
+    steps:
+      - setup-automation
+      - run:
+          name: System setup
+          command: ./system-setup.py
+      - run:
+          name: Install Redis
+          command: |
+            bash -l -c "python2 ./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
+            redis-server --version
+
+  save-tests-logs:
+    steps:
+      - run:
+          name: Cleanup test log dir
+          command: |
+            if [[ -d tests/flow/logs ]]; then
+              cd tests/flow/logs
+              rm -f *.aof *.rdb
+            fi
+      - store_artifacts:
+          path: tests/flow/logs
+
+  persist-artifacts:
+    steps:
+      - early-return-for-forked-pull-requests
+      - persist_to_workspace:
+          root: bin/
+          paths:
+            - artifacts/snapshots/*.zip
+            - artifacts/snapshots/*.tgz
+            - artifacts/snapshots/*.tar
+            - artifacts/*.zip
+            - artifacts/*.tgz
+            - artifacts/*.tar
 
   build-steps:
     parameters:
-      search-from-master:
+      compat-search:
         type: boolean
         default: false
     steps:
-      - checkout
-      - setup-automation
-      - run:
-          name: Install Redis
-          command: python2 ./deps/readies/bin/getredis -v 6
+      - checkout-all
+      - install-prerequisites
       - run:
           name: Submodule checkout
           command: |
             if [[ ! -e src/dep/RediSearch/CMakeLists.txt ]]; then
               git submodule update --init --recursive
             fi
-            if [[ <<parameters.search-from-master>> == true ]]; then
+            if [[ <<parameters.compat-search>> == true ]]; then
               pushd src/dep/RediSearch
-              git checkout master
-              git pull --recurse-submodules
+              if [[ -n $(git ls-remote --heads origin $CIRCLE_BRANCH) ]]; then
+                git checkout $CIRCLE_BRANCH
+                git pull --recurse-submodules
+              else
+                echo "Unable to checkout RediSearch branch $CIRCLE_BRANCH. Aborting."
+                circleci step halt
+              fi
               popd > /dev/null
             fi
       - run:
@@ -45,9 +139,10 @@ commands:
       - run:
           name: Package
           command: |
-            mkdir artifacts
+            mkdir -p artifacts
             ./.circleci/package.sh
             ./.circleci/package-light.sh
+            ./.circleci/package-light-rce.sh
       - persist_to_workspace:
           root: artifacts
           paths:
@@ -57,55 +152,23 @@ commands:
             - snapshots/*.tgz
 
 jobs:
-  bionic:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-bionic
-    environment:
-      - BUILD_DIR: build-bionic
-      - DIST_SUFFIX: -ubuntu18.04
+  build:
     parameters:
-      search-from-master:
+      platform:
+        type: string
+        default: debian
+      compat-search:
         type: boolean
         default: false
+    docker:
+      - image: redisfab/rmbuilder:6.2.4-x64-<<parameters.platform>>
     steps:
       - build-steps:
-          search-from-master: <<parameters.search-from-master>>
-
-  xenial:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-xenial
-    environment:
-      - BUILD_DIR: build-xenial
-      - DIST_SUFFIX: -ubuntu16.04
-    steps:
-      - build-steps
-
-  trusty:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-trusty
-    environment:
-      - BUILD_DIR: build-trusty
-      - DIST_SUFFIX: -ubuntu14.04
-    steps:
-      - build-steps
-  
-  centos7:
-    docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-centos7
-    environment:
-      - BUILD_DIR: build-el
-      - DIST_SUFFIX: -rhel7
-    parameters:
-      search-from-master:
-        type: boolean
-        default: false
-    steps:
-      - build-steps:
-          search-from-master: <<parameters.search-from-master>>
+          compat-search: <<parameters.compat-search>>
 
   deploy-snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -119,7 +182,7 @@ jobs:
 
   deploy-release:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -133,7 +196,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -146,7 +209,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.0.7-x64-buster
+      - image: redisfab/rmbuilder:6.2.4-x64-buster
     steps:
       - checkout
       - setup-automation
@@ -157,6 +220,7 @@ jobs:
           name: Run QA Automation (RediSearch Light)
           command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 LIGHT=1 ./tests/qa/run
 
+#----------------------------------------------------------------------------------------------------------------------------------
 
 on-any-branch: &on-any-branch
   filters:
@@ -185,6 +249,7 @@ on-integ-branch: &on-integ-branch
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -194,6 +259,7 @@ not-on-integ-branch: &not-on-integ-branch
       ignore:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       ignore: /.*/
 
@@ -210,37 +276,47 @@ on-integ-and-version-tags: &on-integ-and-version-tags
       only:
         - master
         - /^\d+\.\d+.*$/
+        - /^feature-.*$/
     tags:
       only: /^v[0-9].*/
 
 
-after-platform-builds: &after-platform-builds
-  requires:
-    - centos7
-    - bionic
-    - xenial
-    # - trusty
-
+#----------------------------------------------------------------------------------------------------------------------------------
 
 workflows:
   version: 2
   default_flow:
     jobs:
-      - bionic:
-          <<: *on-any-branch
-      - xenial:
-          <<: *on-any-branch
-      - centos7:
-          <<: *on-any-branch
-      # - trusty:
-      #    <<: *on-any-branch
+      - build:
+          name: pr-build
+          compat-search: false
+          platform: bionic
+          <<: *not-on-integ-branch
+      - build:
+          name: int-build-<< matrix.platform >>
+          compat-search: true
+          matrix:
+            alias: int-builds
+            parameters:
+              platform: [focal, bionic, xenial, centos7, centos8]
+          <<: *on-integ-branch
+      - build:
+          name: version-build-<< matrix.platform >>
+          compat-search: false
+          matrix:
+            alias: version-builds
+            parameters:
+              platform: [focal, bionic, xenial, centos7, centos8]
+          <<: *on-version-tags
       - deploy-snapshots:
           context: common
-          <<: *after-platform-builds
+          requires:
+            - int-builds
           <<: *on-integ-branch
       - deploy-release:
           context: common
-          <<: *after-platform-builds
+          requires:
+            - version-builds
           <<: *on-version-tags
       - release-automation:
           context: common
@@ -256,10 +332,9 @@ workflows:
             branches:
               only: master
     jobs:
-      - bionic:
-          name: nightly-bionic
-          search-from-master: true
-      - centos7:
-          name: nightly-centos7
-          search-from-master: true
-      - nightly-automation
+      - build:
+          name: nightly-build-<< matrix.platform >>
+          compat-search: true
+          matrix:
+            parameters:
+              platform: [bionic, centos7]

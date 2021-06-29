@@ -26,7 +26,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
   sprintf(buf, "%lld", cursorId);
   int shardingKey = MRCommand_GetShardingKey(cmd);
   const char *idx = MRCommand_ArgStringPtrLen(cmd, shardingKey, NULL);
-  MRCommand newCmd = MR_NewCommand(4, RS_CURSOR_CMD, "READ", idx, buf);
+  MRCommand newCmd = MR_NewCommand(4, "_FT.CURSOR", "READ", idx, buf);
   newCmd.targetSlot = cmd->targetSlot;
   MRCommand_Free(cmd);
   *cmd = newCmd;

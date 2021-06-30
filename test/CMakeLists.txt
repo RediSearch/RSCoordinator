@@ -14,3 +14,4 @@ TARGET_COMPILE_DEFINITIONS(test_distagg PRIVATE REDISMODULE_MAIN)
 
 ADD_TEST(NAME test_searchcluster COMMAND test_searchcluster)
 ADD_TEST(name test_distagg COMMAND test_distagg)
+

@@ -13,7 +13,7 @@ if [[ $1 == --help || $1 == help ]]; then
 		[ARGVARS...] run [--help|help]
 
 		Argument variables:
-    		QA_AUTOMATION_TOKEN=token     QA automation (Opereto) token
+		QA_AUTOMATION_TOKEN=token     QA automation (Opereto) token
 		TEST=name                     Name of .json parameters file
 		MODULE_VERSION=ver            Module version to test. Default: master
 		LIGHT=1                       Test RediSearch Light
@@ -73,7 +73,7 @@ run_test() {
 		return 0
 	fi
 
-     	OPERETO3_URL="opereto.qa.redislabs.com"
+ 	OPERETO3_URL="opereto.qa.redislabs.com"
 	JSON=$(curl -sk \
    		-X POST -H "Content-Type: application/json" \
    		-H "Authorization: Bearer $QA_AUTOMATION_TOKEN" \

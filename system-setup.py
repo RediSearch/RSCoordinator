@@ -20,7 +20,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.pip_install("wheel")
         self.pip_install("--ignore-installed --no-cache-dir setuptools --upgrade")
 
-        self.install("git gawk lcov jq rsync")
+        self.install("git gawk lcov jq rsync unzip")
 
     def debian_compat(self):
         self.install("libatomic1")

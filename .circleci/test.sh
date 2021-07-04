@@ -1,22 +1,25 @@
 #!/bin/bash
 
-set -x
-set -e
+set -xe
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT=$(readlink -f $HERE/..)
+ROOT=$(cd $HERE/..; pwd)
 
-MODULE_OSS_SO=$BUILD_DIR/module-oss.so
+[[ -n "$REDISEARCH_CI_SKIP_TESTS" ]] && exit 0
 
-if [[ -n "$REDISEARCH_CI_SKIP_TESTS" ]]; then
-    exit 0
-fi
+BUILD_DIR=${BUILD_DIR:-build}
+BUILD_DIR=$(cd $BUILD_DIR; pwd)
 
 cd $BUILD_DIR
-
 ctest -V
 
-test_args="--env oss-cluster --env-reuse -t $ROOT/src/dep/RediSearch/tests/pytests/ --clear-logs --shards-count 3 --module $ROOT/$MODULE_OSS_SO"
-python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO"
-python2.7 -m RLTest $test_args --oss_password password --module-args "OSS_GLOBAL_PASSWORD password PARTITIONS AUTO"
-python2.7 -m RLTest $test_args --module-args "PARTITIONS AUTO SAFEMODE"
+cd $ROOT
+MODULE=$BUILD_DIR/module-oss.so
+test_args="--env oss-cluster --env-reuse --clear-logs --shards-count 3"
+test_cmd="$ROOT/src/dep/RediSearch/tests/pytests/runtests.sh $MODULE $test_args"
+
+export EXT_TEST_PATH=src/dep/RediSearch/tests/ctests/ext-example/libexample_extension.so
+
+REJSON=1 MODARGS="PARTITIONS AUTO" $test_cmd
+REJSON=1 MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
+REJSON=1 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd

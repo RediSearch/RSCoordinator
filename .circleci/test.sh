@@ -20,6 +20,6 @@ test_cmd="$ROOT/src/dep/RediSearch/tests/pytests/runtests.sh $MODULE $test_args"
 
 export EXT_TEST_PATH=src/dep/RediSearch/tests/ctests/ext-example/libexample_extension.so
 
-REJSON=1 MODARGS="PARTITIONS AUTO" $test_cmd
-REJSON=1 MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
-REJSON=1 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd
+REJSON=1 REJSON_BRANCH=2.0 MODARGS="PARTITIONS AUTO" $test_cmd
+REJSON=1 REJSON_BRANCH=2.0 MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
+REJSON=1 REJSON_BRANCH=2.0 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd

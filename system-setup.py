@@ -29,7 +29,9 @@ class RedisRSCoordinatorSetup(paella.Setup):
         else:
             self.run("%s/bin/getgcc" % READIES)
             self.install("libtool m4 automake")
-        
+        if self.platform.is_arm() and self.dist == 'ubuntu' and self.os_version[0] < 20:
+            self.install("python-gevent")
+
     def ubuntu_trusty(self):
         self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake") # after modern gcc
@@ -41,7 +43,9 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("libatomic")
         self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake")
-        
+
+        if self.platform.is_arm():
+            self.install("python-gevent")
     def fedora(self):
         self.install("libatomic")
         self.run("%s/bin/getgcc" % READIES)
@@ -53,6 +57,9 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.run("%s/bin/getcmake" % READIES)
         self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("awscli pudb")
+
+        if int(sh("{PYTHON} -c 'import gevent' 2> /dev/null; echo $?".format(PYTHON=self.python))) != 0:
+            self.pip_install("gevent")
 
 #----------------------------------------------------------------------------------------------
 

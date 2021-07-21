@@ -126,7 +126,7 @@ static void handleSpecialField(InfoFields *fields, const char *name, MRReply *va
     if (curlyIdx != NULL) {
       fields->indexNameLen = curlyIdx - fields->indexName;
     }
-  } else if (!strcmp(name, "fields")) {
+  } else if (!strcmp(name, "attributes")) {
     if (!fields->indexSchema) {
       fields->indexSchema = value;
     }
@@ -226,7 +226,7 @@ static void generateFieldsReply(InfoFields *fields, RedisModuleCtx *ctx) {
     n += 2;
   }
   if (fields->indexSchema) {
-    RedisModule_ReplyWithSimpleString(ctx, "fields");
+    RedisModule_ReplyWithSimpleString(ctx, "attributes");
     MR_ReplyWithMRReply(ctx, fields->indexSchema);
     n += 2;
   }

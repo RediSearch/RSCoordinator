@@ -2,9 +2,9 @@
 
 The automated benchmark definitions included within `tests/benchmarks` folder, provides a framework for evaluating and comparing feature branches and catching regressions prior to letting them into the master branch.
 
-To be able to run local benchmarks you need `redisbench_admin>=0.4.3` [[tool repo for full details](https://github.com/RedisLabsModules/redisbench-admin)] and the benchmark tool specified on each configuration file. You can install `redisbench-admin` via PyPi as any other package.
+To be able to run local benchmarks you need `redisbench_admin>=0.4.4` [[tool repo for full details](https://github.com/RedisLabsModules/redisbench-admin)] and the benchmark tool specified on each configuration file. You can install `redisbench-admin` via PyPi as any other package.
 ```
-pip3 install redisbench_admin>=0.4.3
+pip3 install redisbench_admin>=0.4.4
 ```
 
 ## Usage

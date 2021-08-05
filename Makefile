@@ -11,7 +11,16 @@ all: build
 
 export BUILD_DIR ?= build
 
-configure:
+apply_hiredis_patch:
+	@set -e ;\
+	cd src/dep/rmr/hiredis ;\
+	if [[ ! -e applied_hiredis_patch ]]; then\
+	    echo "Apply hiredis patch..." \;
+		git apply $(ROOT)/hiredis_patch && \
+		touch applied_hiredis_patch ;\
+	fi
+
+configure: apply_hiredis_patch
 	mkdir -p $(BUILD_DIR)
 	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8 $(CONFIG_ARGS)
 
@@ -22,7 +31,7 @@ build:
 endif
 	$(MAKE) -C $(BUILD_DIR)
 
-.PHONY: build
+.PHONY: build apply_hiredis_patch
 
 clean:
 	$(MAKE) -C src clean

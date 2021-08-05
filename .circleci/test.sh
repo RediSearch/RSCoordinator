@@ -29,4 +29,5 @@ tls_args="--tls \
 	--tls-key-file $ROOT/tests/tls/redis.key \
 	--tls-ca-cert-file $ROOT/tests/tls/ca.crt"
 
+$ROOT/gen-test-certs.sh
 REJSON=1 $test_cmd $tls_args

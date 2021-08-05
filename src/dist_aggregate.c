@@ -27,7 +27,7 @@ static int getCursorCommand(MRReply *prev, MRCommand *cmd) {
   sprintf(buf, "%lld", cursorId);
   int shardingKey = MRCommand_GetShardingKey(cmd);
   const char *idx = MRCommand_ArgStringPtrLen(cmd, shardingKey, NULL);
-  MRCommand newCmd = MR_NewCommand(4, RS_CURSOR_CMD, "READ", idx, buf);
+  MRCommand newCmd = MR_NewCommand(4, "_FT.CURSOR", "READ", idx, buf);
   newCmd.targetSlot = cmd->targetSlot;
   MRCommand_Free(cmd);
   *cmd = newCmd;
@@ -277,20 +277,6 @@ static void buildMRCommand(RedisModuleString **argv, int argc, int profileArgs,
 
   for (size_t ii = 0; ii < us->nserialized; ++ii) {
     tmparr = array_append(tmparr, us->serialized[ii]);
-    if (strncasecmp("LIMIT", us->serialized[ii], strlen("LIMIT")) == 0) {
-      if (ii + 2 <= us->nserialized) {
-        // change offset to `0`
-        tmparr = array_append(tmparr, "0");
-        
-        // change num to `offset + num`
-        char buf[32];
-        long long offset = atoll(us->serialized[ii + 1]);
-        long long limit = atoll(us->serialized[ii + 2]);
-        snprintf(buf, sizeof(buf), "%lld", offset + limit);
-        tmparr = array_append(tmparr, buf);
-        ii += 2;
-      }
-    }
   }
 
   *xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);

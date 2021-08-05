@@ -1,12 +1,21 @@
 #!/bin/bash
-set -x
-set -e
 
-PROJECT_ROOT=$PWD
+set -xe
 
-pushd $PROJECT_ROOT/src/dep/rmr/hiredis/;git apply $PROJECT_ROOT/hiredis_patch;touch applied_hiredis_patch;popd;
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+ROOT=$(cd $HERE/..; pwd)
 
-mkdir -p $BUILD_DIR
+BUILD_DIR=${BUILD_DIR:-build}
+
+(cd pushd $ROOT/src/dep/rmr/hiredis && \
+ if [[ ! -e applied_hiredis_patch ]]; then \
+   git apply $ROOT/hiredis_patch && \
+   touch applied_hiredis_patch && \
+  fi)
+
+mkdir -p $ROOT/$BUILD_DIR
+BUILD_DIR=$(cd $ROOT/$BUILD_DIR; pwd)
+
 cd $BUILD_DIR
 
-$PROJECT_ROOT/configure.py -j8
+$ROOT/configure.py -j$($ROOT/deps/readies/bin/nproc)

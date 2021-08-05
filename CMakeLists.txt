@@ -104,5 +104,7 @@ TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearch-oss redismock hired
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)
+ADD_SUBDIRECTORY(src/dep/RediSearch/tests/ctests/ext-example)
 
 SET_TARGET_PROPERTIES(redismock PROPERTIES COMPILE_FLAGS "-fvisibility=default")
+

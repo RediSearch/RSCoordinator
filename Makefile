@@ -12,10 +12,12 @@ all: build
 export BUILD_DIR ?= build
 
 apply_hiredis_patch:
-	if [ -f "src/dep/rmr/hiredis/applied_hiredis_patch" ]; then\
-	    echo "skip hiredis patch as its already applied";\
-	else\
-	    echo "apply hiredis patch"; cd src/dep/rmr/hiredis/;git apply ../../../../hiredis_patch;touch applied_hiredis_patch;\
+	@set -e ;\
+	cd src/dep/rmr/hiredis ;\
+	if [[ ! -e "applied_hiredis_patch" ]]; then\
+	    echo "Apply hiredis patch..." \;
+		git apply $(ROOT)/hiredis_patch && \
+		touch applied_hiredis_patch ;\
 	fi
 
 configure: apply_hiredis_patch
@@ -29,7 +31,7 @@ build:
 endif
 	$(MAKE) -C $(BUILD_DIR)
 
-.PHONY: build
+.PHONY: build apply_hiredis_patch
 
 clean:
 	$(MAKE) -C src clean

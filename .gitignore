@@ -21,5 +21,6 @@
 .idea/*
 *.swp
 VSCODE.DB*
-src/dep/rmr/hiredis/.clang-format
-src/dep/rmr/hiredis/.vscode
+/src/dep/rmr/hiredis/.clang-format
+/src/dep/rmr/hiredis/.vscode
+/tests/tls/

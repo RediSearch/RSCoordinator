@@ -2,6 +2,7 @@
 #define __RMR_CONN_H__
 
 #include "hiredis/hiredis.h"
+#include "hiredis/hiredis_ssl.h"
 #include "hiredis/async.h"
 #include "endpoint.h"
 #include "command.h"

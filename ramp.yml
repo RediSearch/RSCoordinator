@@ -21,6 +21,7 @@ capabilities:
     - crdb
     - eviction_expiry
     - hash_policy
+    - intershard_tls
 exclude_commands:
     - FT.CREATE
     - FT.DROP

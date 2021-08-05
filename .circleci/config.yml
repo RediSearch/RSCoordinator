@@ -299,6 +299,7 @@ workflows:
             alias: int-builds
             parameters:
               platform: [focal, bionic, xenial, centos7, centos8]
+          #@@<<: *on-integ-branch
           <<: *on-integ-branch
       - build:
           name: version-build-<< matrix.platform >>

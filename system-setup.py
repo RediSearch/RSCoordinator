@@ -28,11 +28,11 @@ class RedisRSCoordinatorSetup(paella.Setup):
             self.ubuntu_trusty()
         else:
             self.run("%s/bin/getgcc" % READIES)
-            self.install("libtool m4 automake openssl-dev")
+            self.install("libtool m4 automake libssl-dev")
 
     def ubuntu_trusty(self):
         self.run("%s/bin/getgcc --modern" % READIES)
-        self.install("libtool m4 automake openssl-dev") # after modern gcc
+        self.install("libtool m4 automake libssl-dev") # after modern gcc
         self.install("realpath")
         self.install_linux_gnu_tar()
 

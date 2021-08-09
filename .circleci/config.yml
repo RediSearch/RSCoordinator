@@ -307,7 +307,8 @@ workflows:
             alias: version-builds
             parameters:
               platform: [focal, bionic, xenial, centos7, centos8]
-          <<: *on-version-tags
+          #@@<<: *on-version-tags
+          <<: *on-any-branch
       - deploy-snapshots:
           context: common
           requires:

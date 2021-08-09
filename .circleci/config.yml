@@ -161,14 +161,14 @@ jobs:
         type: boolean
         default: false
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-<<parameters.platform>>
+      - image: redisfab/rmbuilder:6.2.5-x64-<<parameters.platform>>
     steps:
       - build-steps:
           compat-search: <<parameters.compat-search>>
 
   deploy-snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -182,7 +182,7 @@ jobs:
 
   deploy-release:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - attach_workspace:
           at: /workspace
@@ -196,29 +196,29 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - checkout
       - setup-automation
       - run:
           name: Run QA Automation
-          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release ./tests/qa/run
+          command: ./tests/qa/qatests -v -t release -m "$CIRCLE_TAG"
       - run:
           name: Run QA Automation (RediSearch Light)
-          command: MODULE_VERSION=$CIRCLE_TAG VERBOSE=1 TEST=release LIGHT=1 ./tests/qa/run
+          command: ./tests/qa/qatests -v -t release -m "$CIRCLE_TAG" --light
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.4-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-buster
     steps:
       - checkout
       - setup-automation
       - run:
           name: Run QA Automation
-          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 ./tests/qa/run
+          command: ./tests/qa/qatests -v -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick
       - run:
           name: Run QA Automation (RediSearch Light)
-          command: MODULE_VERSION=$CIRCLE_BRANCH VERBOSE=1 TEST=nightly QUICK=1 LIGHT=1 ./tests/qa/run
+          command: ./tests/qa/qatests -v -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick --light
 
 #----------------------------------------------------------------------------------------------------------------------------------
 

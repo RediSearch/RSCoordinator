@@ -28,11 +28,11 @@ class RedisRSCoordinatorSetup(paella.Setup):
             self.ubuntu_trusty()
         else:
             self.run("%s/bin/getgcc" % READIES)
-            self.install("libtool m4 automake")
+            self.install("libtool m4 automake libssl-dev")
 
     def ubuntu_trusty(self):
         self.run("%s/bin/getgcc --modern" % READIES)
-        self.install("libtool m4 automake") # after modern gcc
+        self.install("libtool m4 automake libssl-dev") # after modern gcc
         self.install("realpath")
         self.install_linux_gnu_tar()
 
@@ -40,17 +40,18 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("redhat-lsb-core")
         self.install("libatomic")
         self.run("%s/bin/getgcc --modern" % READIES)
-        self.install("libtool m4 automake")
+        self.install("libtool m4 automake openssl-devel")
 
     def fedora(self):
         self.install("libatomic")
         self.run("%s/bin/getgcc" % READIES)
+        self.install("openssl-devel")
 
     def macos(self):
         pass
 
     def common_last(self):
-        self.run("%s/bin/getcmake" % READIES)
+        self.run("%s/bin/getcmake --usr" % READIES)
         self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("awscli pudb")
 

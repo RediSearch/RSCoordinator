@@ -14,8 +14,8 @@ export BUILD_DIR ?= build
 apply_hiredis_patch:
 	@set -e ;\
 	cd src/dep/rmr/hiredis ;\
-	if [[ ! -e applied_hiredis_patch ]]; then\
-	    echo "Apply hiredis patch..." \;
+	if [ ! -e applied_hiredis_patch ]; then \
+	    echo "Apply hiredis patch..." ;\
 		git apply $(ROOT)/hiredis_patch && \
 		touch applied_hiredis_patch ;\
 	fi

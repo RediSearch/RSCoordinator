@@ -87,3 +87,25 @@ docker_package: docker
 # RELEASES ONLY: Create the "latest" package and a package for the current version, and upload them to s3
 docker_release: docker
 	docker run -it --rm -v ~/.s3cfg:/root/.s3cfg -v -v `pwd`:/workspace rscoordinator make deepclean all test package_release upload
+
+#----------------------------------------------------------------------------------------------
+# Benchmark utility
+
+ifneq ($(REMOTE),)
+BENCHMARK_ARGS = run-remote
+else
+BENCHMARK_ARGS = run-local
+endif
+
+BENCHMARK_ARGS += --module_path $(abspath $(BUILD_DIR)/module-oss.so) \
+	--required-module search
+
+ifneq ($(BENCHMARK),)
+BENCHMARK_ARGS += --test $(BENCHMARK)
+endif
+
+bench benchmark: $(TARGET)
+	cd ./tests/benchmarks ;\
+	redisbench-admin $(BENCHMARK_ARGS)
+
+.PHONY: bench benchmark

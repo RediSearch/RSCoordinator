@@ -289,7 +289,7 @@ workflows:
     jobs:
       - build:
           name: pr-build
-          compat-search: false
+          compat-search: true
           platform: bionic
           <<: *not-on-integ-branch
       - build:

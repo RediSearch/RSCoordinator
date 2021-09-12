@@ -809,7 +809,7 @@ static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     if (rCtx.lastError) {
       MR_ReplyWithMRReply(ctx, rCtx.lastError);
     } else {
-      RedisModule_ReplyWithError(ctx, "could not parse redisearch results");
+      RedisModule_ReplyWithError(ctx, "could not parse redisearch results or timeout");
     }
     goto cleanup;
   }

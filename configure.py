@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "deps/readies"))
 import paella
 
 osnick = paella.Platform().osnick
-DEFAULT_VECSIM_ARCH='skylake-avx512' if 'osnick' in osnick else 'x86-64-v4'
+DEFAULT_VECSIM_ARCH='skylake-avx512' if 'centos' in osnick or 'xenial' in osnick else 'x86-64-v4'
 
 ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument('--build-dir', help="Build directory to use")

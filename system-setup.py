@@ -54,6 +54,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.run("%s/bin/getcmake --usr" % READIES)
         self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("awscli pudb")
+        self.pip_install("-r %s/src/dep/RediSearch/tests/pytests/requirements.txt" % ROOT)
 
 #----------------------------------------------------------------------------------------------
 

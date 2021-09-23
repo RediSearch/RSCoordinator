@@ -27,7 +27,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         if self.osnick == 'trusty':
             self.ubuntu_trusty()
         else:
-            self.run("%s/bin/getgcc" % READIES)
+            self.run("%s/bin/getgcc --modern" % READIES)
             self.install("libtool m4 automake libssl-dev")
 
     def ubuntu_trusty(self):

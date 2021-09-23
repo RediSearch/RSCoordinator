@@ -128,16 +128,17 @@ commands:
               popd > /dev/null
             fi
       - run:
-          name: Configuration & UV Build
-          command: ./.circleci/configure.sh
-      - run:
-          name: Main Build
-          command: ./.circleci/build.sh
+          name: Build
+          shell: /bin/bash -l -eo pipefail
+          command: |
+            ./.circleci/configure.sh
+            ./.circleci/build.sh
       - run:
           name: Test
-          command: ./.circleci/test.sh
+          command: bash -l -c "./.circleci/test.sh"
       - run:
           name: Package
+          shell: /bin/bash -l -eo pipefail
           command: |
             mkdir -p artifacts
             ./.circleci/package.sh
@@ -168,7 +169,7 @@ jobs:
 
   deploy-snapshots:
     docker:
-      - image: redisfab/rmbuilder:6.2.5-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - attach_workspace:
           at: /workspace
@@ -182,7 +183,7 @@ jobs:
 
   deploy-release:
     docker:
-      - image: redisfab/rmbuilder:6.2.5-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - attach_workspace:
           at: /workspace
@@ -196,7 +197,7 @@ jobs:
 
   release-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.5-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - checkout
       - setup-automation
@@ -209,7 +210,7 @@ jobs:
 
   nightly-automation:
     docker:
-      - image: redisfab/rmbuilder:6.2.5-x64-buster
+      - image: redisfab/rmbuilder:6.2.5-x64-bullseye
     steps:
       - checkout
       - setup-automation

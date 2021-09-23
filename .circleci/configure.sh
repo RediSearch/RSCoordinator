@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -xe
+set -e
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT=$(cd $HERE/..; pwd)
@@ -12,6 +12,9 @@ BUILD_DIR=${BUILD_DIR:-build}
    git apply $ROOT/hiredis_patch && \
    touch applied_hiredis_patch ;\
   fi)
+
+# for vecsim:
+(cd src/dep/RediSearch; make fetch)
 
 mkdir -p $ROOT/$BUILD_DIR
 BUILD_DIR=$(cd $ROOT/$BUILD_DIR; pwd)

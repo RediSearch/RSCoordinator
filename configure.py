@@ -5,9 +5,16 @@ from __future__ import print_function
 import argparse
 from subprocess import Popen
 import os
+import sys
 import platform
 import multiprocessing
 import shutil
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "deps/readies"))
+import paella
+
+osnick = paella.Platform().osnick
+DEFAULT_VECSIM_ARCH='skylake-avx512' if 'osnick' in osnick else 'x86-64-v4'
 
 ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 ap.add_argument('--build-dir', help="Build directory to use")
@@ -17,6 +24,7 @@ ap.add_argument('--concurrency', '-j', help='Concurrent make build',
                 default=multiprocessing.cpu_count() * 2)
 ap.add_argument('--with-cmake', help='Path to cmake', default='cmake')
 ap.add_argument('--with-sanitizer', help='Sanitizer to use', choices=('asan', 'tsan', 'msan'))
+ap.add_argument('--vecsim-arch', type=str, default=DEFAULT_VECSIM_ARCH, help='VECSIM architecture')
 
 options = ap.parse_args()
 # Determine the build directory
@@ -100,6 +108,8 @@ elif options.with_sanitizer == 'tsan':
     args += ['-DRUSE_TSAN=ON']
 if options.with_sanitizer:
     args += ['-DCMAKE_C_COMPILER=clang', '-DCMAKE_CXX_COMPILER=clang++']
+
+args += ['-DVECSIM_ARCH={}'.format(options.vecsim_arch)]
 
 print("Running: " + " ".join(args))
 if Popen(args).wait() != 0:

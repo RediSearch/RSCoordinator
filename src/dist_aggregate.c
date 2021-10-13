@@ -280,6 +280,19 @@ static void buildMRCommand(RedisModuleString **argv, int argc, int profileArgs,
   }
 
   *xcmd = MR_NewCommandArgv(array_len(tmparr), tmparr);
+
+  // PARAMS was already validated at AREQ_Compile
+  int loc = RMUtil_ArgIndex("PARAMS", argv, argc);
+  if (loc != -1) {
+    long long nargs;
+    int rc = RedisModule_StringToLongLong(argv[loc + 1], &nargs);
+
+    // append params string including PARAMS keyword and nargs
+    for (int i = 0; i < nargs + 2; ++i) {
+      MRCommand_AppendRstr(xcmd, argv[loc + i]);
+    }
+  }
+
   MRCommand_SetPrefix(xcmd, "_FT");
 
   array_free(tmparr);

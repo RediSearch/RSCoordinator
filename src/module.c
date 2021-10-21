@@ -2,6 +2,7 @@
 #include "redismodule.h"
 
 #include "dep/rmr/rmr.h"
+#include "dep/rmr/hiredis/alloc.h"
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
@@ -1472,6 +1473,22 @@ static void getRedisVersion() {
   RedisModule_FreeThreadSafeContext(ctx);
 }
 
+/**
+ * A wrapper function to override hiredis allocators with redis allocators.
+ * It should be called after RedisModule_Init.
+ */
+void setHiredisAllocators(){
+  hiredisAllocFuncs ha = {
+    .mallocFn = RedisModule_Alloc,
+    .callocFn = RedisModule_Calloc,
+    .reallocFn = RedisModule_Realloc,
+    .strdupFn = RedisModule_Strdup,
+    .freeFn = RedisModule_Free,
+  };
+
+  hiredisSetAllocators(&ha);
+}
+
 int __attribute__((visibility("default")))
 RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   IndexSpec_OnCreate = addIndexCursor;
@@ -1487,6 +1504,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RedisModule_Init(ctx, RSCOORDINATOR_MODULE_NAME, RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
+
+  setHiredisAllocators();
 
   getRedisVersion();
   RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d",

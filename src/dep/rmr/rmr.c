@@ -26,7 +26,7 @@ extern int redisMajorVesion;
 static MRCluster *cluster_g = NULL;
 static MRWorkQueue *rq_g = NULL;
 
-#define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 50)
+#define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 500)
 /* Coordination request timeout */
 long long timeout_g = 5000;
 
@@ -119,6 +119,10 @@ RedisModuleCtx *MRCtx_GetRedisCtx(struct MRCtx *ctx) {
   return ctx->redisCtx;
 }
 
+void MRCtx_SetRedisCtx(struct MRCtx *ctx, void* rctx){
+  ctx->redisCtx = rctx;
+}
+
 MRCommand *MRCtx_GetCmds(struct MRCtx *ctx) {
   return ctx->cmds;
 }
@@ -157,7 +161,11 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
   mc->redisCtx = ctx;
 
-  return mc->reducer(mc, mc->numReplied, mc->replies);
+  if (mc->reducer) {
+    return mc->reducer(mc, mc->numReplied, mc->replies);
+  } else {
+    return REDISMODULE_OK;
+  }
 }
 
 /* The callback called from each fanout request to aggregate their replies */
@@ -188,6 +196,9 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
     if (ctx->fn) {
       ctx->fn(ctx, ctx->numReplied, ctx->replies);
+      // printf("FreePrivData called!\n");
+      MR_requestCompleted();
+      MRCtx_Free(ctx);
     } else {
       RedisModuleBlockedClient *bc = ctx->redisCtx;
       RedisModule_UnblockClient(bc, ctx);
@@ -316,13 +327,15 @@ void MR_requestCompleted() {
 
 /* Fanout map - send the same command to all the shards, sending the collective
  * reply to the reducer callback */
-int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd) {
+int MR_Fanout(struct MRCtx *ctx, MRReduceFunc reducer, MRCommand cmd, bool block) {
 
   struct MRRequestCtx *rc = malloc(sizeof(struct MRRequestCtx));
-  ctx->redisCtx = RedisModule_BlockClient(
-      ctx->redisCtx, unblockHandler, timeoutHandler,
-      redisMajorVesion < 5 ? (void (*)(RedisModuleCtx *, void *))freePrivDataCB : freePrivDataCB_V5,
-      timeout_g);
+  if (block) {
+    ctx->redisCtx = RedisModule_BlockClient(
+        ctx->redisCtx, unblockHandler, timeoutHandler,
+        redisMajorVesion < 5 ? (void (*)(RedisModuleCtx *, void *))freePrivDataCB : freePrivDataCB_V5,
+        timeout_g);
+  }
   rc->ctx = ctx;
   rc->f = reducer;
   rc->cmds = calloc(1, sizeof(MRCommand));

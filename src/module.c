@@ -1185,7 +1185,12 @@ int FlatSearchCommandHandler(RedisModuleBlockedClient *bc, RedisModuleString **a
 
   searchRequestCtx *req = rscParseRequest(argv, argc);
   if (!req) {
-    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+    RedisModuleCtx* clientCtx = RedisModule_GetThreadSafeContext(bc);
+    RedisModule_ReplyWithError(clientCtx, "Invalid search request");
+    RedisModule_UnblockClient(bc, NULL);
+    RedisModule_FreeThreadSafeContext(clientCtx);
+    RedisModule_FreeThreadSafeContext(ctx);
+    return REDISMODULE_OK;
   }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);

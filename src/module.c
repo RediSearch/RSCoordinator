@@ -786,6 +786,8 @@ static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     int res = RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
     RedisModule_UnblockClient(bc, mc);
     RedisModule_FreeThreadSafeContext(ctx);
+    MR_requestCompleted();
+    MRCtx_Free(mc);
     return res;
   }
 
@@ -793,6 +795,8 @@ static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
     int res = MR_ReplyWithMRReply(ctx, *replies);
     RedisModule_UnblockClient(bc, mc);
     RedisModule_FreeThreadSafeContext(ctx);
+    MR_requestCompleted();
+    MRCtx_Free(mc);
     return res;
   }
 
@@ -839,6 +843,8 @@ cleanup:
   searchRequestCtx_Free(req);
   RedisModule_UnblockClient(bc, mc);
   RedisModule_FreeThreadSafeContext(ctx);
+  MR_requestCompleted();
+  MRCtx_Free(mc);
   return REDISMODULE_OK;
 }
 
@@ -1173,64 +1179,7 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   return REDISMODULE_OK;
 }
 
-int FlatSearchCommandHandler(RedisModuleCtx* ctx, RedisModuleString **argv, int argc) {
-
-  // MR_UpdateTopology(ctx);
-  if (argc < 3) {
-    return RedisModule_WrongArity(ctx);
-  }
-  // Check that the cluster state is valid
-  if (!SearchCluster_Ready(GetSearchCluster())) {
-    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
-  }
-  RedisModule_AutoMemory(ctx);
-
-  searchRequestCtx *req = rscParseRequest(argv, argc);
-  if (!req) {
-    return RedisModule_ReplyWithError(ctx, "Invalid search request");
-  }
-
-  MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
-
-  // replace the LIMIT {offset} {limit} with LIMIT 0 {limit}, because we need all top N to merge
-  int limitIndex = RMUtil_ArgExists("LIMIT", argv, argc, 3);
-  if (limitIndex && req->limit > 0 && limitIndex < argc - 2) {
-    MRCommand_ReplaceArg(&cmd, limitIndex + 1, "0", 1);
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", req->limit + req->offset);
-    MRCommand_ReplaceArg(&cmd, limitIndex + 2, buf, strlen(buf));
-  }
-
-  /* Replace our own FT command with _FT. command */
-  if (req->profileArgs == 0) {
-    MRCommand_ReplaceArg(&cmd, 0, "_FT.SEARCH", sizeof("_FT.SEARCH") - 1);
-  } else {
-    MRCommand_ReplaceArg(&cmd, 0, "_FT.PROFILE", sizeof("_FT.PROFILE") - 1);
-  }
-
-  // adding the WITHSCORES option anyway immediately after the query.
-  // Worst case it will appears twice.
-  MRCommand_AppendArgsAtPos(&cmd, 3 + req->profileArgs, 1, "WITHSCORES");
-  if (req->withSortby) {
-    // if sort by requested we adding the WITHSORTKEYS option anyway immediately after the query.
-    // Worst case it will appears twice.
-    MRCommand_AppendArgsAtPos(&cmd, 3 + req->profileArgs, 1, "WITHSORTKEYS");
-    // req->withSortingKeys = 1;
-  }
-
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
-  struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
-  // we prefer the next level to be local - we will only approach nodes on our own shard
-  // we also ask only masters to serve the request, to avoid duplications by random
-  MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
-
-  MRCtx_SetReduceFunction(mrctx, searchResultReducer);
-  MR_Map(mrctx, NULL, cg, true);
-  cg.Free(cg.ctx);
-  return REDISMODULE_OK;
-}
-
-int FlatSearchCommandHandler1(RedisModuleBlockedClient *bc, RedisModuleString **argv, int argc) {
+int FlatSearchCommandHandler(RedisModuleBlockedClient *bc, RedisModuleString **argv, int argc) {
   RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
   RedisModule_AutoMemory(ctx);
 
@@ -1267,7 +1216,6 @@ int FlatSearchCommandHandler1(RedisModuleBlockedClient *bc, RedisModuleString **
     // req->withSortingKeys = 1;
   }
 
-//  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
@@ -1276,7 +1224,6 @@ int FlatSearchCommandHandler1(RedisModuleBlockedClient *bc, RedisModuleString **
   MRCtx_SetReduceFunction(mrctx, searchResultReducer);
   MRCtx_SetRedisCtx(mrctx, bc);
   MR_Fanout(mrctx, NULL, cmd, false);
-//  cg.Free(cg.ctx);
   RedisModule_FreeThreadSafeContext(ctx);
   return REDISMODULE_OK;
 }
@@ -1289,7 +1236,7 @@ typedef struct SearchCmdCtx {
 
 static void DistSearchCommandHandler(void* pd) {
   SearchCmdCtx* sCmdCtx = pd;
-  FlatSearchCommandHandler1(sCmdCtx->bc, sCmdCtx->argv, sCmdCtx->argc);
+  FlatSearchCommandHandler(sCmdCtx->bc, sCmdCtx->argv, sCmdCtx->argc);
   for (size_t i = 0 ; i < sCmdCtx->argc ; ++i) {
     RedisModule_FreeString(NULL, sCmdCtx->argv[i]);
   }
@@ -1329,7 +1276,7 @@ int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
   const char *typeStr = RedisModule_StringPtrLen(argv[2], NULL);
   if (RMUtil_ArgExists("SEARCH", argv, 3, 2)) {
-    return FlatSearchCommandHandler(ctx, argv, argc);
+    return DistSearchCommand(ctx, argv, argc);
   }
   if (RMUtil_ArgExists("AGGREGATE", argv, 3, 2)) {
     return DistAggregateCommand(ctx, argv, argc);
@@ -1606,7 +1553,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
 
   // Init the aggregation thread pool
-  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(1);
+  DIST_AGG_THREADPOOL = ConcurrentSearch_CreatePool(RSGlobalConfig.searchPoolSize);
 
   // suggestion commands
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SUGADD", SafeCmd(SingleShardCommandHandler), "readonly",
@@ -1630,7 +1577,7 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.INFO", SafeCmd(InfoCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(DistSearchCommand), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(DistSearchCommand), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.PROFILE", SafeCmd(ProfileCommandHandler), "readonly", 0, 0, -1));
   if (clusterConfig.type == ClusterType_RedisLabs) {

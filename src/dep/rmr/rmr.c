@@ -26,7 +26,7 @@ extern int redisMajorVesion;
 static MRCluster *cluster_g = NULL;
 static MRWorkQueue *rq_g = NULL;
 
-#define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 500)
+#define MAX_CONCURRENT_REQUESTS (MR_CONN_POOL_SIZE * 50)
 /* Coordination request timeout */
 long long timeout_g = 5000;
 
@@ -161,11 +161,7 @@ static int unblockHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
   mc->redisCtx = ctx;
 
-  if (mc->reducer) {
-    return mc->reducer(mc, mc->numReplied, mc->replies);
-  } else {
-    return REDISMODULE_OK;
-  }
+  return mc->reducer(mc, mc->numReplied, mc->replies);
 }
 
 /* The callback called from each fanout request to aggregate their replies */
@@ -196,9 +192,6 @@ static void fanoutCallback(redisAsyncContext *c, void *r, void *privdata) {
   if (ctx->numReplied + ctx->numErrored == ctx->numExpected) {
     if (ctx->fn) {
       ctx->fn(ctx, ctx->numReplied, ctx->replies);
-      // printf("FreePrivData called!\n");
-      MR_requestCompleted();
-      MRCtx_Free(ctx);
     } else {
       RedisModuleBlockedClient *bc = ctx->redisCtx;
       RedisModule_UnblockClient(bc, ctx);

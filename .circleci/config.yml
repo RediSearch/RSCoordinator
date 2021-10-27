@@ -306,13 +306,16 @@ workflows:
           matrix:
             alias: version-builds
             parameters:
-              platform: [focal, bionic, xenial, centos7, centos8]
-          <<: *on-version-tags
+              #@@ platform: [focal, bionic, xenial, centos7, centos8]
+              platform: [bionic]
+          #@@ <<: *on-version-tags
+          <<: *not-on-integ-branch
       - deploy-snapshots:
           context: common
           requires:
             - int-builds
-          <<: *on-integ-branch
+          #@@ <<: *on-integ-branch
+          <<: *not-on-integ-branch
       - deploy-release:
           context: common
           requires:

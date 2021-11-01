@@ -2,6 +2,7 @@
 #include "redismodule.h"
 
 #include "dep/rmr/rmr.h"
+#include "dep/rmr/hiredis/alloc.h"
 #include "dep/rmr/hiredis/async.h"
 #include "dep/rmr/reply.h"
 #include "dep/rmutil/util.h"
@@ -775,18 +776,29 @@ static void profileSearchReply(RedisModuleCtx *ctx, searchReducerCtx *rCtx,
 
 static int searchResultReducer(struct MRCtx *mc, int count, MRReply **replies) {
   clock_t postProccesTime;
-  RedisModuleCtx *ctx = MRCtx_GetRedisCtx(mc);
+  RedisModuleBlockedClient *bc = (RedisModuleBlockedClient *)MRCtx_GetRedisCtx(mc);
+  RedisModuleCtx *ctx = RedisModule_GetThreadSafeContext(bc);
   searchRequestCtx *req = MRCtx_GetPrivdata(mc);
   searchReducerCtx rCtx = {NULL};
   int profile = (req->profileArgs > 0);
 
   // got no replies - this means timeout
   if (count == 0 || req->limit < 0) {
-    return RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+    int res = RedisModule_ReplyWithError(ctx, "Could not send query to cluster");
+    RedisModule_UnblockClient(bc, mc);
+    RedisModule_FreeThreadSafeContext(ctx);
+    MR_requestCompleted();
+    MRCtx_Free(mc);
+    return res;
   }
 
   if (MRReply_Type(*replies) == MR_REPLY_ERROR) {
-    return MR_ReplyWithMRReply(ctx, *replies);
+    int res = MR_ReplyWithMRReply(ctx, *replies);
+    RedisModule_UnblockClient(bc, mc);
+    RedisModule_FreeThreadSafeContext(ctx);
+    MR_requestCompleted();
+    MRCtx_Free(mc);
+    return res;
   }
 
   size_t num = req->offset + req->limit;
@@ -830,6 +842,10 @@ cleanup:
   }
 
   searchRequestCtx_Free(req);
+  RedisModule_UnblockClient(bc, mc);
+  RedisModule_FreeThreadSafeContext(ctx);
+  MR_requestCompleted();
+  MRCtx_Free(mc);
   return REDISMODULE_OK;
 }
 
@@ -987,7 +1003,7 @@ static int mastersCommandCommon(RedisModuleCtx *ctx, RedisModuleString **argv, i
     MR_Map(mrctx, allOKReducer, cg, true);
     cg.Free(cg.ctx);
   } else {
-    MR_Fanout(mrctx, allOKReducer, cmd);
+    MR_Fanout(mrctx, allOKReducer, cmd, true);
   }
   return REDISMODULE_OK;
 }
@@ -1090,7 +1106,7 @@ int BroadcastCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     MR_Map(mctx, chainReplyReducer, cg, true);
     cg.Free(cg.ctx);
   } else {
-    MR_Fanout(mctx, chainReplyReducer, cmd);
+    MR_Fanout(mctx, chainReplyReducer, cmd, true);
   }
   return REDISMODULE_OK;
 }
@@ -1164,21 +1180,18 @@ int LocalSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int
   return REDISMODULE_OK;
 }
 
-int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-  // MR_UpdateTopology(ctx);
-  if (argc < 3) {
-    return RedisModule_WrongArity(ctx);
-  }
-  // Check that the cluster state is valid
-  if (!SearchCluster_Ready(GetSearchCluster())) {
-    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
-  }
+int FlatSearchCommandHandler(RedisModuleBlockedClient *bc, RedisModuleString **argv, int argc) {
+  RedisModuleCtx* ctx = RedisModule_GetThreadSafeContext(NULL);
   RedisModule_AutoMemory(ctx);
 
   searchRequestCtx *req = rscParseRequest(argv, argc);
   if (!req) {
-    return RedisModule_ReplyWithError(ctx, "Invalid search request");
+    RedisModuleCtx* clientCtx = RedisModule_GetThreadSafeContext(bc);
+    RedisModule_ReplyWithError(clientCtx, "Invalid search request");
+    RedisModule_UnblockClient(bc, NULL);
+    RedisModule_FreeThreadSafeContext(clientCtx);
+    RedisModule_FreeThreadSafeContext(ctx);
+    return REDISMODULE_OK;
   }
 
   MRCommand cmd = MR_NewCommandFromRedisStrings(argc, argv);
@@ -1209,14 +1222,52 @@ int FlatSearchCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     // req->withSortingKeys = 1;
   }
 
-  MRCommandGenerator cg = SearchCluster_MultiplexCommand(GetSearchCluster(), &cmd);
   struct MRCtx *mrctx = MR_CreateCtx(ctx, req);
   // we prefer the next level to be local - we will only approach nodes on our own shard
   // we also ask only masters to serve the request, to avoid duplications by random
   MR_SetCoordinationStrategy(mrctx, MRCluster_FlatCoordination);
 
-  MR_Map(mrctx, searchResultReducer, cg, true);
-  cg.Free(cg.ctx);
+  MRCtx_SetReduceFunction(mrctx, searchResultReducer);
+  MRCtx_SetRedisCtx(mrctx, bc);
+  MR_Fanout(mrctx, NULL, cmd, false);
+  RedisModule_FreeThreadSafeContext(ctx);
+  return REDISMODULE_OK;
+}
+
+typedef struct SearchCmdCtx {
+  RedisModuleString **argv;
+  int argc;
+  RedisModuleBlockedClient* bc;
+}SearchCmdCtx;
+
+static void DistSearchCommandHandler(void* pd) {
+  SearchCmdCtx* sCmdCtx = pd;
+  FlatSearchCommandHandler(sCmdCtx->bc, sCmdCtx->argv, sCmdCtx->argc);
+  for (size_t i = 0 ; i < sCmdCtx->argc ; ++i) {
+    RedisModule_FreeString(NULL, sCmdCtx->argv[i]);
+  }
+  rm_free(sCmdCtx->argv);
+  rm_free(sCmdCtx);
+}
+
+static int DistSearchCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  if (argc < 3) {
+    return RedisModule_WrongArity(ctx);
+  }
+  if (!SearchCluster_Ready(GetSearchCluster())) {
+    return RedisModule_ReplyWithError(ctx, CLUSTERDOWN_ERR);
+  }
+  RedisModuleBlockedClient* bc = RedisModule_BlockClient(ctx, NULL, NULL, NULL, 0);
+  SearchCmdCtx* sCmdCtx = rm_malloc(sizeof(*sCmdCtx));
+  sCmdCtx->argv = rm_malloc(sizeof(RedisModuleString*) * argc);
+  for (size_t i = 0 ; i < argc ; ++i) {
+    sCmdCtx->argv[i] = RedisModule_HoldString(ctx, argv[i]);
+  }
+  sCmdCtx->argc = argc;
+  sCmdCtx->bc = bc;
+  ConcurrentSearch_ThreadPoolRun(DistSearchCommandHandler, sCmdCtx, DIST_AGG_THREADPOOL);
+
   return REDISMODULE_OK;
 }
 
@@ -1231,7 +1282,7 @@ int ProfileCommandHandler(RedisModuleCtx *ctx, RedisModuleString **argv, int arg
 
   const char *typeStr = RedisModule_StringPtrLen(argv[2], NULL);
   if (RMUtil_ArgExists("SEARCH", argv, 3, 2)) {
-    return FlatSearchCommandHandler(ctx, argv, argc);
+    return DistSearchCommand(ctx, argv, argc);
   }
   if (RMUtil_ArgExists("AGGREGATE", argv, 3, 2)) {
     return DistAggregateCommand(ctx, argv, argc);
@@ -1472,6 +1523,22 @@ static void getRedisVersion() {
   RedisModule_FreeThreadSafeContext(ctx);
 }
 
+/**
+ * A wrapper function to override hiredis allocators with redis allocators.
+ * It should be called after RedisModule_Init.
+ */
+void setHiredisAllocators(){
+  hiredisAllocFuncs ha = {
+    .mallocFn = rm_malloc,
+    .callocFn = rm_calloc,
+    .reallocFn = rm_realloc,
+    .strdupFn = rm_strdup,
+    .freeFn = rm_free,
+  };
+
+  hiredisSetAllocators(&ha);
+}
+
 int __attribute__((visibility("default")))
 RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   IndexSpec_OnCreate = addIndexCursor;
@@ -1487,6 +1554,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RedisModule_Init(ctx, RSCOORDINATOR_MODULE_NAME, RSCOORDINATOR_VERSION, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
+
+  setHiredisAllocators();
 
   getRedisVersion();
   RedisModule_Log(ctx, "notice", "redis version observed by redisearch : %d.%d.%d",
@@ -1532,8 +1601,8 @@ RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   }
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.INFO", SafeCmd(InfoCommandHandler), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.LSEARCH", SafeCmd(LocalSearchCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
-  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(FlatSearchCommandHandler), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.FSEARCH", SafeCmd(DistSearchCommand), "readonly", 0, 0, -1));
+  RM_TRY(RedisModule_CreateCommand(ctx, "FT.SEARCH", SafeCmd(DistSearchCommand), "readonly", 0, 0, -1));
   RM_TRY(RedisModule_CreateCommand(ctx, "FT.PROFILE", SafeCmd(ProfileCommandHandler), "readonly", 0, 0, -1));
   if (clusterConfig.type == ClusterType_RedisLabs) {
     RM_TRY(RedisModule_CreateCommand(ctx, "FT.CURSOR", SafeCmd(CursorCommand), "readonly", 3, 1, -3));

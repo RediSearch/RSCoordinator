@@ -2,12 +2,13 @@
 #define __RMR_CONN_H__
 
 #include "hiredis/hiredis.h"
+#include "hiredis/hiredis_ssl.h"
 #include "hiredis/async.h"
 #include "endpoint.h"
 #include "command.h"
 #include "dep/triemap/triemap.h"
 
-#define MR_CONN_POOL_SIZE 4
+#define MR_CONN_POOL_SIZE 1
 
 /*
  * The state of the connection.

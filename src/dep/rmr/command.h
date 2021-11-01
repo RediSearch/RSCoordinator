@@ -1,6 +1,7 @@
 #ifndef __MR_COMMAND_H__
 #define __MR_COMMAND_H__
 #include <redismodule.h>
+#include "hiredis/sds.h"
 #include <assert.h>
 /* A redis command is represented with all its arguments and its flags as MRCommand */
 typedef struct {
@@ -16,6 +17,8 @@ typedef struct {
 
   /* if not -1, this value indicate to which slot the command should be sent */
   int targetSlot;
+
+  sds cmd;
 } MRCommand;
 
 /* Free the command and all its strings. Doesn't free the actual commmand struct, as it is usually

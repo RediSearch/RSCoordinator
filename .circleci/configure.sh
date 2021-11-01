@@ -7,6 +7,12 @@ ROOT=$(cd $HERE/..; pwd)
 
 BUILD_DIR=${BUILD_DIR:-build}
 
+(cd $ROOT/src/dep/rmr/hiredis && \
+ if [[ ! -e applied_hiredis_patch ]]; then \
+   git apply $ROOT/hiredis_patch && \
+   touch applied_hiredis_patch ;\
+  fi)
+
 mkdir -p $ROOT/$BUILD_DIR
 BUILD_DIR=$(cd $ROOT/$BUILD_DIR; pwd)
 

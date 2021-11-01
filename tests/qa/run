@@ -13,7 +13,7 @@ if [[ $1 == --help || $1 == help ]]; then
 		[ARGVARS...] run [--help|help]
 
 		Argument variables:
-    		QA_AUTOMATION_TOKEN=token     QA automation (Opereto) token
+		QA_AUTOMATION_TOKEN=token     QA automation (Opereto) token
 		TEST=name                     Name of .json parameters file
 		MODULE_VERSION=ver            Module version to test. Default: master
 		LIGHT=1                       Test RediSearch Light
@@ -49,6 +49,9 @@ run_test() {
 		export MODULE_VERSION=$(echo "$MODULE_VERSION" | sed  's/^v\(.*\)/\1/')
 	fi
 
+	export RS_ENV=bionic-amd64-aws
+	
+	export RS_MODULE_OS=Linux-ubuntu18.04
 	export RS_MODULE_DIR=redisearch
 	if [[ $LIGHT == 1 ]]; then
 		export RS_MODULE=RedisearchLight
@@ -57,6 +60,9 @@ run_test() {
 		export RS_MODULE=RediSearchEnterprise
 		export RS_MODULE_FILE_PREFIX=redisearch
 	fi
+	export REJSON_MODULE_DIR=rejson
+	export REJSON_FILE_PREFIX=rejson
+	export REJSON_VERSION=2.0.0
 
 	results() {
 		echo "$JSON" | jq "$1" | cut -d\" -f2
@@ -65,7 +71,10 @@ run_test() {
 	cd $HERE
 
 	json_in=$(mktemp /tmp/$TEST.json.XXXX)
-	$READIES/bin/xtx -e RS_MODULE -e RS_MODULE_DIR -e RS_MODULE_FILE_PREFIX -e MODULE_VERSION -e RS_VERSION $TEST.json > $json_in
+	$READIES/bin/xtx -e RS_MODULE -e RS_MODULE_DIR -e RS_MODULE_FILE_PREFIX -e MODULE_VERSION -e RS_VERSION \
+		-e RS_MODULE_OS -e RS_ENV \
+		-e REJSON_MODULE_DIR -e REJSON_FILE_PREFIX -e REJSON_VERSION \
+		$TEST.json > $json_in
 	(( VERBOSE >= 1 )) && cat $json_in
 
 	if [[ $NOP == 1 ]]; then
@@ -73,9 +82,10 @@ run_test() {
 		return 0
 	fi
 
-     	OPERETO3_URL="opereto.qa.redislabs.com"
+	OPERETO3_URL="opereto.qa.redislabs.com"
 	JSON=$(curl -sk \
-   		-X POST -H "Content-Type: application/json" \
+   		-X POST \
+		-H "Content-Type: application/json" \
    		-H "Authorization: Bearer $QA_AUTOMATION_TOKEN" \
    		-d @$json_in \
    		https://$OPERETO3_URL/processes 2>&1)

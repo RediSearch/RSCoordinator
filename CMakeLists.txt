@@ -70,7 +70,7 @@ SET(FINAL_OBJECTS
 MACRO(MODULE_TARGET SUFFIX)
     SET(_moduleName module-${SUFFIX})
     ADD_LIBRARY(${_moduleName} SHARED ${FINAL_OBJECTS} src/build-info/info-${SUFFIX}.c)
-    TARGET_LINK_LIBRARIES(${_moduleName} redisearch-${SUFFIX} ${LIBUV_LIBRARIES} hiredis)
+    TARGET_LINK_LIBRARIES(${_moduleName} redisearch-${SUFFIX} ${LIBUV_LIBRARIES} hiredis hiredis_ssl)
 
     IF (${SUFFIX} STREQUAL "oss")
         SET(_moduleDefs "RS_CLUSTER_OSS")
@@ -100,7 +100,7 @@ MODULE_TARGET(oss)
 MODULE_TARGET(enterprise)
 
 ADD_LIBRARY(testdeps STATIC ${FINAL_OBJECTS})
-TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearch-oss redismock hiredis dl)
+TARGET_LINK_LIBRARIES(testdeps ${LIBUV_LIBRARIES} redisearch-oss redismock hiredis hiredis_ssl dl)
 # Add RMR's tests, and our own tests
 ADD_SUBDIRECTORY(src/dep/rmr/test)
 ADD_SUBDIRECTORY(test)

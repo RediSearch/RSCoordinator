@@ -119,6 +119,9 @@ int _getCommandConfId(MRCommand *cmd) {
 }
 
 void MRCommand_Free(MRCommand *cmd) {
+  if (cmd->cmd) {
+    sdsfree(cmd->cmd);
+  }
   for (int i = 0; i < cmd->num; i++) {
     free(cmd->strs[i]);
   }
@@ -157,6 +160,7 @@ static void MRCommand_Init(MRCommand *cmd, size_t len) {
   cmd->lens = malloc(sizeof(*cmd->lens) * len);
   cmd->id = 0;
   cmd->targetSlot = -1;
+  cmd->cmd = NULL;
 }
 
 MRCommand MR_NewCommandArgv(int argc, const char **argv) {

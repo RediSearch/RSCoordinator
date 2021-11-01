@@ -1,6 +1,7 @@
 #include "conn.h"
 #include "reply.h"
 #include "hiredis/adapters/libuv.h"
+#include "search_cluster.h"
 
 #include <uv.h>
 #include <signal.h>
@@ -121,8 +122,12 @@ int MRConn_SendCommand(MRConn *c, MRCommand *cmd, redisCallbackFn *fn, void *pri
   }
   // printf("Sending to %s:%d\n", c->ep.host, c->ep.port);
   // MRCommand_Print(cmd);
-  return redisAsyncCommandArgv(c->conn, fn, privdata, cmd->num, (const char **)cmd->strs,
-                               cmd->lens);
+  if (!cmd->cmd) {
+    if (redisFormatSdsCommandArgv(&cmd->cmd, cmd->num, (const char **)cmd->strs, cmd->lens) == REDIS_ERR) {
+      return REDIS_ERR;
+    }
+  }
+  return redisAsyncFormattedCommand(c->conn, fn, privdata, cmd->cmd, sdslen(cmd->cmd));
 }
 
 // replace an existing coonnection pool with a new one
@@ -320,8 +325,10 @@ static void MRConn_AuthCallback(redisAsyncContext *c, void *r, void *privdata) {
 
   redisReply *rep = r;
   /* AUTH error */
-  if (REDIS_REPLY_GETTYPE(&c->c, rep) == REDIS_REPLY_ERROR) {
-    CONN_LOG(conn, "Error authenticating: %s", REDIS_REPLY_GETSTRZ(&c->c, rep));
+  if (MRReply_Type(rep) == REDIS_REPLY_ERROR) {
+    size_t len;
+    const char* s = MRReply_String(rep, &len);
+    CONN_LOG(conn, "Error authenticating: %.*s", (int)len, s);
     MRConn_SwitchState(conn, MRConn_ReAuth);
     /*we don't try to reconnect to failed connections */
     return;
@@ -368,7 +375,33 @@ static void MRConn_ConnectCallback(const redisAsyncContext *c, int status) {
     return;
   }
 
+  // todo: check if tls is require and if it does initiate a tls connection
+  char* client_cert = NULL;
+  char* client_key = NULL;
+  char* ca_cert = NULL;
+  if(checkTLS(&client_key, &client_cert, &ca_cert)){
+    redisSSLContextError ssl_error = 0;
+    redisSSLContext *ssl_context = redisCreateSSLContext(ca_cert, NULL, client_cert, client_key, NULL, &ssl_error);
+    if(ssl_context == NULL || ssl_error != 0) {
+      CONN_LOG(conn, "Error on ssl contex creation: %s", (ssl_error != 0) ? redisSSLContextGetError(ssl_error) : "Unknown error");
+      detachFromConn(conn, 0);  // Free the connection as well - we have an error
+      MRConn_SwitchState(conn, MRConn_Connecting);
+      return;
+    }
+    if (redisInitiateSSLWithContext((redisContext *)(&c->c), ssl_context) != REDIS_OK) {
+      CONN_LOG(conn, "Error on tls auth");
+      detachFromConn(conn, 0);  // Free the connection as well - we have an error
+      MRConn_SwitchState(conn, MRConn_Connecting);
+      return;
+    }
+    rm_free(client_key);
+    rm_free(client_cert);
+  }
+
+
+
   // If this is an authenticated connection, we need to atu
+
   if (conn->ep.auth) {
     if (MRConn_SendAuth(conn) != REDIS_OK) {
       detachFromConn(conn, 1);
@@ -409,16 +442,8 @@ static int MRConn_Connect(MRConn *conn) {
   // fprintf(stderr, "Connectig to %s:%d\n", conn->ep.host, conn->ep.port);
 
   redisOptions options = {.type = REDIS_CONN_TCP,
-                          .options = REDIS_OPT_NOFREEREPLIES,
+                          .options = REDIS_OPT_NOAUTOFREEREPLIES,
                           .endpoint.tcp = {.ip = conn->ep.host, .port = conn->ep.port}};
-
-  if (MRReply_UseV2) {
-    options.reader = redisReaderCreateWithFunctions(&redisReplyV2Functions);
-    options.accessors = &redisReplyV2Accessors;
-    if (MRReply_UseBlockAlloc) {
-      redisReaderEnableBlockAllocator(options.reader);
-    }
-  }
 
   redisAsyncContext *c = redisAsyncConnectWithOptions(&options);
   if (c->err) {

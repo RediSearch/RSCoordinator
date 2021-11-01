@@ -3,7 +3,7 @@
 set -xe
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-ROOT=$(cd $HERE/..; pwd)
+ROOT=$(cd $HERE/.. && pwd)
 
 [[ -n "$REDISEARCH_CI_SKIP_TESTS" ]] && exit 0
 
@@ -23,3 +23,11 @@ export EXT_TEST_PATH=src/dep/RediSearch/tests/ctests/ext-example/libexample_exte
 REJSON=1 REJSON_BRANCH=2.0 MODARGS="PARTITIONS AUTO" $test_cmd
 REJSON=1 REJSON_BRANCH=2.0 MODARGS="OSS_GLOBAL_PASSWORD password; PARTITIONS AUTO" $test_cmd --oss_password password
 REJSON=1 REJSON_BRANCH=2.0 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd
+
+tls_args="--tls \
+	--tls-cert-file $ROOT/tests/tls/redis.crt \
+	--tls-key-file $ROOT/tests/tls/redis.key \
+	--tls-ca-cert-file $ROOT/tests/tls/ca.crt"
+
+$ROOT/gen-test-certs.sh
+REJSON=1 $test_cmd $tls_args

@@ -12,37 +12,36 @@
 #define MR_REPLY_STATUS 5
 #define MR_REPLY_ERROR 6
 
-extern const int MRReply_UseV2;
-extern const int MRReply_UseBlockAlloc;
-extern redisReplyAccessors MRReply__Accessors;
-
-typedef struct MRReply MRReply;
+typedef struct redisReply MRReply;
 
 static inline void MRReply_Free(MRReply *reply) {
   freeReplyObject(reply);
 }
 
 static inline int MRReply_Type(MRReply *reply) {
-  return MRReply__Accessors.getType(reply);
+  return reply->type;
 }
 
 static inline long long MRReply_Integer(MRReply *reply) {
-  return MRReply__Accessors.getInteger(reply);
+  return reply->integer;
 }
 
 static inline size_t MRReply_Length(MRReply *reply) {
-  return MRReply__Accessors.getArrayLength(reply);
+  return reply->elements;
 }
 
 /* Compare a string reply with a string, optionally case sensitive */
 int MRReply_StringEquals(MRReply *r, const char *s, int caseSensitive);
 
 static inline char *MRReply_String(MRReply *reply, size_t *len) {
-  return (char *)MRReply__Accessors.getString(reply, len);
+  if (len) {
+    *len = reply->len;
+  }
+  return reply->str;
 }
 
 static inline MRReply *MRReply_ArrayElement(MRReply *reply, size_t idx) {
-  return MRReply__Accessors.getArrayElement(reply, idx);
+  return reply->element[idx];
 }
 
 void MRReply_Print(FILE *fp, MRReply *r);

@@ -192,8 +192,11 @@ static int rpnetNext(ResultProcessor *self, SearchResult *r) {
   MRReply *rep = MRReply_ArrayElement(nc->current.rows, nc->curIdx++);
   for (size_t i = 0; i < MRReply_Length(rep); i += 2) {
     const char *c = MRReply_String(MRReply_ArrayElement(rep, i), NULL);
-    MRReply *val = MRReply_ArrayElement(rep, i + 1);
-    RSValue *v = MRReply_ToValue(val);
+    RSValue *v = RS_NullVal();
+    if (i + 1 < MRReply_Length(rep)) {
+      MRReply *val = MRReply_ArrayElement(rep, i + 1);
+      v = MRReply_ToValue(val);
+    }
     RLookup_WriteOwnKeyByName(nc->lookup, c, &r->rowdata, v);
   }
   return RS_RESULT_OK;
@@ -378,6 +381,12 @@ void RSExecDistAggregate(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
   int rc = AREQ_Compile(r, argv + 2 + profileArgs, argc - 2 - profileArgs, &status);
   if (rc != REDISMODULE_OK) goto err;
+
+  // Save time when query was initiated
+  if (!r->reqTimeout) {
+    r->reqTimeout = RSGlobalConfig.queryTimeoutMS;
+  }
+  updateTimeout(&r->timeoutTime, r->reqTimeout);
 
   rc = AGGPLN_Distribute(&r->ap, &status);
   if (rc != REDISMODULE_OK) goto err;

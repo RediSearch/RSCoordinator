@@ -2,9 +2,9 @@
 #define RSCOORDINATOR_VERSION_H_
 #include "dep/RediSearch/src/version.h"
 
-#define RSCOORDINATOR_VERSION_MAJOR 99
-#define RSCOORDINATOR_VERSION_MINOR 99
-#define RSCOORDINATOR_VERSION_PATCH 99
+#define RSCOORDINATOR_VERSION_MAJOR 2
+#define RSCOORDINATOR_VERSION_MINOR 2
+#define RSCOORDINATOR_VERSION_PATCH 1
 
 // convert semver to incremental number as expected by redis
 #define RSCOORDINATOR_VERSION                                                \

@@ -92,7 +92,7 @@ class Test:
         
         ENV['REJSON_MODULE_DIR'] = 'rejson'
         ENV['REJSON_FILE_PREFIX'] = 'rejson'
-        ENV['REJSON_VERSION'] = '2.0.0'
+        ENV['REJSON_VERSION'] = '2.0.2'
 
         self.xtx_vars = ['RS_MODULE', 'RS_MODULE_DIR', 'RS_MODULE_FILE_PREFIX',
                          'RS_VERSION', 'RS_ENV', 'RS_MODULE_OS',

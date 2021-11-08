@@ -4,7 +4,7 @@
 
 #define RSCOORDINATOR_VERSION_MAJOR 2
 #define RSCOORDINATOR_VERSION_MINOR 2
-#define RSCOORDINATOR_VERSION_PATCH 1
+#define RSCOORDINATOR_VERSION_PATCH 2
 
 // convert semver to incremental number as expected by redis
 #define RSCOORDINATOR_VERSION                                                \

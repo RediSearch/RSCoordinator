@@ -62,7 +62,7 @@ run_test() {
 	fi
 	export REJSON_MODULE_DIR=rejson
 	export REJSON_FILE_PREFIX=rejson
-	export REJSON_VERSION=2.0.0
+	export REJSON_VERSION=2.0.4
 
 	results() {
 		echo "$JSON" | jq "$1" | cut -d\" -f2

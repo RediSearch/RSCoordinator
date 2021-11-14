@@ -18,9 +18,9 @@ class RedisRSCoordinatorSetup(paella.Setup):
     def common_first(self):
         self.install_downloaders()
         self.pip_install("wheel")
-        self.pip_install("setuptools --upgrade")
+        self.pip_install("--ignore-installed --no-cache-dir setuptools --upgrade")
 
-        self.install("git gawk lcov jq")
+        self.install("git gawk lcov jq rsync unzip")
 
     def debian_compat(self):
         self.install("libatomic1")
@@ -29,7 +29,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         else:
             self.run("%s/bin/getgcc" % READIES)
             self.install("libtool m4 automake")
-        
+
     def ubuntu_trusty(self):
         self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake") # after modern gcc
@@ -41,7 +41,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         self.install("libatomic")
         self.run("%s/bin/getgcc --modern" % READIES)
         self.install("libtool m4 automake")
-        
+
     def fedora(self):
         self.install("libatomic")
         self.run("%s/bin/getgcc" % READIES)
@@ -50,7 +50,7 @@ class RedisRSCoordinatorSetup(paella.Setup):
         pass
 
     def common_last(self):
-        self.run("%s/bin/getcmake" % READIES)
+        self.run("%s/bin/getcmake --usr" % READIES)
         self.run("{PYTHON} {READIES}/bin/getrmpytools".format(PYTHON=self.python, READIES=READIES))
         self.pip_install("awscli pudb")
 

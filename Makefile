@@ -1,24 +1,70 @@
+
+ROOT:=$(shell pwd)
+
+#----------------------------------------------------------------------------------------------
+ 
+ifeq ($(DEBUG),1)
+CONFIG_ARGS += --enable-debug
+endif
+
 all: build
 
-build:
-	$(MAKE) -C ./src module.so
-.PHONY: build
+export BUILD_DIR ?= build
 
-test: build
-	$(MAKE) -C ./test
-	$(MAKE) -C ./src/dep/rmr/test test
-	$(MAKE) -C ./src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
-	$(MAKE) -C ./src module-oss.so
-	$(MAKE) -C ./pytest 
-	
+configure:
+	mkdir -p $(BUILD_DIR)
+	set -e; cd $(BUILD_DIR); $(ROOT)/configure.py -j8 $(CONFIG_ARGS)
+
+ifeq ($(wildcard $(BUILD_DIR)/Makefile),)
+build: configure
+else
+build:
+endif
+	$(MAKE) -C $(BUILD_DIR)
+
+.PHONY: build apply_hiredis_patch
+
 clean:
-	$(MAKE) -C ./src clean
+	$(MAKE) -C src clean
+
 .PHONY: clean
 
 deepclean:
-	$(MAKE) -C ./src deepclean
+	$(MAKE) -C src deepclean
 
-BRANCH=$(shell git branch | awk '/\*/{print $$2}')
+#----------------------------------------------------------------------------------------------
+ 
+test: build
+	$(MAKE) -C test
+	$(MAKE) -C src/dep/rmr/test test
+	$(MAKE) -C src/dep/RediSearch/src REDIS_MODULE_PATH=src/dep/RediSearch/src/redisearch.so redisearch.so test
+	$(MAKE) -C src module-oss.so
+
+PYTHON ?= python2
+
+_PYTEST_ARGS=\
+	-t ./src/dep/RediSearch/src/pytest/$(TEST) \
+	--env oss-cluster --env-reuse \
+	 --clear-logs \
+	--module $(abspath $(BUILD_DIR)/module-oss.so) --module-args "$(strip PARTITIONS AUTO $(MODULE_ARGS))" \
+	$(PYTEST_ARGS)
+
+ifeq ($(GDB),1)
+_PYTEST_ARGS += -s --shards-count 1 --debugger gdb
+else
+_PYTEST_ARGS += --shards-count 3
+ifneq ($(TEST),)
+_PYTEST_ARGS += -s
+endif
+endif
+
+pytest:
+	$(PYTHON) -m RLTest $(_PYTEST_ARGS)
+
+#----------------------------------------------------------------------------------------------
+
+BRANCH:=$(shell git branch | awk '/\*/{print $$2}')
+
 docker:
 	docker build . -t rscoordinator
 

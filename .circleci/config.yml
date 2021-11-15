@@ -60,10 +60,10 @@ commands:
 
   install-prerequisites:
     parameters:
-      redis_version:
+      redis-version:
         type: string
         default: "6"
-      getredis_params:
+      getredis-params:
         type: string
         default: ""
     steps:
@@ -74,7 +74,7 @@ commands:
       - run:
           name: Install Redis
           command: |
-            bash -l -c "python2 ./deps/readies/bin/getredis -v <<parameters.redis_version>> --force <<parameters.getredis_params>>"
+            bash -l -c "python2 ./deps/readies/bin/getredis -v <<parameters.redis-version>> --force <<parameters.getredis-params>>"
             redis-server --version
 
   save-tests-logs:
@@ -107,9 +107,13 @@ commands:
       compat-search:
         type: boolean
         default: false
+      redis-version:
+        type: string
+        default: "6"
     steps:
       - checkout-all
-      - install-prerequisites
+      - install-prerequisites:
+          redis-version: <<parameters.redis-version>>
       - run:
           name: Submodule checkout
           command: |
@@ -160,11 +164,15 @@ jobs:
       compat-search:
         type: boolean
         default: false
+      redis-version:
+        type: string
+        default: "6"
     docker:
       - image: redisfab/rmbuilder:6.2.5-x64-<<parameters.platform>>
     steps:
       - build-steps:
           compat-search: <<parameters.compat-search>>
+          redis-version: <<parameters.redis-version>>
 
   deploy-snapshots:
     docker:
@@ -202,10 +210,10 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: ./tests/qa/qatests -v -t release -m "$CIRCLE_TAG"
+          command: ./tests/qa/qatests -t release -m "$CIRCLE_TAG"
       - run:
           name: Run QA Automation (RediSearch Light)
-          command: ./tests/qa/qatests -v -t release -m "$CIRCLE_TAG" --light
+          command: ./tests/qa/qatests -t release -m "$CIRCLE_TAG" --light
 
   nightly-automation:
     docker:
@@ -215,10 +223,10 @@ jobs:
       - setup-automation
       - run:
           name: Run QA Automation
-          command: ./tests/qa/qatests -v -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick
+          command: ./tests/qa/qatests -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick
       - run:
           name: Run QA Automation (RediSearch Light)
-          command: ./tests/qa/qatests -v -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick --light
+          command: ./tests/qa/qatests -t nightly -m "$CIRCLE_BRANCH" --snapshot --quick --light
 
 #----------------------------------------------------------------------------------------------------------------------------------
 
@@ -288,17 +296,29 @@ workflows:
   default_flow:
     jobs:
       - build:
-          name: pr-build
+          name: build-with-redis-<< matrix.redis-version >>
           compat-search: false
           platform: bionic
+          matrix:
+            alias: pr-builds
+            parameters:
+              redis-version: ["6.2", "6.0"]
           <<: *not-on-integ-branch
       - build:
-          name: int-build-<< matrix.platform >>
+          name: int-platform-build-<< matrix.platform >>
+          compat-search: true
+          matrix:
+            alias: int-platform-builds
+            parameters:
+              platform: [focal, bionic, xenial, centos7, centos8]
+          <<: *on-integ-branch
+      - build:
+          name: int-build-with-redis-<< matrix.redis-version >>
           compat-search: true
           matrix:
             alias: int-builds
             parameters:
-              platform: [focal, bionic, xenial, centos7, centos8]
+              redis-version: ["6.2", "6.0"]
           <<: *on-integ-branch
       - build:
           name: version-build-<< matrix.platform >>
@@ -311,7 +331,7 @@ workflows:
       - deploy-snapshots:
           context: common
           requires:
-            - int-builds
+            - int-platform-builds
           <<: *on-integ-branch
       - deploy-release:
           context: common

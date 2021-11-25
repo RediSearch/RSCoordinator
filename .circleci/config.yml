@@ -176,7 +176,8 @@ jobs:
           name: Deploy Snapshots to S3
           command: |
             cd /workspace/snapshots
-            for f in *.zip *.tgz; do
+            du -ah --apparent-size *
+            for f in `find . -name "*.zip" -or -name "*.tgz"`; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/snapshots/ --acl public-read
             done
 
@@ -190,7 +191,8 @@ jobs:
           name: Deploy Releases to S3
           command: |
             cd /workspace
-            for f in *.zip *.tgz; do
+            du -ah --apparent-size *
+            for f in `find . -name "*.zip" -or -name "*.tgz"`; do
               aws s3 cp $f s3://redismodules/$PACKAGE_NAME/ --acl public-read
             done
 
@@ -299,7 +301,8 @@ workflows:
             alias: int-builds
             parameters:
               platform: [focal, bionic, xenial, centos7, centos8]
-          <<: *on-integ-branch
+          #@@<<: *on-integ-branch
+          <<: *not-on-integ-branch
       - build:
           name: version-build-<< matrix.platform >>
           compat-search: false
@@ -312,7 +315,8 @@ workflows:
           context: common
           requires:
             - int-builds
-          <<: *on-integ-branch
+          #@@<<: *on-integ-branch
+          <<: *not-on-integ-branch
       - deploy-release:
           context: common
           requires:

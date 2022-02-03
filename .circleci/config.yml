@@ -324,17 +324,17 @@ workflows:
             - deploy-release
           <<: *on-version-tags
 
-  nightly:
-    triggers:
-      - schedule:
-          cron: "07 20 * * *"
-          filters:
-            branches:
-              only: master
-    jobs:
-      - build:
-          name: nightly-build-<< matrix.platform >>
-          compat-search: true
-          matrix:
-            parameters:
-              platform: [bionic, centos7]
+#  nightly:
+#    triggers:
+#      - schedule:
+#          cron: "07 20 * * *"
+#          filters:
+#            branches:
+#              only: master
+#    jobs:
+#      - build:
+#          name: nightly-build-<< matrix.platform >>
+#          compat-search: true
+#          matrix:
+#            parameters:
+#              platform: [bionic, centos7]

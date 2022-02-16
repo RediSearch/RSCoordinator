@@ -27,7 +27,8 @@ REJSON=1 MODARGS="PARTITIONS AUTO SAFEMODE" $test_cmd
 tls_args="--tls \
 	--tls-cert-file $ROOT/tests/tls/redis.crt \
 	--tls-key-file $ROOT/tests/tls/redis.key \
-	--tls-ca-cert-file $ROOT/tests/tls/ca.crt"
+	--tls-ca-cert-file $ROOT/tests/tls/ca.crt \
+	--tls-passphrase foobar"
 
 $ROOT/gen-test-certs.sh
 REJSON=1 $test_cmd $tls_args

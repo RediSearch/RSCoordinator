@@ -3,6 +3,12 @@
 [![Forum](https://img.shields.io/badge/Forum-RediSearch-blue)](https://forum.redislabs.com/c/modules/redisearch/)
 [![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/xTbqgTB)
 
+## Deprecation notice
+
+As of [RediSearch 2.0](https://github.com/RediSearch/RediSearch/releases/tag/v2.0.0) this repository is deprecated. It's features have been merged into RediSearch. 
+
+For more details please check https://github.com/RediSearch/RediSearch/tree/master/coord.
+
 # RSCoordinator - Distributed RediSearch
 
 RSCoordinator is an add-on module that enables scalable distributed search over [RediSearch](http://redisearch.io).
